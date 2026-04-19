@@ -1,16 +1,34 @@
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+Active feature: **001-modular-calc-engine** (branch `001-modular-calc-engine`).
+For technical context, structure, and commands, read the current plan:
+
+- Plan: [specs/001-modular-calc-engine/plan.md](./specs/001-modular-calc-engine/plan.md)
+- Spec: [specs/001-modular-calc-engine/spec.md](./specs/001-modular-calc-engine/spec.md)
+- Research: [specs/001-modular-calc-engine/research.md](./specs/001-modular-calc-engine/research.md)
+- Data model: [specs/001-modular-calc-engine/data-model.md](./specs/001-modular-calc-engine/data-model.md)
+- Module contracts: [specs/001-modular-calc-engine/contracts/](./specs/001-modular-calc-engine/contracts/)
+- Quickstart: [specs/001-modular-calc-engine/quickstart.md](./specs/001-modular-calc-engine/quickstart.md)
+- Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator
 
-A personal Financial Independence / Retire Early dashboard built as a zero-dependency single-file HTML app. Two parallel versions are maintained in lockstep:
+A personal Financial Independence / Retire Early dashboard built as a zero-dependency single-file HTML app.
 
-- `FIRE-Dashboard.html` — Roger & Rebecca's personalized dashboard
-- `FIRE-Dashboard-Generic.html` — public/generic version
+## The Two Active Dashboards (READ FIRST)
 
-Other project files:
+There are **two main files** the user actively works on, and they are maintained **in lockstep**:
+
+1. **`FIRE-Dashboard.html`** — the **RR FIRE dashboard** (Roger & Rebecca's personalized version)
+2. **`FIRE-Dashboard-Generic.html`** — the **Generic FIRE dashboard** (public version)
+
+**Default rule:** When the user says "fix this," "change this," "the dashboard," "the chart," or any similar phrasing without naming a specific file, apply the change to **BOTH** files. Only scope to one file when the user explicitly says so (e.g., "only the RR version," "Generic only," "the personalized one").
+
+Personal-only content (Roger/Rebecca's names, private figures) lives in `FIRE-Dashboard.html` only. Everything else — structure, styling, charts, calc logic, i18n wiring — stays identical between the two files.
+
+Always report which file(s) you modified.
+
+## Other project files
 
 - `FIRE-snapshots.csv` — append-only history of net worth + FIRE metrics
 - `FIRE-Dashboard-Roadmap.md` — master planning document for features
