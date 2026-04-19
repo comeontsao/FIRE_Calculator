@@ -6131,7 +6131,19 @@ function _applyConfirmedOverride() {
   const hintEl = document.getElementById('dragHint');
   if (hintEl) hintEl.classList.add('drag-hint--seen');
   const cs = _cs();
-  if (cs) cs.setOverride(age);
+  if (cs) {
+    cs.setOverride(age);
+    // R-A fix: re-evaluate feasibility at the overridden age so the
+    // infeasibility banner (T029) activates immediately on confirm,
+    // not just on a subsequent mode switch.
+    try {
+      const inp = getInputs();
+      const scenario = scenarios.find(s => s.id === selectedScenario);
+      const effectiveSpend = getScenarioEffectiveSpend(scenario);
+      const feasibleAtAge = _evaluateFeasibilityAtAge(inp, effectiveSpend, age, fireMode);
+      cs.revalidateFeasibilityAt(age, feasibleAtAge);
+    } catch (_e) { /* defensive: never block override on feasibility calc */ }
+  }
   else _setOverrideFire(age);
 }
 
