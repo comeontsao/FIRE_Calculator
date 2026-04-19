@@ -1873,11 +1873,44 @@
 <script type="module">
   import { chartState } from './calc/chartState.js';
   import { makeInflation } from './calc/inflation.js';
+  import { computeTax } from './calc/tax.js';
+  import { computeWithdrawal } from './calc/withdrawal.js';
+  import { projectSS } from './calc/socialSecurity.js';
+  import { getHealthcareCost } from './calc/healthcare.js';
+  import { resolveMortgage, computeMortgage } from './calc/mortgage.js';
+  import { computeCollegeCosts } from './calc/college.js';
+  import { resolveSecondHome } from './calc/secondHome.js';
+  import { computeStudentLoan } from './calc/studentLoan.js';
+  import { runLifecycle } from './calc/lifecycle.js';
+  import { solveFireAge, evaluateFeasibility } from './calc/fireCalculator.js';
+
   window.chartState = chartState;
   window.makeInflation = makeInflation;
+  // Full helpers bundle — passed through to runLifecycle via _solveFireAge etc.
+  // so every canonical solver call uses the same pure-module DI wiring that
+  // the tests exercise. Rebuilt per call because makeInflation closes over
+  // inflationRate + baseYear and those may change between calls.
+  window._calcHelpers = (inputs) => ({
+    inflation: makeInflation(inputs.inflationRate, new Date().getFullYear()),
+    tax: computeTax,
+    withdrawal: computeWithdrawal,
+    socialSecurity: projectSS,
+    healthcare: getHealthcareCost,
+    mortgage: resolveMortgage,
+    college: computeCollegeCosts,
+    secondHome: resolveSecondHome,
+    studentLoan: computeStudentLoan,
+  });
+  window._runLifecycle = (canonical, fireAge) =>
+    runLifecycle({ inputs: canonical, fireAge, helpers: window._calcHelpers(canonical) });
+  window._solveFireAge = (canonical) =>
+    solveFireAge({ inputs: canonical, helpers: window._calcHelpers(canonical) });
+  window._evaluateFeasibility = (canonical, fireAge) =>
+    evaluateFeasibility({ inputs: canonical, fireAge, helpers: window._calcHelpers(canonical) });
   // Signal bootstrap is ready for code that wants to wait.
   window.__calcBootstrapReady = true;
   document.dispatchEvent(new Event('calc-bootstrap-ready'));
+  window.dispatchEvent(new CustomEvent('calc-bootstrap-ready'));
 </script>
 
 <script>
@@ -3253,6 +3286,216 @@ function getInputs() {
   return inp;
 }
 
+// ==================== CANONICAL INPUTS ADAPTER (U2B-4a) ====================
+// Translates the legacy flat `inp` shape (produced by getInputs()) into the
+// canonical `Inputs` typedef (data-model.md §1 / §1b / §1c / §1d / §1e) that
+// calc/*.js modules consume. The adapter is the single seam through which the
+// HTML dashboard hands state to the pure calc engine — it reads DOM-scoped
+// globals (fireMode, selectedScenario, mortgageEnabled, secondHomeEnabled)
+// here, so the canonical callers downstream stay DOM-free.
+//
+// §C.3b — CONTRIBUTION SPLIT FIX. The inline HTML stores annual Trad 401k /
+// Roth 401k / taxable-stocks contributions as three separate DOLLAR buckets:
+//   - inp.contrib401kTrad  (annual $, id='contrib401k')
+//   - inp.contrib401kRoth  (annual $, id='contrib401kRoth')
+//   - inp.monthlySavings * 12  (annual $ taxable, id='monthlySavings')
+//   - inp.empMatch         (annual $, always Traditional)
+// The canonical engine takes one `annualContributionReal` plus a
+// `contributionSplit` of three fractions that sum to 1.0 (the historical
+// CONTRIB_SPLIT default was 60/20/20; using that default on HTML inputs
+// misroutes dollars and shifts RR fireAge by ~1 yr — see baseline-rr-inline
+// §C.3b). This adapter routes the inline's explicit dollars into the
+// canonical fraction form exactly, and passes employerMatchReal as a
+// separate Trad-only overlay so it isn't double-counted inside the split.
+function getCanonicalInputs() {
+  const inp = getInputs();
+  const currentYear = new Date().getFullYear();
+  const scenario = (typeof scenarios !== 'undefined')
+    ? scenarios.find(s => s.id === selectedScenario)
+    : null;
+
+  // §C.3b — contribution split fix.
+  const tradAnnual = inp.contrib401kTrad || 0;
+  const rothAnnual = inp.contrib401kRoth || 0;
+  const taxableAnnual = Math.max(0, (inp.monthlySavings || 0) * 12);
+  const employerMatchReal = inp.empMatch || 0;
+  const totalContrib = tradAnnual + rothAnnual + taxableAnnual;
+  const contributionSplit = totalContrib > 0 ? {
+    trad401kFraction: tradAnnual / totalContrib,
+    rothFraction:     rothAnnual / totalContrib,
+    taxableFraction:  taxableAnnual / totalContrib,
+  } : { trad401kFraction: 0.6, rothFraction: 0.2, taxableFraction: 0.2 };
+
+  // Ages — FR-001 requires integers. Inline already holds integers via parseInt.
+  const currentAgePrimary = Math.floor(inp.ageRoger);
+  const currentAgeSecondary = Math.floor(inp.ageRebecca);
+
+  // Portfolio merger per data-model.md §1 portfolio-merger note:
+  // Roth IRA pool = Roth IRA + Roth 401k (merged).
+  // Total contribution is TRAD + ROTH + TAXABLE (employer match is separate).
+  // Primary = Roger; Secondary = Rebecca (stocks-only, no retirement account in form).
+  const portfolioPrimary = {
+    trad401kReal:            inp.roger401kTrad || 0,
+    rothIraReal:             inp.roger401kRoth || 0,   // Roth IRA + Roth 401k merged
+    taxableStocksReal:       inp.rogerStocks || 0,
+    cashReal:                (inp.cashSavings || 0) + (inp.otherAssets || 0),
+    annualContributionReal:  totalContrib,
+  };
+  const portfolioSecondary = {
+    trad401kReal:            0,
+    rothIraReal:             0,
+    taxableStocksReal:       inp.rebeccaStocks || 0,
+    cashReal:                0,
+    annualContributionReal:  0,
+  };
+
+  // Scenario spend: inline's effective retirement-phase spend combines the
+  // scenario's annualSpend + visa cost.
+  const scenarioSpendReal = scenario ? (scenario.annualSpend + (scenario.visaCostAnnual || 0)) : undefined;
+  const relocationCostReal = scenario ? (scenario.relocationCost || 0) : 0;
+
+  // Tax — canonical needs brackets; approximate from the flat effective rate
+  // the HTML form exposes (inp.taxRate). A single-bracket shape is enough to
+  // exercise the tax.js contract; finer bracket modeling is out of U2B-4a scope.
+  const ordinaryRate = Math.max(0, Math.min(0.50, inp.taxRate || 0.22));
+  const tax = {
+    ordinaryBrackets: [{ thresholdReal: 0, rate: ordinaryRate }],
+    ltcgBrackets:     [{ thresholdReal: 0, rate: 0.15 }],
+    rmdAgeStart:      73,
+  };
+
+  // Safety buffers — inline stores years-of-spend multipliers directly.
+  const buffers = {
+    bufferUnlockMultiple: inp.bufferUnlock || 0,
+    bufferSSMultiple:     inp.bufferSS || 0,
+  };
+
+  // Base annual spend — the accumulation-phase spend target. For RR this is
+  // derived from scenario.annualSpend when scenario-specific spend is in play;
+  // otherwise we fall back to the aggregated monthly-expense total. Using the
+  // scenario's annualSpend here keeps the solver feasibility gate aligned with
+  // what the dashboard KPIs display.
+  const annualSpendReal = scenarioSpendReal || 60000;
+
+  // Returns — inline stores nominal rates; canonical expects REAL rates, so
+  // subtract inflation at the adapter boundary (FR-017 — the only seam that
+  // converts between nominal and real lives here, not in calc modules).
+  const returnRateReal     = (inp.returnRate || 0) - (inp.inflationRate || 0);
+  const returnRateCashReal = Math.max(-0.05, 0.005 - (inp.inflationRate || 0));
+
+  // Mortgage — only emit a canonical Mortgage when the user has enabled it.
+  let mortgage;
+  if (mortgageEnabled) {
+    const m = getMortgageInputs();
+    const ownership = m.ownership || 'buying-now';
+    mortgage = {
+      ownership,
+      homePriceReal:      m.homePrice || 0,
+      downPaymentReal:    m.downPayment || 0,
+      closingCostReal:    m.closingCosts || 0,
+      annualRateReal:     Math.max(-0.05, (m.rate || 0) - (inp.inflationRate || 0)),
+      termYears:          m.term || 30,
+      propertyTaxReal:    m.propertyTax || 0,
+      insuranceReal:      m.insurance || 0,
+      hoaMonthlyReal:     m.hoa || 0,
+      appreciationReal:   Math.max(-0.05, (m.appreciation || 0) - (inp.inflationRate || 0)),
+      destiny:            m.homeDestiny || 'live-in',
+      location:           m.homeLocation || 'us',
+    };
+    if (ownership === 'buying-in') {
+      mortgage.purchaseAge = currentAgePrimary + (m.buyInYears || 0);
+    } else if (ownership === 'already-own') {
+      mortgage.yearsPaid = m.yearsPaid || 0;
+    }
+  }
+
+  // Second home — similar optional overlay.
+  let secondHome;
+  if (secondHomeEnabled) {
+    const h2 = getSecondHomeInputs();
+    secondHome = {
+      label:              h2.label,
+      location:           h2.location || 'us',
+      homePriceReal:      h2.homePrice || 0,
+      downPaymentReal:    h2.downPayment || 0,
+      closingCostReal:    h2.closingCosts || 0,
+      annualRateReal:     Math.max(-0.05, (h2.rate || 0) - (inp.inflationRate || 0)),
+      termYears:          h2.term || 30,
+      propertyTaxReal:    h2.propertyTax || 0,
+      otherCarryReal:     h2.otherCarry || 0,
+      rentalIncomeReal:   h2.rentalIncome || 0,
+      appreciationReal:   Math.max(-0.05, (h2.appreciation || 0) - (inp.inflationRate || 0)),
+      purchaseAge:        currentAgePrimary + (h2.buyInYears || 0),
+      destiny:            h2.destiny || 'live-in',
+    };
+  }
+
+  // Colleges — per-kid shape with optional loan overlay.
+  const colleges = [
+    {
+      name:             'Kid 1',
+      currentAge:       inp.ageKid1,
+      fourYearCostReal: 240_000,     // coarse default; inline computes via getTotalCollegeCostForYear
+      pctFinanced:      (inp.loanPctKid1 || 0) / 100,
+      parentPayPct:     (inp.loanParentPctKid1 ?? 100) / 100,
+      loanRateReal:     Math.max(-0.05, (inp.loanRate || 6.53) / 100 - (inp.inflationRate || 0)),
+      loanTermYears:    inp.loanTerm || 10,
+    },
+    {
+      name:             'Kid 2',
+      currentAge:       inp.ageKid2,
+      fourYearCostReal: 240_000,
+      pctFinanced:      (inp.loanPctKid2 || 0) / 100,
+      parentPayPct:     (inp.loanParentPctKid2 ?? 100) / 100,
+      loanRateReal:     Math.max(-0.05, (inp.loanRate || 6.53) / 100 - (inp.inflationRate || 0)),
+      loanTermYears:    inp.loanTerm || 10,
+    },
+  ];
+
+  // SS claim ages — inline has a single ssClaimAge global (primary). Rebecca
+  // uses the same claim-age for spousal benefit purposes; we mirror that here.
+  const ssStartAgePrimary = inp.ssClaimAge || 67;
+  const ssStartAgeSecondary = inp.ssClaimAge || 67;
+
+  // SS earnings — RR has a real actual-earnings record; map it to the canonical
+  // SSEarnings shape so socialSecurity.js can use AIME math instead of a curve.
+  const ssPrimary = (typeof ssEarningsHistory !== 'undefined' && ssEarningsHistory.length > 0) ? {
+    annualEarningsNominal: ssEarningsHistory.map(r => r.earnings || 0),
+    latestEarningsYear:    Math.max(...ssEarningsHistory.map(r => r.year)),
+  } : undefined;
+
+  return {
+    currentAgePrimary,
+    currentAgeSecondary,
+    endAge:                  inp.endAge || 95,
+    baseYear:                currentYear,
+    portfolioPrimary,
+    portfolioSecondary,
+    annualSpendReal,
+    scenarioSpendReal,
+    returnRateReal,
+    returnRateCashReal,
+    inflationRate:           inp.inflationRate || 0,
+    tax,
+    solverMode:              fireMode,
+    buffers,
+    scenario:                scenario ? { country: scenario.id, healthcareScenario: 'aca' } : { country: 'us', healthcareScenario: 'aca' },
+    mortgage,
+    secondHome,
+    colleges,
+    studentLoans:            [],
+    ssPrimary,
+    ssStartAgePrimary,
+    ssStartAgeSecondary,
+    contributionSplit,
+    employerMatchReal,
+    taxTradRate:             inp.taxTrad,
+    relocationCostReal,
+    homeSaleAtFireReal:      0,
+    rentAlternativeReal:     0,
+  };
+}
+
 function calcNetWorth(inp) {
   return inp.roger401k + inp.rogerStocks + inp.rebeccaStocks + inp.cashSavings + inp.otherAssets;
 }
@@ -3563,26 +3806,10 @@ function effectiveK401(k401Trad, k401Roth, taxTrad) {
   return Math.max(0, k401Trad) * (1 - taxTrad) + Math.max(0, k401Roth);
 }
 
-// Given a desired NET spend $S and the four pools (trad/roth/stocks/cash),
-// returns the gross withdrawal needed and the per-pool gross amounts.
-// Assumption: Trad gets hit by taxTrad; Roth/Stocks/Cash are tax-free
-// (LTCG 0% bracket is realistic for modest-income retirees). Proportional
-// withdrawal by positive balance.
-function taxAwareWithdraw(netSpend, pTrad, pRoth, pStocks, pCash, taxTrad) {
-  const posT = Math.max(0, pTrad);
-  const posR = Math.max(0, pRoth);
-  const posS = Math.max(0, pStocks);
-  const posC = Math.max(0, pCash);
-  const posTotal = posT + posR + posS + posC;
-  if (posTotal <= 0 || netSpend <= 0) {
-    return { gross: 0, gTrad: 0, gRoth: 0, gStocks: 0, gCash: 0, shortfall: netSpend };
-  }
-  const wT = posT / posTotal, wR = posR / posTotal, wS = posS / posTotal, wC = posC / posTotal;
-  // Net per $1 gross: wT*(1-t) + wR + wS + wC  =  1 - wT*t
-  const effRate = 1 - wT * taxTrad;
-  const gross = effRate > 1e-9 ? netSpend / effRate : netSpend;
-  return { gross, gTrad: gross * wT, gRoth: gross * wR, gStocks: gross * wS, gCash: gross * wC, shortfall: 0 };
-}
+// U2B-4a: `taxAwareWithdraw` deleted. Its only caller was
+// `signedLifecycleEndBalance`, which also went away in U2B-4a. Withdrawal
+// math now lives in calc/withdrawal.js (computeWithdrawal) — the canonical
+// solver routes through it via window._solveFireAge.
 
 // Project portfolio growth year by year (accumulation phase)
 function projectGrowth(inp, years) {
@@ -3661,9 +3888,21 @@ function projectGrowth(inp, years) {
 //   Safe:        phase-transition buffers + end balance ≥ 0
 //   Exact:       end balance ≥ terminalBuffer years of spend
 //   DieWithZero: end balance ≥ 0 (targets exactly $0 at plan age)
+// U2B-4a: shimmed to call the canonical solver (calc/fireCalculator.js)
+// via the ES-module bootstrap at <script type="module"> above. Signature
+// and return-shape preserved; existing call sites throughout the HTML still
+// do `const r = yearsToFIRE(inp, effectiveSpend)` and read `r` as an integer.
+// The ES-module script block runs deferred-by-spec before any classic
+// <script>'s user-gesture handlers, so window._solveFireAge is always set
+// by the time this shim is invoked.
 function yearsToFIRE(inp, annualSpend) {
-  const r = findFireAgeNumerical(inp, annualSpend, fireMode);
-  return r.years;
+  const canonical = getCanonicalInputs();
+  if (typeof annualSpend === 'number' && annualSpend > 0) {
+    canonical.annualSpendReal = annualSpend;
+    canonical.scenarioSpendReal = annualSpend;
+  }
+  const result = window._solveFireAge(canonical);
+  return result.yearsToFire;
 }
 
 // Evaluate feasibility of a specific FIRE age under a specific solver mode,
@@ -3671,195 +3910,25 @@ function yearsToFIRE(inp, annualSpend) {
 //   - recalcAll() to report feasibility of the freshly solved age to chartState.
 //   - setFireMode() when an override is active, to update feasibility without
 //     discarding the override (FR-015 / T023b).
-// NOTE: This is a minimum-viable shim that reuses signedLifecycleEndBalance +
-// isFireAgeFeasible from the existing inline solver code. It will be replaced
-// in US2 (T046/T047) by fireCalculator.js.
+// U2B-4a: shimmed to call calc/fireCalculator.js evaluateFeasibility.
 function _evaluateFeasibilityAtAge(inp, annualSpend, age, mode) {
   try {
-    const sim = signedLifecycleEndBalance(inp, annualSpend, age);
-    return isFireAgeFeasible(sim, inp, annualSpend, mode);
+    const canonical = getCanonicalInputs();
+    if (typeof annualSpend === 'number' && annualSpend > 0) {
+      canonical.annualSpendReal = annualSpend;
+      canonical.scenarioSpendReal = annualSpend;
+    }
+    if (mode) canonical.solverMode = mode;
+    return window._evaluateFeasibility(canonical, age);
   } catch (_e) {
     return true; // fail-open; feasibility will re-evaluate on next recalc
   }
 }
 
-// ==================== DWZ NUMERICAL SOLVER (MONTH-PRECISE) ====================
-// We need a SIGNED end-of-life balance to detect infeasibility properly
-// (projectFullLifecycle clamps pools to ≥0, which hides negative "shortfall"
-// and was the root cause of the earlier solver bug).
-//
-// This signed simulator mirrors projectFullLifecycle's math but lets pools
-// go negative so the final balance is:
-//   >= 0  → feasible (≈0 is DWZ's sweet spot)
-//   <  0  → infeasible by exactly that shortfall
-//
-// Because end-balance is monotonic in fireAge, we can:
-//   1. Scan integer years to find the crossover from negative → non-negative
-//   2. Linearly interpolate between the two boundary years for month precision
-//
-// Returns { endBalance, balanceAtUnlock, balanceAtSS } where balances are
-// expressed in "spendable" terms (Trad is discounted by taxTrad).
-// balanceAtUnlock = effective portfolio at the start of age 59.5 (first Phase-2 year)
-// balanceAtSS     = effective portfolio at the start of ssClaimAge (first Phase-3 year)
-// Used by the unified FIRE-age solver to enforce Safe mode's phase-transition buffers.
-function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
-  // Employer match is always Traditional
-  const tradContrib = inp.contrib401kTrad + inp.empMatch;
-  const rothContrib = inp.contrib401kRoth;
-  const endAge = inp.endAge || 95;
-  const unlockAge = 59.5;
-  const taxTrad = inp.taxTrad;
-  const ssAnnual = getSSAnnual(inp, inp.ssClaimAge, fireAge);
-  const yrsToFire = fireAge - inp.ageRoger;
-  const mtgAdj = getMortgageAdjustedRetirement(annualSpend, yrsToFire);
-  const retireSpend = mtgAdj.annualSpend;
-  const relocationCost = getSelectedRelocationCost();
-
-  let pTrad = inp.roger401kTrad;
-  let pRoth = inp.roger401kRoth;
-  let pStocks = inp.rogerStocks + inp.rebeccaStocks;
-  let pCash = inp.cashSavings + inp.otherAssets;
-
-  // Mortgage upfront handling (simplified — mirrors projectFullLifecycle's buying-now path)
-  const mtg = mortgageEnabled ? getMortgageInputs() : null;
-  let mtgPurchased = false;
-  let mtgPurchaseYear = 0;
-  if (mortgageEnabled && mtg) {
-    if (mtg.ownership === 'buying-now') {
-      mtgPurchased = true;
-      mtgPurchaseYear = 0;
-      pCash -= (mtg.downPayment + mtg.closingCosts);
-    } else if (mtg.ownership === 'already-own') {
-      mtgPurchased = true;
-      mtgPurchaseYear = -mtg.yearsPaid;
-    }
-  }
-  // Second home setup (signed sim)
-  const h2 = secondHomeEnabled ? getSecondHomeInputs() : null;
-  let h2Purchased = false;
-  let h2SaleAdded = false;
-  if (secondHomeEnabled && h2 && h2.buyInYears === 0) {
-    pCash -= (h2.downPayment + h2.closingCosts);
-    h2Purchased = true;
-  }
-  let saleAdded = false;
-  let relocDeducted = false;
-
-  // Phase-transition balance snapshots (effective-spendable terms).
-  // Captured at the START of the first Phase-2 / Phase-3 year.
-  let balanceAtUnlock = null;
-  let balanceAtSS = null;
-  const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
-
-  for (let age = inp.ageRoger; age < endAge; age++) {
-    const yearsFromNow = age - inp.ageRoger;
-    if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && !mtgPurchased && yearsFromNow >= mtg.buyInYears) {
-      pCash -= (mtg.downPayment + mtg.closingCosts);
-      mtgPurchased = true;
-      mtgPurchaseYear = mtg.buyInYears;
-    }
-    // Second home: trigger delayed purchase
-    if (secondHomeEnabled && h2 && !h2Purchased && yearsFromNow >= h2.buyInYears) {
-      pCash -= (h2.downPayment + h2.closingCosts);
-      h2Purchased = true;
-    }
-
-    const isRetired = age >= fireAge;
-    const is401kUnlocked = age >= unlockAge;
-    const ssActive = age >= inp.ssClaimAge;
-    const ssThisYear = ssActive ? ssAnnual : 0;
-
-    // Snapshot balances at the START of each phase transition (post-retirement only)
-    if (isRetired) {
-      if (balanceAtUnlock === null && is401kUnlocked) balanceAtUnlock = effBal();
-      if (balanceAtSS === null && ssActive) balanceAtSS = effBal();
-    }
-
-    if (isRetired && !saleAdded && mtgAdj.saleProceeds > 0) { pStocks += mtgAdj.saleProceeds; saleAdded = true; }
-    if (isRetired && !relocDeducted && relocationCost > 0) { pStocks -= relocationCost; relocDeducted = true; }
-    // Second home sale at FIRE
-    if (secondHomeEnabled && h2 && isRetired && !h2SaleAdded && h2.destiny === 'sell') {
-      pStocks += getSecondHomeSaleAtFire(h2, yrsToFire);
-      h2SaleAdded = true;
-    }
-    // Second home annual carry cost (stacks on top of primary home / rent)
-    const h2Carry = (secondHomeEnabled && h2 && h2Purchased) ? getSecondHomeAnnualCarryAtYear(h2, yearsFromNow, yrsToFire) : 0;
-
-    // Compute mortgage-vs-rent delta if applicable
-    let mtgAdjust = 0;
-    if (mortgageEnabled && mtgPurchased && mtg) {
-      const yearsIntoPurchase = yearsFromNow - mtgPurchaseYear;
-      const rentEl = document.getElementById('exp_0');
-      const rent = rentEl ? parseFloat(rentEl.value) || 0 : 2690;
-      if (yearsIntoPurchase < mtg.term) {
-        const loanAmount = mtg.homePrice - mtg.downPayment;
-        const monthlyPI = calcMortgagePayment(loanAmount, mtg.rate, mtg.term);
-        mtgAdjust = ((monthlyPI + mtg.propertyTax/12 + mtg.insurance/12 + mtg.hoa) - rent) * 12;
-      } else {
-        mtgAdjust = ((mtg.propertyTax/12 + mtg.insurance/12 + mtg.hoa) - rent) * 12;
-      }
-    }
-
-    // College cost this year (applies in BOTH phases — during accumulation it
-    // reduces savings; during retirement it's added to the withdrawal target).
-    const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
-    if (!isRetired) {
-      // Accumulation — contribs + growth (pools stay positive naturally here)
-      pTrad = pTrad * (1 + realReturn401k) + tradContrib;
-      pRoth = pRoth * (1 + realReturn401k) + rothContrib;
-      const effAnnualSavings = Math.max(0, inp.monthlySavings * 12 - mtgAdjust - collegeCostThisYear - h2Carry);
-      pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
-      pCash *= 1.005;
-    } else {
-      // Retirement — withdraw target spend. Allow pools to go NEGATIVE.
-      // Target is NET spend; gross up Trad by taxTrad.
-      // Apply age-exact per-country healthcare delta (pre-65 vs post-65).
-      const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
-      const netSpend = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry - ssThisYear);
-      if (!is401kUnlocked) {
-        // Phase 1: only taxable can fund (pStocks + pCash). 401K locked.
-        const posTax = Math.max(0, pStocks) + Math.max(0, pCash);
-        if (posTax > 0) {
-          const sR = Math.max(0, pStocks) / Math.max(1e-9, posTax);
-          pStocks -= netSpend * sR;
-          pCash -= netSpend * (1 - sR);
-        } else {
-          pStocks -= netSpend; // accumulate shortfall here
-        }
-        pTrad *= (1 + realReturn401k); // locked, grows untouched
-        pRoth *= (1 + realReturn401k);
-      } else {
-        // Phase 2/3: all 4 pools available. Tax gross-up on Trad share.
-        const pos = Math.max(0, pTrad) + Math.max(0, pRoth) + Math.max(0, pStocks) + Math.max(0, pCash);
-        if (pos > 0) {
-          const w = taxAwareWithdraw(netSpend, pTrad, pRoth, pStocks, pCash, taxTrad);
-          pTrad -= w.gTrad;
-          pRoth -= w.gRoth;
-          pStocks -= w.gStocks;
-          pCash -= w.gCash;
-        } else {
-          // All pools depleted — shortfall goes to stocks (as signed debt).
-          // Use gross shortfall assuming pure-Trad (conservative: largest gap).
-          pStocks -= netSpend / Math.max(1e-9, 1 - taxTrad);
-        }
-        pTrad *= (1 + realReturn401k);
-        pRoth *= (1 + realReturn401k);
-      }
-      pStocks *= (1 + realReturnStocks);
-      pCash *= 1.005;
-    }
-  }
-  // Signed total: effective after-tax value of Trad is counted
-  // (matches the "spending-equivalent" framing of DWZ).
-  const endBalance = pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
-  // Fallback: if FIRE age is already past a transition, snapshot = endBalance
-  // (won't bind the Safe-mode constraint because there's no "extra" cushion to demand).
-  if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
-  if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
-  return { endBalance, balanceAtUnlock, balanceAtSS };
-}
+// U2B-4a: `signedLifecycleEndBalance` deleted. Its callers (yearsToFIRE,
+// findFireAgeNumerical, _evaluateFeasibilityAtAge) have been shimmed to the
+// canonical solver which uses calc/lifecycle.js for the year-by-year portfolio
+// trajectory and calc/fireCalculator.js for the mode-aware feasibility decision.
 
 // ==================== UNIFIED MODE-AWARE FEASIBILITY ====================
 // All three FIRE modes collapse to a single numerical feasibility check
@@ -3872,6 +3941,9 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
 //               endBalance      ≥ 0
 //  Exact:       endBalance      ≥ terminalBuffer × spend
 //  DieWithZero: endBalance      ≥ 0
+// TODO: inline — scheduled for removal in U2B-4b once
+// findMinAccessibleAtFireNumerical is ported to the canonical engine
+// (its current callers are the last remaining inline users of this function).
 function isFireAgeFeasible(sim, inp, annualSpend, mode) {
   if (mode === 'dieWithZero') {
     return sim.endBalance >= 0;
@@ -3898,46 +3970,34 @@ let _dwzPreciseCache = null;
 // linear interpolation across the feasibility boundary. For Safe and Exact,
 // the constraint set is multi-dimensional so we use integer-year precision
 // (Safe's extra phase-transition constraints aren't smoothly monotonic).
+// U2B-4a: shimmed to call calc/fireCalculator.js solveFireAge via the bootstrap.
+// Return shape preserved: {totalMonths, years, months, endBalance, sim, feasible}
+// where sim is a {endBalance, balanceAtUnlock, balanceAtSS} object. Callers read
+// `r.years`, `r.feasible`, `r.sim.balanceAtUnlock`, `r.sim.balanceAtSS` — the
+// canonical FireSolverResult exposes `*Reals` for these, and we translate.
+// The canonical engine's `*EffReal` mirrors (Trad 401(k) discounted by taxTrad)
+// match the inline engine's `effBal` convention one-for-one, so downstream
+// safe-mode buffer checks get the same "spendable" values they read before.
 function findFireAgeNumerical(inp, annualSpend, mode) {
-  const endAge = inp.endAge || 95;
-  const ageRoger = inp.ageRoger;
-  const maxYrs = Math.min(45, Math.max(0, endAge - ageRoger - 1));
-  let prevSim = null;
-  for (let y = 0; y <= maxYrs; y++) {
-    const sim = signedLifecycleEndBalance(inp, annualSpend, ageRoger + y);
-    if (isFireAgeFeasible(sim, inp, annualSpend, mode)) {
-      // Month-precise interpolation only works cleanly for single-constraint DWZ.
-      if (mode === 'dieWithZero' && y > 0 && prevSim !== null) {
-        const span = sim.endBalance - prevSim.endBalance; // > 0 (monotonic)
-        const f = span > 0 ? Math.max(0, Math.min(1, -prevSim.endBalance / span)) : 0;
-        const totalMonths = Math.max(0, Math.min(maxYrs * 12, Math.ceil((y - 1) * 12 + f * 12)));
-        return {
-          totalMonths,
-          years: Math.floor(totalMonths / 12),
-          months: totalMonths % 12,
-          endBalance: sim.endBalance,
-          sim,
-          feasible: true
-        };
-      }
-      return {
-        totalMonths: y * 12,
-        years: y,
-        months: 0,
-        endBalance: sim.endBalance,
-        sim,
-        feasible: true
-      };
-    }
-    prevSim = sim;
+  const canonical = getCanonicalInputs();
+  if (typeof annualSpend === 'number' && annualSpend > 0) {
+    canonical.annualSpendReal = annualSpend;
+    canonical.scenarioSpendReal = annualSpend;
   }
+  if (mode) canonical.solverMode = mode;
+  const result = window._solveFireAge(canonical);
+  const sim = {
+    endBalance:      result.endBalanceEffReal,
+    balanceAtUnlock: result.balanceAtUnlockEffReal,
+    balanceAtSS:     result.balanceAtSSEffReal,
+  };
   return {
-    totalMonths: maxYrs * 12,
-    years: maxYrs,
-    months: 0,
-    endBalance: prevSim ? prevSim.endBalance : 0,
-    sim: prevSim,
-    feasible: false
+    totalMonths: result.yearsToFire * 12,
+    years:       result.yearsToFire,
+    months:      0,
+    endBalance:  result.endBalanceEffReal,
+    sim,
+    feasible:    result.feasible,
   };
 }
 
@@ -4124,50 +4184,9 @@ function simulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge,
     .map(d => ({ age: d.age, portfolio: Math.max(0, d.total) }));
 }
 
-// Legacy inline drawdown (kept for reference only — not called). DO NOT USE.
-function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge, withSS) {
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
-  const ssAnnual = withSS ? getSSAnnual(inp, inp.ssClaimAge, fireAge) : 0;
-  const unlockAge = 59.5;
-  const endAge = inp.endAge || 95;
-
-  let portfolio401k = start401k;
-  let portfolioTaxable = startAccessible;
-  const data = [];
-
-  for (let age = fireAge; age <= endAge; age++) {
-    const total = Math.max(0, portfolio401k) + Math.max(0, portfolioTaxable);
-    data.push({ age, portfolio: Math.max(0, total) });
-
-    const is401kUnlocked = age >= unlockAge;
-    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual : 0;
-
-    // Calculate withdrawal amount — fixed target spend for all modes.
-    // DWZ distinction is only in FIRE number calculation (no buffers, no terminal value).
-    // Retire with exactly FIRE number → depletes to ~$0 at endAge.
-    // Retire with more → leftover. Retire with less → runs out early.
-    const withdrawal = Math.max(0, annualSpend - ssThisYear);
-
-    if (!is401kUnlocked) {
-      // Phase 1: withdraw ONLY from taxable; 401K grows untouched
-      portfolioTaxable -= withdrawal;
-      portfolio401k = Math.max(0, portfolio401k) * (1 + realReturn401k);
-    } else {
-      // Phase 2 & 3: withdraw proportionally from all pools
-      const allTotal = Math.max(0, portfolio401k) + Math.max(0, portfolioTaxable);
-      if (allTotal > 0 && withdrawal > 0) {
-        const tRatio = Math.max(0, portfolioTaxable) / allTotal;
-        const kRatio = Math.max(0, portfolio401k) / allTotal;
-        portfolioTaxable -= withdrawal * tRatio;
-        portfolio401k -= withdrawal * kRatio;
-      }
-      portfolio401k = Math.max(0, portfolio401k) * (1 + realReturn401k);
-    }
-    portfolioTaxable = Math.max(0, portfolioTaxable) * (1 + realReturnStocks);
-  }
-  return data;
-}
+// U2B-4a: `_legacySimulateDrawdown` deleted. It was already marked unused
+// ("kept for reference only") pre-U2B-4a. simulateDrawdown above delegates
+// to projectFullLifecycle which stays as the chart renderers' back-end.
 
 // ==================== UNIFIED LIFECYCLE PROJECTION ====================
 // Full picture: accumulation → FIRE → drawdown → SS → end of life

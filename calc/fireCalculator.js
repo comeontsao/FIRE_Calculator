@@ -31,6 +31,9 @@
  *   - KPI cards      (yearsToFire, fireAge, balanceAtUnlockEffReal for display)
  *   - growthChart    (lifecycle + fireAge marker)
  *   - scenario card  (yearsToFire delta)
+ *   - FIRE-Dashboard{,-Generic}.html  (via window._solveFireAge /
+ *                                       window._evaluateFeasibility bootstrap
+ *                                       shims exposed by the ES-module glue)
  *
  * Invariants:
  *   - fireAge is integer; currentAgePrimary + yearsToFire === fireAge.
@@ -94,13 +97,15 @@ function effBalAtAge(lifecycle, age) {
 /**
  * Evaluate whether a lifecycle satisfies the feasibility rule for the
  * current solver mode. Returns { ok, endBalance } where ok drives the
- * binary search decision.
+ * binary search decision. Internal helper used by the solver loop; see
+ * the exported `evaluateFeasibility` below for the public contract that
+ * takes `{inputs, fireAge, helpers}` and recomputes the lifecycle.
  *
  * @param {LifecycleRecord[]} lifecycle
  * @param {Inputs} inputs
  * @returns {{ok: boolean, endBalance: number, balanceAtUnlock: number, balanceAtSS: number}}
  */
-function evaluateFeasibility(lifecycle, inputs) {
+function evalLifecycleFeasibility(lifecycle, inputs) {
   const endBalance = lifecycle[lifecycle.length - 1].totalReal;
   const balanceAtUnlock = balanceAtAge(lifecycle, UNLOCK_AGE);
   const balanceAtSS = balanceAtAge(lifecycle, inputs.ssStartAgePrimary);
@@ -205,7 +210,7 @@ export function solveFireAge({ inputs, helpers }) {
 
   for (let age = currentAge; age <= endAge; age += 1) {
     const lifecycle = runLifecycle({ inputs, fireAge: age, helpers: helpersBundle });
-    const evalRes = evaluateFeasibility(lifecycle, inputs);
+    const evalRes = evalLifecycleFeasibility(lifecycle, inputs);
     fallback = buildResult(lifecycle, age, false, currentAge, inputs);
 
     if (evalRes.ok) {
@@ -223,4 +228,31 @@ export function solveFireAge({ inputs, helpers }) {
   // Use the lifecycle generated for endAge as the representative projection.
   const finalLifecycle = runLifecycle({ inputs, fireAge: endAge, helpers: helpersBundle });
   return buildResult(finalLifecycle, endAge, false, currentAge, inputs);
+}
+
+/**
+ * Evaluate whether a SPECIFIC fireAge is feasible under the current solver
+ * mode's rules, without running the full linear search in `solveFireAge`.
+ *
+ * Used by the HTML glue's mode-switch preservation path (FR-015) and by
+ * drag-preview feasibility checks: when the user already has an override
+ * active, we must not discard it — we only need to know "is this age still
+ * feasible under the newly-selected solver mode?"
+ *
+ * Purity: reuses `runLifecycle` + the internal `evalLifecycleFeasibility`
+ * helper, so behavior matches `solveFireAge`'s decision rule exactly. No
+ * DOM, no globals, no side effects.
+ *
+ * @param {{
+ *   inputs:  Inputs,
+ *   fireAge: number,
+ *   helpers?: object
+ * }} args
+ * @returns {boolean}
+ */
+export function evaluateFeasibility({ inputs, fireAge, helpers }) {
+  const helpersBundle = helpers ?? {};
+  const lifecycle = runLifecycle({ inputs, fireAge, helpers: helpersBundle });
+  const res = evalLifecycleFeasibility(lifecycle, inputs);
+  return res.ok;
 }
