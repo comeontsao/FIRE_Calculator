@@ -14,18 +14,30 @@
  *
  * Outputs: LifecycleRecord[] (data-model.md §3)
  *   One record per year from inputs.currentAgePrimary through inputs.endAge inclusive.
+ *   Every record includes both:
+ *     - totalReal   : gross sum of the four pool fields (canonical/mathematical).
+ *     - effBalReal  : display-parity sum with Traditional 401(k) discounted by
+ *                     inputs.taxTradRate to mirror the inline dashboard's
+ *                     "effective balance" convention (`pTrad × (1 − taxTrad) +
+ *                     pRoth + pStocks + pCash`). Consumers that render
+ *                     user-facing balance numbers should prefer effBalReal;
+ *                     reporting paths that require the gross figure (RMD base,
+ *                     estate planning) use totalReal.
  *
  * Consumers:
- *   - growthChart renderer      — totalReal, phase, feasible, pool balances
- *   - ssChart renderer          — totalReal, ssIncomeReal, phase, is401kUnlocked
+ *   - growthChart renderer      — totalReal OR effBalReal, phase, feasible, pool balances
+ *   - ssChart renderer          — totalReal OR effBalReal, ssIncomeReal, phase, is401kUnlocked
  *   - rothLadderChart renderer  — withdrawalReal, pool balances by year
  *   - timelineChart renderer    — phase, age, year, overlays (mortgage, secondHome, college)
- *   - calc/fireCalculator.js    — feasibility + balance checkpoints
+ *   - calc/fireCalculator.js    — feasibility + balance checkpoints (gross and eff)
  *
  * Invariants:
  *   - result.length === inputs.endAge - inputs.currentAgePrimary + 1.
  *   - Years strictly monotonic by 1; agePrimary advances by exactly 1 each record.
  *   - totalReal === sum of the four pool fields at every year.
+ *   - effBalReal === totalReal − (trad401kReal × taxTradRate) at every year;
+ *     effBalReal <= totalReal always; effBalReal === totalReal when either
+ *     trad401kReal or taxTradRate is zero.
  *   - If any pool would go negative, the offending record carries
  *     feasible:false and deficitReal > 0 (FR-013).
  *   - All money is real dollars. Any nominal input (e.g., a healthcare
@@ -100,6 +112,15 @@ const SPLIT_SUM_TOLERANCE = 1e-9;
 
 /** Default withdrawal strategy when inputs don't specify. */
 const DEFAULT_WITHDRAWAL_STRATEGY = 'tax-optimized';
+
+/**
+ * Default tax-trad drag rate used by the effBalReal presentation layer when
+ * inputs.taxTradRate is omitted. Matches the inline dashboard's hardcoded
+ * 0.22 fallback (see tests/baseline/inline-harness.mjs line 832:
+ *   `inp.taxTrad ??= 0.15;` — note the harness pins 0.15 for the locked RR
+ *   + Generic fixtures, but the inline dashboard's broader default is 0.22).
+ */
+const DEFAULT_TAX_TRAD_RATE = 0.22;
 
 /**
  * Validate Inputs at the lifecycle boundary (FR-001 range checks).
@@ -560,6 +581,12 @@ export function runLifecycle(args) {
   const relocationCostReal = inputs.relocationCostReal ?? 0;
   const homeSaleAtFireReal = inputs.homeSaleAtFireReal ?? 0;
 
+  // Presentation-layer tax drag applied to Traditional 401(k) balances in the
+  // effBalReal display field. Mirrors the inline dashboard's effBal formula.
+  const taxTradRate = typeof inputs.taxTradRate === 'number'
+    ? inputs.taxTradRate
+    : DEFAULT_TAX_TRAD_RATE;
+
   /** @type {LifecycleRecord[]} */
   const records = [];
   const numYears = inputs.endAge - inputs.currentAgePrimary + 1;
@@ -732,6 +759,11 @@ export function runLifecycle(args) {
 
     // Assemble the record for this year.
     const totalReal = sumPools(pools);
+    // effBalReal: "effective balance" — sum of pools with Traditional 401(k)
+    // discounted by taxTradRate. Mirrors the inline engine's effBal convention
+    // so chart renderers can display numbers consistent with what users see
+    // in the pre-refactor dashboard. effBalReal <= totalReal always.
+    const effBalReal = totalReal - pools.trad401k * taxTradRate;
     const is401kUnlocked = agePrimary >= UNLOCK_AGE;
     const accessible = phase !== 'accumulation' && phase !== 'preUnlock';
     const rec = {
@@ -739,6 +771,7 @@ export function runLifecycle(args) {
       agePrimary,
       phase,
       totalReal,
+      effBalReal,
       trad401kReal: pools.trad401k,
       rothIraReal: pools.rothIra,
       taxableStocksReal: pools.taxable,

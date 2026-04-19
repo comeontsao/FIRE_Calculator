@@ -14,12 +14,21 @@
  *   {
  *     yearsToFire, fireAge, feasible,
  *     endBalanceReal, balanceAtUnlockReal, balanceAtSSReal,
+ *     endBalanceEffReal, balanceAtUnlockEffReal, balanceAtSSEffReal,
  *     lifecycle  // the projection that justifies this answer
  *   }
  *
+ *   The `*EffReal` companions are presentation-layer mirrors of the
+ *   corresponding `*Real` checkpoints. They read the same lifecycle record
+ *   but use that record's `effBalReal` field (Trad 401(k) pool discounted by
+ *   inputs.taxTradRate). This matches the inline dashboard's "effective
+ *   balance" convention so chart renderers can keep displaying numbers users
+ *   recognize; the gross `*Real` fields remain for reporting paths that need
+ *   the unrounded figure (RMD base, estate planning).
+ *
  * Consumers:
  *   - chartState.js  (via setCalculated(fireAge, feasible))
- *   - KPI cards      (yearsToFire, fireAge, balanceAtUnlockReal)
+ *   - KPI cards      (yearsToFire, fireAge, balanceAtUnlockEffReal for display)
  *   - growthChart    (lifecycle + fireAge marker)
  *   - scenario card  (yearsToFire delta)
  *
@@ -28,7 +37,10 @@
  *   - feasible=true ⇒ returned lifecycle has no feasible:false records per
  *     mode-specific feasibility rule (see below).
  *   - feasible=false ⇒ fireAge === inputs.endAge; warning flag is surfaced.
- *   - endBalanceReal === lifecycle[last].totalReal exactly (same array).
+ *   - endBalanceReal      === lifecycle[last].totalReal           exactly.
+ *   - endBalanceEffReal   === lifecycle[last].effBalReal          exactly.
+ *   - balanceAtUnlockEffReal === lifecycle[@UNLOCK_AGE].effBalReal exactly.
+ *   - balanceAtSSEffReal     === lifecycle[@ssStartAgePrimary].effBalReal exactly.
  *   - solverMode semantics:
  *       'safe'        : every record feasible AND
  *                       balanceAtUnlock >= buffers.bufferUnlockMultiple * spend AND
@@ -64,6 +76,19 @@ const UNLOCK_AGE = 60;
 function balanceAtAge(lifecycle, age) {
   const rec = lifecycle.find((r) => r.agePrimary === age);
   return rec ? rec.totalReal : 0;
+}
+
+/**
+ * Pull the effective balance (post-tax-drag) at a given age. Returns 0 if
+ * the age is outside the simulated range.
+ *
+ * @param {LifecycleRecord[]} lifecycle
+ * @param {number} age
+ * @returns {number}
+ */
+function effBalAtAge(lifecycle, age) {
+  const rec = lifecycle.find((r) => r.agePrimary === age);
+  return rec ? rec.effBalReal : 0;
 }
 
 /**
@@ -126,9 +151,16 @@ function evaluateFeasibility(lifecycle, inputs) {
  * @returns {FireSolverResult}
  */
 function buildResult(lifecycle, fireAge, feasible, currentAge, inputs) {
-  const endBalance = lifecycle[lifecycle.length - 1].totalReal;
+  const lastRec = lifecycle[lifecycle.length - 1];
+  const endBalance = lastRec.totalReal;
   const balanceAtUnlock = balanceAtAge(lifecycle, UNLOCK_AGE);
   const balanceAtSS = balanceAtAge(lifecycle, inputs.ssStartAgePrimary);
+
+  // Presentation-layer effBal companions — same lifecycle records, effBalReal field.
+  const endBalanceEff = lastRec.effBalReal;
+  const balanceAtUnlockEff = effBalAtAge(lifecycle, UNLOCK_AGE);
+  const balanceAtSSEff = effBalAtAge(lifecycle, inputs.ssStartAgePrimary);
+
   return Object.freeze({
     yearsToFire: fireAge - currentAge,
     fireAge,
@@ -136,6 +168,9 @@ function buildResult(lifecycle, fireAge, feasible, currentAge, inputs) {
     endBalanceReal: endBalance,
     balanceAtUnlockReal: balanceAtUnlock,
     balanceAtSSReal: balanceAtSS,
+    endBalanceEffReal: endBalanceEff,
+    balanceAtUnlockEffReal: balanceAtUnlockEff,
+    balanceAtSSEffReal: balanceAtSSEff,
     lifecycle,
   });
 }

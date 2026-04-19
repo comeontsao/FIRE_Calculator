@@ -203,6 +203,19 @@ const fixture = Object.freeze({
     balanceAtSSReal: 1_061_540.29,     // canonical-engine-pinned (TB21)
     endBalanceReal: 990_645.48,        // canonical-engine-pinned (TB21)
 
+    // effBal presentation-layer companions — canonical-engine-pinned on the
+    // TB21-locked fireAge=58 trajectory (2026-04-19). Formula at each
+    // checkpoint: effBalReal = totalReal − (trad401kReal × taxTradRate), with
+    // taxTradRate=0.15 from this fixture's inputs. Gap vs inline harness
+    // (§A.observed: end $618,741 / unlock $704,027 / SS $344,908) remains
+    // material because the RR canonical run retires at age 58, not 54 — the
+    // +4-year shift is §C.1/§C.2/§C.3b correctness drivers, not the effBal
+    // presentation. Locked for regression; shrinks toward inline parity as
+    // T048/T049 closes §C.3b.
+    endBalanceEffReal: 918_525.24,
+    balanceAtUnlockEffReal: 1_175_103.41,
+    balanceAtSSEffReal: 948_116.61,
+
     // Tolerance band for TB12 integration test: ±1 year on fireAge absorbs
     // small floating-point drift in future canonical-engine refactors. The
     // balance checkpoints are looser (±10%) because fireAge drift cascades
@@ -213,18 +226,23 @@ const fixture = Object.freeze({
   notes:
     'Canonical RR input set expressed in the shared Inputs shape. Expected ' +
     'values are CANONICAL-ENGINE-PINNED (post-US2b lifecycle+fireCalculator, ' +
-    're-locked 2026-04-19 in TB21). Previously locked to inline-harness ' +
-    'values (fireAge=54); rolled forward to fireAge=58 with correctness-delta ' +
-    'documented in baseline §C.5. ' +
+    're-locked 2026-04-19 in TB21; effBal companions added U2B-parity dispatch ' +
+    '2026-04-19). Previously locked to inline-harness values (fireAge=54); ' +
+    'rolled forward to fireAge=58 with correctness-delta documented in baseline ' +
+    '§C.5. ' +
     'Classification of expected fields: ' +
     '(a) ANALYTICAL — none in this fixture. ' +
     '(b) CANONICAL-PINNED — yearsToFire, fireAge, feasible, balanceAtUnlockReal, ' +
     'balanceAtSSReal, endBalanceReal. Captured from solveFireAge on canonical ' +
-    'engine 2026-04-19. Acts as the forward-regression oracle. ' +
+    'engine 2026-04-19. `*Real` fields are gross (canonical); `*EffReal` fields ' +
+    'are post-tax-drag (display parity with inline engine baseline §A/§B); ' +
+    '§C.3c originally captured the gap and the effBal layer now closes the ' +
+    'presentation half of it. Acts as the forward-regression oracle. ' +
     '(c) INTENTIONAL DEVIATIONS from inline baseline — documented in baseline ' +
     '§C.1 (healthcare real/nominal mixing), §C.2 (typed silent-shortfall), ' +
     '§C.3b (60/20/20 contribution-split default), §C.3c (totalReal raw-sum vs ' +
-    'inline effBal taxTrad-adjusted). See §C.5 for the delta summary table. ' +
+    'inline effBal taxTrad-adjusted — now mirrored via effBalReal field). See ' +
+    '§C.5 for the delta summary table. ' +
     'Mortgage + secondHome + studentLoans intentionally OMITTED (cold-load ' +
     'default; exercises the lifecycle default-value paths).',
 });

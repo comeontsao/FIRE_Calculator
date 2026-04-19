@@ -386,7 +386,24 @@ Owned by `chartState.js`. The single source of truth cited in FR-001.
  *   'unlocked'     — spec.md calls this "401(k)-unlocked"; post-59.5, pre-SS
  *   'ssActive'     — spec.md calls this "SS-active"; Social Security income flowing
  *
- * @property {number} totalReal           sum of all pools, real dollars
+ * @property {number} totalReal           sum of all pools, real dollars (gross/canonical)
+ * @property {number} effBalReal          "effective balance" — sum of pools with
+ *                                        Traditional 401(k) discounted by
+ *                                        `inputs.taxTradRate` (default 0.22 when
+ *                                        omitted) to approximate after-tax spending
+ *                                        power. Matches the inline dashboard's
+ *                                        `effBal` display convention so chart
+ *                                        renderers keep showing numbers users
+ *                                        recognize.
+ *                                        Formula: `effBalReal = totalReal −
+ *                                        (trad401kReal × taxTradRate)`.
+ *                                        Invariant: `effBalReal <= totalReal`
+ *                                        always; equality when either
+ *                                        `trad401kReal` or `taxTradRate` is 0.
+ *                                        Consumer hint: chart renderers SHOULD
+ *                                        display `effBalReal` by default;
+ *                                        `totalReal` is for gross reporting paths
+ *                                        (RMD base, estate planning).
  * @property {number} trad401kReal        Traditional 401(k) balance only (pre-tax)
  * @property {number} rothIraReal         Roth 401(k) + Roth IRA balance (post-tax, merged)
  * @property {number} [p401kTradReal]     alias of trad401kReal maintained for HTML
@@ -459,15 +476,29 @@ no reverse mapping is required.
  * @property {number} yearsToFire         integer years (rounded up, age at FIRE = currentAge + yearsToFire)
  * @property {number} fireAge             integer age at which FIRE is feasible
  * @property {boolean} feasible           false ⇒ FIRE not achievable within endAge under current inputs
- * @property {number} endBalanceReal      portfolio value at endAge under this plan
- * @property {number} balanceAtUnlockReal value at 401(k) unlock (age 59.5, rounded to 60)
- * @property {number} balanceAtSSReal     value at SS start age
- * @property {LifecycleRecord[]} lifecycle  the projection that justifies this answer
+ * @property {number} endBalanceReal      gross portfolio value at endAge under this plan (sum of pools, real dollars)
+ * @property {number} balanceAtUnlockReal gross value at 401(k) unlock (age 59.5, rounded to 60)
+ * @property {number} balanceAtSSReal     gross value at SS start age
+ * @property {number} endBalanceEffReal      presentation-layer companion of
+ *                                           `endBalanceReal` — sources the
+ *                                           corresponding lifecycle record's
+ *                                           `effBalReal` (Traditional 401(k)
+ *                                           pool discounted by `inputs.taxTradRate`).
+ *                                           Matches the inline dashboard's effBal
+ *                                           convention for display.
+ * @property {number} balanceAtUnlockEffReal presentation-layer companion of
+ *                                           `balanceAtUnlockReal`.
+ * @property {number} balanceAtSSEffReal     presentation-layer companion of
+ *                                           `balanceAtSSReal`.
+ * @property {LifecycleRecord[]} lifecycle   the projection that justifies this answer
  */
 ```
 
-Solver invariant: `lifecycle[lifecycle.length-1].totalReal === endBalanceReal` (no
-rounding drift between solver and downstream renderers).
+Solver invariants (no rounding drift between solver and downstream renderers):
+- `lifecycle[lifecycle.length-1].totalReal === endBalanceReal`
+- `lifecycle[lifecycle.length-1].effBalReal === endBalanceEffReal`
+- `lifecycle.find(r => r.agePrimary === 60).effBalReal === balanceAtUnlockEffReal`
+- `lifecycle.find(r => r.agePrimary === ssStartAgePrimary).effBalReal === balanceAtSSEffReal`
 
 ---
 

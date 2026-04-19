@@ -236,3 +236,146 @@ test('fireCalculator: generic-realistic fixture produces fireAge within ±1 year
     `generic-realistic: feasible must match baseline (${fixture.expected.feasible}); got ${result.feasible}`,
   );
 });
+
+/*
+ * US2b parity-phase effBal display layer (Backend dispatch, 2026-04-19) —
+ * canonical engine adds presentation-layer fields that mirror the inline
+ * engine's `effBal` convention (pTrad × (1 − taxTrad) + pRoth + pStocks + pCash).
+ *
+ * The canonical engine's raw `totalReal` is mathematically honest but
+ * materially larger than what users see today in the inline dashboard.
+ * `effBalReal` (per record) and `endBalanceEffReal` / `balanceAtUnlockEffReal` /
+ * `balanceAtSSEffReal` (per FireSolverResult) close the presentation gap so
+ * chart renderers can keep displaying numbers users recognize.
+ *
+ * Invariants tested here:
+ *   - Every lifecycle record carries a numeric `effBalReal` field.
+ *   - `effBalReal <= totalReal` always (tax drag is non-negative).
+ *   - `effBalReal === totalReal` when `trad401kReal` is 0 OR `taxTradRate` is 0.
+ *   - `result.endBalanceEffReal === lifecycle[last].effBalReal` exactly.
+ *   - `result.balanceAtUnlockEffReal === lifecycle[@60].effBalReal` exactly.
+ *   - `result.balanceAtSSEffReal === lifecycle[@ssStartAge].effBalReal` exactly.
+ *   - rr-realistic and generic-realistic: the solver's effBal checkpoints
+ *     match fixture.expected.* effBal fields within balanceRelativeTolerance.
+ */
+
+test('fireCalculator: effBalReal layer — invariants on every lifecycle record (rr-realistic)', () => {
+  const fixture = rrRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const taxTradRate = fixture.inputs.taxTradRate ?? 0.22;
+
+  for (const rec of result.lifecycle) {
+    assert.equal(
+      typeof rec.effBalReal,
+      'number',
+      `effBalReal must be numeric on every record (age ${rec.agePrimary})`,
+    );
+    // effBalReal <= totalReal always (non-negative tax drag).
+    assert.ok(
+      rec.effBalReal <= rec.totalReal + 1e-6,
+      `effBalReal (${rec.effBalReal}) must be <= totalReal (${rec.totalReal}) at age ${rec.agePrimary}`,
+    );
+    // Formula: effBalReal === totalReal - trad401kReal * taxTradRate.
+    const expected = rec.totalReal - rec.trad401kReal * taxTradRate;
+    assert.ok(
+      Math.abs(rec.effBalReal - expected) < 1e-3,
+      `effBalReal at age ${rec.agePrimary} must match totalReal - trad401k*taxTradRate ` +
+        `(expected ${expected}, got ${rec.effBalReal})`,
+    );
+  }
+});
+
+test('fireCalculator: effBalReal === totalReal when trad401kReal is zero (generic-realistic early years)', () => {
+  const fixture = genericRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+
+  // Generic fixture starts with trad401kReal = 0 and contributes 60% to trad.
+  // At i=0 (before any contribution compounds), trad401kReal is still 0.
+  const firstRec = result.lifecycle[0];
+  assert.equal(
+    firstRec.trad401kReal,
+    0,
+    'generic-realistic year 0: trad401kReal is 0 (fixture precondition)',
+  );
+  assert.ok(
+    Math.abs(firstRec.effBalReal - firstRec.totalReal) < 1e-9,
+    `when trad401kReal === 0, effBalReal (${firstRec.effBalReal}) must equal ` +
+      `totalReal (${firstRec.totalReal})`,
+  );
+});
+
+test('fireCalculator: FireSolverResult effBal companions match lifecycle checkpoints exactly (rr-realistic)', () => {
+  const fixture = rrRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const lc = result.lifecycle;
+  const lastRec = lc[lc.length - 1];
+  const unlockRec = lc.find((r) => r.agePrimary === 60);
+  const ssRec = lc.find((r) => r.agePrimary === fixture.inputs.ssStartAgePrimary);
+
+  assert.equal(
+    typeof result.endBalanceEffReal,
+    'number',
+    'endBalanceEffReal present on result',
+  );
+  assert.equal(
+    typeof result.balanceAtUnlockEffReal,
+    'number',
+    'balanceAtUnlockEffReal present on result',
+  );
+  assert.equal(
+    typeof result.balanceAtSSEffReal,
+    'number',
+    'balanceAtSSEffReal present on result',
+  );
+
+  assert.ok(
+    Math.abs(result.endBalanceEffReal - lastRec.effBalReal) < 1e-6,
+    `endBalanceEffReal (${result.endBalanceEffReal}) must === lifecycle[last].effBalReal (${lastRec.effBalReal})`,
+  );
+  assert.ok(unlockRec, 'unlock record (age 60) exists in lifecycle');
+  assert.ok(
+    Math.abs(result.balanceAtUnlockEffReal - unlockRec.effBalReal) < 1e-6,
+    `balanceAtUnlockEffReal (${result.balanceAtUnlockEffReal}) must === unlockRec.effBalReal (${unlockRec.effBalReal})`,
+  );
+  assert.ok(ssRec, 'SS-start record exists in lifecycle');
+  assert.ok(
+    Math.abs(result.balanceAtSSEffReal - ssRec.effBalReal) < 1e-6,
+    `balanceAtSSEffReal (${result.balanceAtSSEffReal}) must === ssRec.effBalReal (${ssRec.effBalReal})`,
+  );
+});
+
+test('fireCalculator: rr-realistic effBal checkpoints match fixture.expected within balanceRelativeTolerance', () => {
+  const fixture = rrRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const tol = fixture.expected.balanceRelativeTolerance ?? 0.10;
+
+  for (const field of ['endBalanceEffReal', 'balanceAtUnlockEffReal', 'balanceAtSSEffReal']) {
+    const expected = fixture.expected[field];
+    const actual = result[field];
+    assert.equal(typeof expected, 'number', `fixture.expected.${field} must be locked`);
+    const relErr = Math.abs(actual - expected) / Math.max(Math.abs(expected), 1);
+    assert.ok(
+      relErr <= tol,
+      `rr-realistic: ${field} expected ${expected} ±${(tol * 100).toFixed(0)}%, got ${actual} ` +
+        `(rel err ${(relErr * 100).toFixed(3)}%)`,
+    );
+  }
+});
+
+test('fireCalculator: generic-realistic effBal checkpoints match fixture.expected within balanceRelativeTolerance', () => {
+  const fixture = genericRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const tol = fixture.expected.balanceRelativeTolerance ?? 0.10;
+
+  for (const field of ['endBalanceEffReal', 'balanceAtUnlockEffReal', 'balanceAtSSEffReal']) {
+    const expected = fixture.expected[field];
+    const actual = result[field];
+    assert.equal(typeof expected, 'number', `fixture.expected.${field} must be locked`);
+    const relErr = Math.abs(actual - expected) / Math.max(Math.abs(expected), 1);
+    assert.ok(
+      relErr <= tol,
+      `generic-realistic: ${field} expected ${expected} ±${(tol * 100).toFixed(0)}%, got ${actual} ` +
+        `(rel err ${(relErr * 100).toFixed(3)}%)`,
+    );
+  }
+});

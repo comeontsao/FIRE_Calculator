@@ -370,6 +370,29 @@ noted below.
 rr-realistic and generic-realistic. This is PURELY a presentation-layer
 semantic difference — the underlying feasibility is not worse or better.
 
+**Resolution (2026-04-19 U2B-parity dispatch)**: the canonical engine now
+emits a dedicated `effBalReal` field per `LifecycleRecord` (formula:
+`totalReal − trad401kReal × taxTradRate`) plus three solver-level
+companions (`endBalanceEffReal`, `balanceAtUnlockEffReal`,
+`balanceAtSSEffReal`) that mirror the inline engine's effBal convention
+exactly. Chart renderers that currently display pre-refactor numbers can
+bind to `*EffReal` and stay visually consistent; reporting paths that need
+the gross figure (RMD base, estate planning) continue to bind to `*Real`.
+
+With the effBal display layer in place, the presentation half of the §C.3c
+gap is closed. The *residual* gap between canonical `endBalanceEffReal`
+and inline harness `endBalanceReal` reflects §C.1 (real/nominal healthcare
+mixing fix) + §C.2 (typed silent-shortfall fix) + §C.3b (60/20/20 default
+contribution split) — all of which genuinely change the simulated
+trajectory, not the presentation. The U2B-parity dispatch expected
+`endBalanceEffReal` to land within ~10% of the inline `endBalanceReal`,
+but the observed gap on the TB21-locked fixtures is larger (≈ +49%
+rr-realistic, ≈ +56% generic-realistic) because the canonical fixtures
+retire 4 years later (RR: 58 vs 54) / 10 years later (Generic: 75 vs 65)
+than inline — those extra accumulation years inflate the end balance
+regardless of the effBal vs totalReal choice. §C.5's summary table is
+extended below with the effBal observations.
+
 ### C.4 Generic ignores secondary-person portfolio (corrected in US3)
 
 **Inline behavior** (Generic today): `findFireAgeNumerical` in the Generic
@@ -404,11 +427,31 @@ deltas were:
 | rr-realistic | balanceAtUnlockReal | $704,027 | $1,261,296 | +79.2% | §C.3b (60/20/20 default routes more to Trad; canonical totalReal doesn't discount Trad by 15%), §C.3c (no tax pre-pay) |
 | rr-realistic | balanceAtSSReal | $344,908 | $1,061,540 | +207.8% | §C.3c, delayed retirement (fireAge 58 vs 54) means 4 extra accumulation years + less drawdown before SS |
 | rr-realistic | endBalanceReal | $618,741 | $990,645 | +60.1% | §C.3c (totalReal raw sum) + delayed retirement |
+| rr-realistic | endBalanceEffReal | $618,741 | $918,525 | +48.5% | §C.3c closed by effBal layer; residual is §C.1/§C.2/§C.3b + 4-yr-later retirement |
+| rr-realistic | balanceAtUnlockEffReal | $704,027 | $1,175,103 | +66.9% | same as above |
+| rr-realistic | balanceAtSSEffReal | $344,908 | $948,117 | +174.9% | same as above; heavily amplified by 4-yr-later retirement path |
 | generic-realistic | fireAge | 65 | 75 | +10 yrs | §C.1, §C.2, §C.3c, Zero-portfolio start — canonical's stricter feasibility gate pushes fireAge much later when buffers bind harder |
 | generic-realistic | yearsToFire | 29 | 39 | +10 yrs | (derived from fireAge) |
 | generic-realistic | balanceAtUnlockReal | $520,394 | $410,367 | −21.1% | Delayed fireAge (75 > 60): at age 60, still in accumulation phase with only 24 yrs of growth on $10.5k/yr vs inline's fireAge=65 where pool grew 5 additional years past retirement |
 | generic-realistic | balanceAtSSReal | $389,735 | $622,948 | +59.8% | Canonical retires at 75 > 67 SS start; pool is still accumulating through age 67 whereas inline has been drawing down since 65 |
 | generic-realistic | endBalanceReal | $164,650 | $299,077 | +81.6% | §C.3c (raw totalReal) + shorter drawdown window (20 years vs 30) |
+| generic-realistic | endBalanceEffReal | $164,650 | $256,617 | +55.9% | §C.3c closed by effBal layer; residual is §C.1/§C.2 + 10-yr-later retirement with shorter drawdown |
+| generic-realistic | balanceAtUnlockEffReal | $520,394 | $373,434 | −28.2% | effBal layer widens the gap vs raw because canonical has a larger Trad share at age 60; same cause as the raw checkpoint |
+| generic-realistic | balanceAtSSEffReal | $389,735 | $566,882 | +45.4% | same as raw case but with Trad discount applied |
+
+**effBal layer observations (2026-04-19 U2B-parity dispatch)**:
+- effBalReal formula: `totalReal − (trad401kReal × taxTradRate)` per lifecycle
+  record, exactly mirroring the inline harness's `pTrad × (1 − taxTrad) + pRoth
+  + pStocks + pCash` (inline-harness.mjs:621, 730).
+- `taxTradRate` comes from `inputs.taxTradRate` (0.15 on both RR and Generic
+  fixtures); defaults to 0.22 when omitted.
+- The effBal layer closes the §C.3c presentation gap but the `*EffReal`
+  residual remains large (≈ +49–175% for rr-realistic, ≈ −28–+56% for
+  generic-realistic) because §C.1/§C.2/§C.3b shift the fireAge itself (+4 yrs
+  RR, +10 yrs Generic). A matched-fireAge comparison (inline @ 54 vs canonical
+  @ 54) would show much smaller effBal gaps dominated by §C.3b. The
+  large-looking residual here is a **trajectory** difference, not a
+  **presentation** difference.
 
 **Classification**: every delta above is a correctness-framework or semantic
 difference — no delta traces to a regression introduced by US2b module

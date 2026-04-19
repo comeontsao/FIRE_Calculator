@@ -150,20 +150,36 @@ const fixture = Object.freeze({
     balanceAtSSReal: 622_947.52,     // canonical-engine-pinned (TB21)
     endBalanceReal: 299_076.99,      // canonical-engine-pinned (TB21)
 
+    // effBal presentation-layer companions — canonical-engine-pinned on the
+    // TB21-locked fireAge=75 trajectory (2026-04-19). Formula at each
+    // checkpoint: effBalReal = totalReal − (trad401kReal × taxTradRate), with
+    // taxTradRate=0.15 from this fixture's inputs. Gap vs inline harness
+    // (§B.observed: end $164,650 / unlock $520,394 / SS $389,735) remains
+    // material because the Generic canonical run retires at age 75, not 65 —
+    // the +10-year shift is §C.1/§C.2/§C.3c correctness drivers, not the
+    // effBal presentation. Locked for regression.
+    endBalanceEffReal: 256_616.97,
+    balanceAtUnlockEffReal: 373_434.28,
+    balanceAtSSEffReal: 566_882.24,
+
     fireAgeToleranceYears: 1,
     balanceRelativeTolerance: 0.10,
   }),
   notes:
     'Canonical Generic input set in shared Inputs shape. Expected values ' +
     'are CANONICAL-ENGINE-PINNED (post-US2b lifecycle+fireCalculator, ' +
-    're-locked 2026-04-19 in TB21). Previously locked to inline-harness ' +
-    'values (fireAge=65); rolled forward to fireAge=75 with correctness ' +
-    'delta documented in baseline §C.5. Classification: ' +
+    're-locked 2026-04-19 in TB21; effBal companions added U2B-parity ' +
+    'dispatch 2026-04-19). Previously locked to inline-harness values ' +
+    '(fireAge=65); rolled forward to fireAge=75 with correctness delta ' +
+    'documented in baseline §C.5. Classification: ' +
     '(a) ANALYTICAL — baseline §B.analytical predicted infeasibility but ' +
     'the canonical engine finds feasibility at age 75 (SS + residual ' +
     'compounding cushion). ' +
-    '(b) CANONICAL-PINNED — all six expected values are canonical-engine ' +
-    'outputs captured 2026-04-19 via solveFireAge. ' +
+    '(b) CANONICAL-PINNED — all nine expected values are canonical-engine ' +
+    'outputs captured 2026-04-19 via solveFireAge. `*Real` fields are gross ' +
+    '(canonical); `*EffReal` fields are post-tax-drag (display parity with ' +
+    'inline engine baseline §A/§B); §C.3c originally captured the gap and ' +
+    'the effBal layer now closes the presentation half of it. ' +
     '(c) INTENTIONAL DEVIATIONS from inline baseline — documented in ' +
     'baseline §C.1/§C.2/§C.3c and summarized in §C.5. The zero-portfolio ' +
     'cold start amplifies the Safe-mode-buffer-binding effect. ' +
