@@ -82,10 +82,19 @@ function evaluateFeasibility(lifecycle, inputs) {
   const everyYearFeasible = lifecycle.every((r) => r.feasible);
 
   const mode = inputs.solverMode;
+  // When `scenarioSpendReal` is provided, it overrides `annualSpendReal` as the
+  // retirement-phase spend target. Safe-mode buffers are expressed in
+  // "years-of-spend", which semantically means years of RETIREMENT spend —
+  // so we key the buffer multiplier off the retirement-spend value. This
+  // matches the inline harness's `annualSpend` variable, which is already
+  // scenario-adjusted before the buffer check.
+  const retirementSpend = typeof inputs.scenarioSpendReal === 'number'
+    ? inputs.scenarioSpendReal
+    : inputs.annualSpendReal;
   let ok = false;
   if (mode === 'safe') {
-    const unlockRequired = (inputs.buffers?.bufferUnlockMultiple ?? 0) * inputs.annualSpendReal;
-    const ssRequired = (inputs.buffers?.bufferSSMultiple ?? 0) * inputs.annualSpendReal;
+    const unlockRequired = (inputs.buffers?.bufferUnlockMultiple ?? 0) * retirementSpend;
+    const ssRequired = (inputs.buffers?.bufferSSMultiple ?? 0) * retirementSpend;
     ok = everyYearFeasible
       && balanceAtUnlock >= unlockRequired
       && balanceAtSS >= ssRequired;

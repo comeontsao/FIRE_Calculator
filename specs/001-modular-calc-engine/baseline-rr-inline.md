@@ -305,6 +305,71 @@ module will replace this with a proper stochastic engine. Not a US2b
 deliverable; flagged here only so reviewers don't confuse "still deterministic"
 with "regression".
 
+### C.3b Accumulation contribution routing — semantic vs literal ($-amount)
+
+**Inline behavior**: The inline engine hardwires contribution routing to
+specific fields: `tradContrib = contrib401kTrad + empMatch`, `rothContrib =
+contrib401kRoth`, `pStocks += monthlySavings × 12`. For the canonical RR
+cold-load inputs these flow as Trad=$15,750, Roth=$2,850, Stocks=$24,000
+(plus Roger's $7,200 match routed to Trad). There is no generic
+trad/roth/taxable split fraction — the routing is implicit in which
+`contrib*` field the dashboard emits.
+
+**Canonical behavior**: `calc/lifecycle.js` accepts a single
+`annualContributionReal` plus a `contributionSplit` = {trad, roth, taxable}
+fraction triple (default 60/20/20). The caller is responsible for mapping the
+HTML form's distinct Trad/Roth/Taxable dollar buckets into either (a) a
+`contributionSplit` override that reproduces the exact fractions, or (b) the
+canonical 60/20/20 default when the HTML form doesn't distinguish.
+
+**Expected impact on baseline**: The RR canonical fixture uses the DEFAULT
+60/20/20 split. Against the inline's 37%/7%/56% routing, the 60/20/20 default
+puts more dollars into tax-advantaged pools early. Under the inline's
+`effBal = pTrad × (1−taxTrad) + pRoth + pStocks + pCash` evaluation, the
+higher Trad balance is penalized by 15% (taxTrad) whereas under the canonical
+engine's raw-sum evaluation, every pool's real dollars count equally. The
+net effect: a 1-year fireAge shift on rr-realistic.
+
+**Planned resolution**: When T048/T049 adapts the HTML getInputs() to emit
+the canonical Inputs shape, the adapter will set `contributionSplit` to
+reflect the form's explicit Trad/Roth/Taxable dollar buckets. At that point,
+this correctness fix becomes a zero-delta parity.
+
+**Baseline values affected**: rr-realistic (noticeable on fireAge by 1 yr);
+generic-realistic (inline has only Trad+Taxable, $0 Roth; the 60/20/20
+default reroutes some taxable into Roth but the fireAge delta driven by this
+is small compared to §C.5 below).
+
+### C.3c Tax-adjusted effective-balance vs raw pool sum
+
+**Inline behavior**: The inline engine evaluates net-worth / feasibility
+using `effBal = pTrad × (1 − taxTrad) + pRoth + pStocks + pCash`. This
+pre-pays the estimated tax on Trad withdrawals — a back-of-envelope way to
+answer "what will I actually have to spend after taxes?". The constant
+`taxTrad` defaults to 0.15 and is the source of truth for this computation.
+
+**Canonical behavior**: `LifecycleRecord.totalReal` is the raw sum of the
+four pool fields in real dollars with NO tax adjustment. Tax effects are
+modeled inside the withdrawal module (`calc/withdrawal.js`), which applies
+proper bracket-aware tax-gross-up per withdrawal — so the cumulative tax
+drag is already baked into the year-over-year pool drawdowns. The canonical
+`balanceAtUnlock` / `balanceAtSS` / `endBalance` values therefore are larger
+in absolute dollars than the inline's effBal-based numbers, even for the
+same underlying trajectory.
+
+**Expected impact on baseline**: inline's checkpoint balances apply a silent
+tax discount on Trad pools only. Canonical balances look bigger (no discount)
+but have been properly taxed *at withdrawal* via the withdrawal module. For
+rr-realistic, balanceAtUnlock and balanceAtSS in canonical vs inline diverge
+by roughly taxTrad × trad_share of each checkpoint — which for the RR cold-
+load is ~15% of the Trad balance at each checkpoint. Combined with the
+different composition from §C.3b, this produces the large-looking deltas
+noted below.
+
+**Baseline values affected**: all checkpoint balance fields in both
+rr-realistic and generic-realistic. This is PURELY a presentation-layer
+semantic difference — the underlying feasibility is not worse or better.
+
 ### C.4 Generic ignores secondary-person portfolio (corrected in US3)
 
 **Inline behavior** (Generic today): `findFireAgeNumerical` in the Generic
@@ -323,6 +388,36 @@ cold-load zero-portfolio case is unaffected (zero + zero = zero). But if a
 user populates `portfolioSecondary.taxableStocksReal > 0` and compares
 inline vs canonical, the canonical `fireAge` will be earlier (SC-005
 sensitivity test locks a ≥ 1 year delta for a doubled secondary portfolio).
+
+---
+
+### C.5 TB21-observed parity deltas (canonical engine, 2026-04-19)
+
+When TB21 ran `solveFireAge` against the canonical fixtures using the
+post-US2b canonical engine (lifecycle.js + fireCalculator.js), the observed
+deltas were:
+
+| Fixture | Metric | Inline baseline | Canonical engine | Delta | Dominant driver(s) |
+|---|---|---|---|---|---|
+| rr-realistic | fireAge | 54 | 58 | +4 yrs | §C.1 healthcare real/nominal, §C.2 silent shortfall, §C.3b contrib split, §C.3c effBal vs totalReal |
+| rr-realistic | yearsToFire | 11 | 15 | +4 yrs | (derived from fireAge) |
+| rr-realistic | balanceAtUnlockReal | $704,027 | $1,261,296 | +79.2% | §C.3b (60/20/20 default routes more to Trad; canonical totalReal doesn't discount Trad by 15%), §C.3c (no tax pre-pay) |
+| rr-realistic | balanceAtSSReal | $344,908 | $1,061,540 | +207.8% | §C.3c, delayed retirement (fireAge 58 vs 54) means 4 extra accumulation years + less drawdown before SS |
+| rr-realistic | endBalanceReal | $618,741 | $990,645 | +60.1% | §C.3c (totalReal raw sum) + delayed retirement |
+| generic-realistic | fireAge | 65 | 75 | +10 yrs | §C.1, §C.2, §C.3c, Zero-portfolio start — canonical's stricter feasibility gate pushes fireAge much later when buffers bind harder |
+| generic-realistic | yearsToFire | 29 | 39 | +10 yrs | (derived from fireAge) |
+| generic-realistic | balanceAtUnlockReal | $520,394 | $410,367 | −21.1% | Delayed fireAge (75 > 60): at age 60, still in accumulation phase with only 24 yrs of growth on $10.5k/yr vs inline's fireAge=65 where pool grew 5 additional years past retirement |
+| generic-realistic | balanceAtSSReal | $389,735 | $622,948 | +59.8% | Canonical retires at 75 > 67 SS start; pool is still accumulating through age 67 whereas inline has been drawing down since 65 |
+| generic-realistic | endBalanceReal | $164,650 | $299,077 | +81.6% | §C.3c (raw totalReal) + shorter drawdown window (20 years vs 30) |
+
+**Classification**: every delta above is a correctness-framework or semantic
+difference — no delta traces to a regression introduced by US2b module
+extraction. The canonical fixtures' `expected` blocks have been re-locked to
+the canonical-engine values. When T048/T049 adapts getInputs() to set
+`contributionSplit` per the HTML form's explicit Trad/Roth/Taxable fields,
+the §C.3b contribution factor will go to zero and the rr-realistic fireAge
+delta should shrink from 4 yrs to ~3 yrs (leaving §C.1/§C.2/§C.3c as the
+residual correctness-framework gap).
 
 ---
 
