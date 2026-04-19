@@ -1,0 +1,81 @@
+/**
+ * Infeasible case (per constitution Principle IV).
+ *
+ * $500k portfolio, $80k/yr spend, $0 contributions, retiring "now" at 45.
+ * At 16% withdrawal rate (80k/500k) the money runs out in ~8-10 years well
+ * before endAge. The solver MUST NOT silently round this away; it MUST
+ * surface `feasible: false` with `deficitReal > 0` and let the banner
+ * trigger (FR-004, FR-013).
+ *
+ * Complex fixture — numeric expected values locked during T037 (withdrawal)
+ * and T038 (lifecycle) TDD cycles. Qualitative invariants in `notes`.
+ *
+ * @typedef {import('./types.js').FixtureCase} FixtureCase
+ */
+
+/** @type {FixtureCase} */
+const fixture = Object.freeze({
+  name: 'infeasible — single age 45, $500k portfolio, $80k spend, $0 contributions',
+  kind: 'unit',
+  inputs: Object.freeze({
+    currentAgePrimary: 45,
+    endAge: 95,
+
+    portfolioPrimary: Object.freeze({
+      trad401kReal: 200_000,
+      rothIraReal: 100_000,
+      taxableStocksReal: 150_000,
+      cashReal: 50_000,
+      annualContributionReal: 0,
+    }),
+
+    annualSpendReal: 80_000,
+    returnRateReal: 0.05,
+    returnRateCashReal: 0.01,
+    inflationRate: 0.03,
+
+    tax: Object.freeze({
+      ordinaryBrackets: Object.freeze([
+        Object.freeze({ threshold: 0, rate: 0.10 }),
+        Object.freeze({ threshold: 11_600, rate: 0.12 }),
+        Object.freeze({ threshold: 47_150, rate: 0.22 }),
+        Object.freeze({ threshold: 100_525, rate: 0.24 }),
+      ]),
+      ltcgBrackets: Object.freeze([
+        Object.freeze({ threshold: 0, rate: 0.00 }),
+        Object.freeze({ threshold: 47_025, rate: 0.15 }),
+        Object.freeze({ threshold: 518_900, rate: 0.20 }),
+      ]),
+      rmdAgeStart: 73,
+    }),
+    solverMode: 'exact',
+    buffers: Object.freeze({
+      bufferUnlockMultiple: 2,
+      bufferSSMultiple: 2,
+    }),
+
+    scenario: Object.freeze({
+      country: 'US',
+      healthcareScenario: 'aca',
+    }),
+    colleges: Object.freeze([]),
+    ssStartAgePrimary: 67,
+  }),
+  expected: Object.freeze({
+    feasible: false,
+    fireAge: 'TBD_LOCK_IN_T038', // must equal endAge per data-model §8 invariant
+    yearsToFire: 'TBD_LOCK_IN_T038',
+    deficitReal: 'TBD_LOCK_IN_T037', // must be > 0
+    deficitSignInvariant: 'deficitReal > 0',
+    shortfallYearApprox: 'within 10-15y of retirement start (qualitative)',
+  }),
+  notes:
+    'feasible must be false; deficitReal > 0 by the time lifecycle runs out of ' +
+    'taxable+cash pools (~year 8-10 at the listed withdrawal rate). ' +
+    'FireSolverResult.fireAge must equal endAge (95) per data-model.md §8 ' +
+    'invariant when solver cannot find a feasible age. ' +
+    'Exact numeric values locked during T037 (withdrawal.js) and T038 ' +
+    '(lifecycle.js) TDD cycles.',
+});
+
+export default fixture;
