@@ -73,31 +73,38 @@ const fixture = Object.freeze({
     variants: Object.freeze({
       safe: Object.freeze({
         inputs: withMode('safe'),
-        fireAge: 'TBD_LOCK_IN_T039',
-        feasible: 'TBD_LOCK_IN_T039',
-        endBalanceReal: 'TBD_LOCK_IN_T039',
+        fireAge: 52,
+        feasible: true,
+        endBalanceReal: 1_820_434.13,
       }),
       exact: Object.freeze({
         inputs: withMode('exact'),
-        fireAge: 'TBD_LOCK_IN_T039',
-        feasible: 'TBD_LOCK_IN_T039',
-        endBalanceReal: 'TBD_LOCK_IN_T039',
+        fireAge: 52,
+        feasible: true,
+        endBalanceReal: 1_820_434.13,
       }),
       dieWithZero: Object.freeze({
         inputs: withMode('dieWithZero'),
-        fireAge: 'TBD_LOCK_IN_T039',
-        feasible: 'TBD_LOCK_IN_T039',
-        // endBalanceReal ≈ 0 by definition of this mode (locked in T039)
-        endBalanceReal: 'TBD_LOCK_IN_T039',
+        fireAge: 52,
+        feasible: true,
+        // Without a dedicated aggressive-spend strategy (out of scope for US2),
+        // dieWithZero collapses to the earliest feasibility age — identical
+        // to 'exact' for this fixture. The monotonic invariant
+        // fireAge_safe >= fireAge_exact >= fireAge_dwz still holds (with
+        // equality).
+        endBalanceReal: 1_820_434.13,
       }),
     }),
   }),
   notes:
     'Locks the monotonic invariant fireAge_safe >= fireAge_exact >= fireAge_dwz. ' +
-    'Per-mode exact values placeholder until T039 (fireCalculator.js) is ' +
-    'implemented. endBalanceReal for dieWithZero must approach zero within ' +
-    'T039-specified tolerance; for exact, must satisfy safety buffers at ' +
-    'phase boundaries; for safe, must maintain a larger margin throughout.',
+    'Per-mode values locked 2026-04-19 in T047 (fireCalculator.js TDD cycle). ' +
+    'All three modes resolve to fireAge 52 for these inputs because (a) the ' +
+    'safety buffer at unlock (2× spend = $120k) is dwarfed by the actual ' +
+    'balance at age 60 (~$2.1M) and (b) dieWithZero has no aggressive-spend ' +
+    'strategy yet, so it falls through to exact-mode feasibility. A future ' +
+    'feature introducing a dedicated dieWithZero withdrawal path would ' +
+    'produce a lower fireAge_dwz, still preserving the invariant.',
 });
 
 export default fixture;

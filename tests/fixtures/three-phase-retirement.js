@@ -62,21 +62,31 @@ const fixture = Object.freeze({
     ssStartAgePrimary: 67,
   }),
   expected: Object.freeze({
-    yearsToFire: 'TBD_LOCK_IN_T038',
-    fireAge: 'TBD_LOCK_IN_T038',
-    feasible: 'TBD_LOCK_IN_T038',
-    endBalanceReal: 'TBD_LOCK_IN_T038',
-    balanceAtUnlockReal: 'TBD_LOCK_IN_T038',
-    balanceAtSSReal: 'TBD_LOCK_IN_T038',
+    // Locked 2026-04-19 (T046/T047) — lifecycle+solver output becomes the
+    // ground truth for this complex fixture. Tolerances on balance
+    // checkpoints (2%) absorb float-drift across lifecycle-engine refactors.
+    // Solver fields (consumed by fireCalculator test): solver-found fireAge=52.
+    yearsToFire: 7,
+    fireAge: 52,
+    feasible: true,
+    endBalanceReal: 1_820_434.13,
+    balanceAtUnlockReal: 1_965_889.61,
+    balanceAtSSReal: 2_226_066.49,
+    // Lifecycle checkpoints (consumed by lifecycle test): captured at the
+    // test's hardcoded fireAge=53 (see tests/unit/lifecycle.test.js:94), which
+    // differs from the solver's 52. Both are equally valid projections — the
+    // lifecycle test asserts structural invariants at a pinned fireAge; the
+    // fireCalculator test asserts the solver picks the earliest feasible age.
     lifecycleCheckpoints: Object.freeze([
-      Object.freeze({ age: 55, totalReal: 'TBD_LOCK_IN_T038', tolerance: 0.02 }),
-      Object.freeze({ age: 62, totalReal: 'TBD_LOCK_IN_T038', tolerance: 0.02 }),
-      Object.freeze({ age: 85, totalReal: 'TBD_LOCK_IN_T038', tolerance: 0.02 }),
+      Object.freeze({ age: 55, totalReal: 1_965_426.82, tolerance: 0.02 }),
+      Object.freeze({ age: 62, totalReal: 2_179_328.30, tolerance: 0.02 }),
+      Object.freeze({ age: 85, totalReal: 3_083_437.99, tolerance: 0.02 }),
     ]),
   }),
   notes:
-    'Complex fixture — expected values are placeholders. Locks the phase transitions ' +
-    'at 59.5 (401(k) unlock) and 67 (SS start). Qualitative invariants until T038: ' +
+    'Complex fixture — numeric expected values locked 2026-04-19 in T046 (lifecycle) ' +
+    'and T047 (fireCalculator) TDD cycles. Locks the phase transitions ' +
+    'at 59.5 (401(k) unlock) and 67 (SS start). Qualitative invariants: ' +
     '(a) feasible must be true at solver-found fireAge; ' +
     '(b) lifecycle must transit accumulation → preUnlock at fireAge, ' +
     'preUnlock → unlocked at age 60 (59.5 rounded), unlocked → ssActive at 67; ' +
@@ -84,8 +94,7 @@ const fixture = Object.freeze({
     '(d) withdrawalReal > 0 only in retirement phases, contributionReal > 0 only ' +
     'in accumulation; ' +
     '(e) totalReal monotonically non-decreasing through accumulation. ' +
-    'Expected numeric values locked during T038 TDD cycle when lifecycle.js is ' +
-    'implemented and tested — its output becomes the ground truth for this case.',
+    'Solver-found fireAge 52 = 7 years to FIRE from currentAgePrimary 45.',
 });
 
 export default fixture;
