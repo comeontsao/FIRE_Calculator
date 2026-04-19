@@ -777,6 +777,120 @@
     transition: opacity 0.3s;
   }
   .fire-drag-hint.hidden { display: none; }
+
+  /* ==================== Feature 001-modular-calc-engine (T024–T029) ==================== */
+  /* Confirm overlay (FR-018) — DOM overlay positioned over the growth-chart canvas */
+  .override-confirm {
+    position: absolute;
+    top: 12px;
+    background: var(--card);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85em;
+    color: var(--text);
+    white-space: nowrap;
+    animation: overrideConfirmIn 0.18s ease-out;
+  }
+  .override-confirm[hidden] { display: none !important; }
+  .override-confirm__label { font-weight: 500; }
+  .override-confirm__apply {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95em;
+    transition: background 0.15s;
+  }
+  .override-confirm__apply:hover { background: #8076ff; }
+  .override-confirm__cancel {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 1em;
+    line-height: 1;
+  }
+  .override-confirm__cancel:hover { color: var(--text); }
+  .override-confirm__apply:focus-visible,
+  .override-confirm__cancel:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @keyframes overrideConfirmIn {
+    from { opacity: 0; transform: translate(-50%, -6px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+
+  /* Reset-to-calculated control (FR-003) — matches dashboard button aesthetic */
+  .override-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    background: rgba(108,99,255,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(108,99,255,0.35);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.82em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .override-reset::before { content: '↺'; font-size: 1em; }
+  .override-reset:hover { background: rgba(108,99,255,0.22); border-color: var(--accent); }
+  .override-reset[hidden] { display: none !important; }
+  .override-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Drag affordance (FR-019) — persistent italic hint positioned near the marker */
+  .drag-hint {
+    position: absolute;
+    font-style: italic;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+    pointer-events: none;
+    transform: translateX(-50%);
+    text-shadow: 0 1px 2px rgba(15,17,23,0.8);
+    transition: opacity 0.3s, top 0.15s, left 0.15s;
+    z-index: 15;
+  }
+  .drag-hint[hidden] { display: none !important; }
+  .drag-hint--seen { opacity: 0.3; }
+  .drag-hint--pulse { animation: firemarker-pulse 1s ease-out 3; }
+  @keyframes firemarker-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(108,99,255,0.7); opacity: 0.95; }
+    70%  { box-shadow: 0 0 0 12px rgba(108,99,255,0); opacity: 0.7; }
+    100% { box-shadow: 0 0 0 0 rgba(108,99,255,0); opacity: 0.7; }
+  }
+
+  /* Infeasibility indicator (FR-004) — reuses --danger token */
+  .infeasibility-banner {
+    background: rgba(255,107,107,0.10);
+    border-left: 4px solid var(--danger);
+    color: var(--danger);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.88em;
+    font-weight: 500;
+  }
+  .infeasibility-banner[hidden] { display: none !important; }
+  .infeasibility-banner__icon { font-size: 1.15em; }
+  .infeasibility-banner__deficit { margin-left: auto; color: var(--text-dim); font-size: 0.88em; font-weight: 400; }
 </style>
 </head>
 <body>
@@ -1579,9 +1693,25 @@
   <!-- Full Lifecycle Chart -->
   <div class="card span-3">
     <div class="card-title"><span class="icon">📊</span> <span data-i18n="sec.lifecycle">Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security</span></div>
-    <div style="position:relative;width:100%;height:380px">
-      <canvas id="growthChart"></canvas>
+    <!-- Infeasibility banner (FR-004) — driven by chartState.state.feasible -->
+    <div class="infeasibility-banner" id="infeasibilityBanner" hidden role="alert">
+      <span class="infeasibility-banner__icon" aria-hidden="true">⚠</span>
+      <span class="infeasibility-banner__text" data-i18n="infeasibility.banner">This retirement age is not sustainable under your current plan.</span>
+      <span class="infeasibility-banner__deficit" id="infeasibilityDeficit"></span>
     </div>
+    <div style="position:relative;width:100%;height:380px" id="growthChartWrap">
+      <canvas id="growthChart"></canvas>
+      <!-- T028: persistent drag hint positioned near the FIRE marker via getPixelForValue -->
+      <span class="drag-hint" id="dragHint" data-i18n="override.dragHint" hidden>drag me</span>
+      <!-- T024: confirm overlay (FR-018) — shown after a drag ends; DOM overlay per research R4 -->
+      <div class="override-confirm" id="overrideConfirm" hidden role="dialog" aria-live="polite" aria-label="Confirm retirement age override">
+        <span class="override-confirm__label" id="overrideConfirmLabel" data-i18n="override.confirmLabel">Recalculate for retirement at age {0}?</span>
+        <button class="override-confirm__apply" id="overrideConfirmApply" type="button" data-i18n="override.applyButton">Recalculate</button>
+        <button class="override-confirm__cancel" id="overrideConfirmCancel" type="button" aria-label="Cancel" data-i18n="override.cancelButton">✕</button>
+      </div>
+    </div>
+    <!-- T027: reset-to-calculated control (FR-003) — visible only when override active -->
+    <button class="override-reset" id="overrideReset" type="button" hidden data-i18n="override.resetButton">Reset to calculated FIRE age</button>
     <div class="fire-drag-hint" id="fireDragHint">💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later</div>
     <div id="fireOverrideBanner" class="fire-override-banner">
       <button class="fire-override-reset" onclick="resetFireOverride()">↺ Reset</button>
@@ -1734,6 +1864,21 @@
 
 <!-- Toast notification -->
 <div class="save-toast" id="saveToast">✅ Snapshot saved!</div>
+
+<!--
+  ES-module bootstrap (T019 / feature 001-modular-calc-engine).
+  Exposes pure calc modules to the classic <script> glue below via window.*.
+  Must execute before any code that reads window.chartState or window.makeInflation.
+-->
+<script type="module">
+  import { chartState } from './calc/chartState.js';
+  import { makeInflation } from './calc/inflation.js';
+  window.chartState = chartState;
+  window.makeInflation = makeInflation;
+  // Signal bootstrap is ready for code that wants to wait.
+  window.__calcBootstrapReady = true;
+  document.dispatchEvent(new Event('calc-bootstrap-ready'));
+</script>
 
 <script>
 // ==================== BIRTHDATES (FIXED) ====================
@@ -2692,6 +2837,13 @@ const TRANSLATIONS = {
     'mode.safe': '🛡️ Safe',
     'mode.exact': '⚡ Exact',
     'mode.dieWithZero': '💀 Die-With-Zero',
+    // Feature 001-modular-calc-engine (T030) — drag/confirm/reset/infeasibility strings
+    'override.confirmLabel': 'Recalculate for retirement at age {0}?',
+    'override.applyButton': 'Recalculate',
+    'override.cancelButton': '✕',
+    'override.resetButton': 'Reset to calculated FIRE age',
+    'override.dragHint': 'drag me',
+    'infeasibility.banner': 'This retirement age is not sustainable under your current plan.',
   },
   zh: {
     'header.title': 'Roger & Rebecca FIRE 指揮中心',
@@ -2898,6 +3050,13 @@ const TRANSLATIONS = {
     'mode.safe': '🛡️ 安全',
     'mode.exact': '⚡ 精確',
     'mode.dieWithZero': '💀 歸零',
+    // Feature 001-modular-calc-engine (T030) — drag/confirm/reset/infeasibility strings
+    'override.confirmLabel': '以 {0} 歲退休重新計算？',
+    'override.applyButton': '重新計算',
+    'override.cancelButton': '✕',
+    'override.resetButton': '重設為計算出的 FIRE 年齡',
+    'override.dragHint': '拖曳我',
+    'infeasibility.banner': '以目前的規劃，這個退休年齡不可持續。',
   }
 };
 
@@ -2991,7 +3150,18 @@ function setFireMode(mode) {
     bufferControls.style.display = 'none';
     terminalControls.style.display = 'none';
   }
-  recalcAll();
+  // T023b / FR-015: if an override is active, preserve it and only re-evaluate
+  // feasibility under the new mode. Otherwise run a full recalc.
+  const cs = _cs();
+  if (cs && cs.state.source === 'override' && cs.state.overrideFireAge != null) {
+    const inp = getInputs();
+    const scenario = scenarios.find(s => s.id === selectedScenario);
+    const effectiveSpend = getScenarioEffectiveSpend(scenario);
+    const feasibleUnderNewMode = _evaluateFeasibilityAtAge(inp, effectiveSpend, cs.state.overrideFireAge, mode);
+    cs.revalidateFeasibilityAt(cs.state.overrideFireAge, feasibleUnderNewMode);
+  } else {
+    recalcAll();
+  }
 }
 
 // ==================== EXPENSE TABLE ====================
@@ -3188,9 +3358,71 @@ function getSSAnnual(inp, claimAge, fireAge) {
 }
 
 let yearsToFIREcache = 10; // updated by recalcAll
-let fireAgeOverride = null; // set when user drags FIRE marker
-let calculatedFireAge = null; // the "real" calculated FIRE age (set by recalcAll)
 let cachedOriginalLifecycle = null; // lifecycle data at calculated FIRE age for comparison
+
+// ==================== FIRE-age globals → chartState delegation (T021) ====================
+// `fireAgeOverride` and `calculatedFireAge` were previously mutable `let` globals.
+// They now delegate to window.chartState (calc/chartState.js — single source of truth
+// per FR-001). Reads/writes go through chartState; if the ES-module bootstrap has not
+// yet finished importing chartState (classic <script> runs before deferred <script
+// type="module">), we fall back to a local cache and sync forward once chartState
+// becomes available. Glue code continues to read `fireAgeOverride` and
+// `calculatedFireAge` verbatim; all mutations funnel through _setCalculatedFire,
+// _setOverrideFire, _clearOverrideFire below.
+const _fireStateFallback = { calculatedFireAge: null, overrideFireAge: null, feasible: true };
+function _cs() { return (typeof window !== 'undefined' && window.chartState) ? window.chartState : null; }
+Object.defineProperty(window, 'calculatedFireAge', {
+  configurable: true,
+  get() {
+    const cs = _cs();
+    return cs ? cs.state.calculatedFireAge : _fireStateFallback.calculatedFireAge;
+  },
+  set(v) {
+    // Legacy writers funnel through _setCalculatedFire. Tolerate direct assignment
+    // by routing into chartState if available; else stash in fallback.
+    const cs = _cs();
+    if (cs) cs.setCalculated(v, _fireStateFallback.feasible);
+    else _fireStateFallback.calculatedFireAge = v;
+  },
+});
+Object.defineProperty(window, 'fireAgeOverride', {
+  configurable: true,
+  get() {
+    const cs = _cs();
+    return cs ? cs.state.overrideFireAge : _fireStateFallback.overrideFireAge;
+  },
+  set(v) {
+    const cs = _cs();
+    if (v == null) {
+      if (cs) cs.clearOverride();
+      else _fireStateFallback.overrideFireAge = null;
+    } else {
+      if (cs) cs.setOverride(v);
+      else _fireStateFallback.overrideFireAge = v;
+    }
+  },
+});
+// Structured writers used by the glue layer. Prefer these over raw assignment.
+function _setCalculatedFire(age, feasible) {
+  _fireStateFallback.feasible = !!feasible;
+  const cs = _cs();
+  if (cs) cs.setCalculated(age, !!feasible);
+  else { _fireStateFallback.calculatedFireAge = age; _fireStateFallback.overrideFireAge = null; }
+}
+function _setOverrideFire(age) {
+  const cs = _cs();
+  if (cs) cs.setOverride(age);
+  else _fireStateFallback.overrideFireAge = age;
+}
+function _clearOverrideFire() {
+  const cs = _cs();
+  if (cs) cs.clearOverride();
+  else _fireStateFallback.overrideFireAge = null;
+}
+function _fireFeasible() {
+  const cs = _cs();
+  return cs ? cs.state.feasible : _fireStateFallback.feasible;
+}
 
 function calcFIRENumber(annualSpend, swr) {
   return annualSpend / swr;
@@ -3432,6 +3664,23 @@ function projectGrowth(inp, years) {
 function yearsToFIRE(inp, annualSpend) {
   const r = findFireAgeNumerical(inp, annualSpend, fireMode);
   return r.years;
+}
+
+// Evaluate feasibility of a specific FIRE age under a specific solver mode,
+// without re-solving for a new age. Used by:
+//   - recalcAll() to report feasibility of the freshly solved age to chartState.
+//   - setFireMode() when an override is active, to update feasibility without
+//     discarding the override (FR-015 / T023b).
+// NOTE: This is a minimum-viable shim that reuses signedLifecycleEndBalance +
+// isFireAgeFeasible from the existing inline solver code. It will be replaced
+// in US2 (T046/T047) by fireCalculator.js.
+function _evaluateFeasibilityAtAge(inp, annualSpend, age, mode) {
+  try {
+    const sim = signedLifecycleEndBalance(inp, annualSpend, age);
+    return isFireAgeFeasible(sim, inp, annualSpend, mode);
+  } catch (_e) {
+    return true; // fail-open; feasibility will re-evaluate on next recalc
+  }
 }
 
 // ==================== DWZ NUMERICAL SOLVER (MONTH-PRECISE) ====================
@@ -4726,9 +4975,12 @@ function recalcAll() {
       dwzPreciseEl.style.display = 'none';
     }
   }
-  calculatedFireAge = fireAge; // track for drag override comparison
-  fireAgeOverride = null; // reset override when inputs change
+  // T023: push solver result into chartState (single source of truth, FR-001).
+  // This atomically wipes any active override per FR-014 — no manual
+  // `fireAgeOverride = null` needed.
   cachedOriginalLifecycle = null;
+  const _feasibleNow = _evaluateFeasibilityAtAge(inp, effectiveSpend, fireAge, fireMode);
+  _setCalculatedFire(fireAge, _feasibleNow);
   // Hide override banner
   const overrideBanner = document.getElementById('fireOverrideBanner');
   if (overrideBanner) overrideBanner.classList.remove('active');
@@ -5156,28 +5408,25 @@ function recalcAll() {
   document.getElementById('expTotalAnnual').textContent = '$' + annualExp.toLocaleString();
   document.getElementById('expTotalPct').textContent = (annualExp / inp.annualIncome * 100).toFixed(1) + '%';
 
-  // Render scenarios
-  renderScenarios(inp);
-
-  // Render healthcare card (depends on selectedScenario + overrides)
-  renderHealthcareCard(inp);
-
-  // Render college impact summary (depends on per-kid college location)
-  renderCollegeSummary(inp);
-
-  // Render second home impact summary (depends on secondHomeEnabled + mtg2 inputs)
-  renderSecondHomeImpact(inp);
-
-  // Render Roth conversion ladder planner (pre-59.5 bridge)
-  renderRothLadder(inp);
-
-  // Render charts
-  renderGrowthChart(inp);
-  renderNetWorthPie(inp);
-  renderExpensePie(expenses);
-  renderCountryChart(inp);
-  renderSSChart(inp);
-  renderTimeline(inp);
+  // T021: chart renderers are now registered as chartState listeners. They
+  // fire automatically via the earlier _setCalculatedFire() call (or via drag
+  // override). We do NOT invoke them directly here — that would double-render.
+  // If chartState has not yet been bootstrapped (initial page load before the
+  // ES-module script ran), fall back to a direct render pass so the first
+  // paint still happens. After bootstrap the listener path takes over.
+  if (!_cs()) {
+    renderScenarios(inp);
+    renderHealthcareCard(inp);
+    renderCollegeSummary(inp);
+    renderSecondHomeImpact(inp);
+    renderRothLadder(inp);
+    renderGrowthChart(inp);
+    renderNetWorthPie(inp);
+    renderExpensePie(expenses);
+    renderCountryChart(inp);
+    renderSSChart(inp);
+    renderTimeline(inp);
+  }
   runWhatIf();
 
   // Update timestamp
@@ -5671,7 +5920,12 @@ function applyScenarioFilter() {
 
 // ==================== CHARTS ====================
 // ==================== DRAGGABLE FIRE MARKER STATE ====================
-// Module-level drag state that persists across chart recreations
+// Module-level drag state that persists across chart recreations.
+// T026 (FR-014/FR-018): drag is PREVIEW-ONLY. A mousemove never mutates
+// chartState; it only updates `_previewFireAge` and re-renders the growth
+// chart. On mouseup (if the preview age differs from the drag-start age)
+// we surface a DOM confirm overlay; chartState.setOverride fires only on
+// explicit confirm-click.
 const _fireDrag = {
   active: false,
   listenersAttached: false,
@@ -5679,6 +5933,17 @@ const _fireDrag = {
   throttleMs: 50, // ~20fps during drag for smooth feel
   rendering: false, // true while chart is being recreated
 };
+// Preview state — kept distinct from chartState so downstream charts never
+// update during a raw drag. `previewAge` is consulted by renderGrowthChart;
+// when null the chart falls back to chartState.state.effectiveFireAge.
+const _dragPreview = {
+  active: false,
+  previewAge: null,
+  dragStartAge: null,
+};
+// Exposed to renderGrowthChart — read inside the render function; null means
+// "no active preview, use the real effective age".
+let _previewFireAge = null;
 
 function _getFireMarkerPosition() {
   const chart = charts.growth;
@@ -5730,6 +5995,18 @@ function setupFireDragListeners() {
     if (_isNearFireMarker(x, y)) {
       _fireDrag.active = true;
       canvas.style.cursor = 'grabbing';
+      // T026: if a confirm overlay is already visible, starting a new drag
+      // supersedes it (Edge Case E-5 / INT-7). Hide it AND clear any stale
+      // preview before this new drag begins.
+      _hideConfirmOverlay();
+      _previewFireAge = null;
+      // Capture the drag-start age so we can detect "did the user actually move it?"
+      const startAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null)
+        ? fireAgeOverride
+        : calculatedFireAge;
+      _dragPreview.active = true;
+      _dragPreview.dragStartAge = startAge;
+      _dragPreview.previewAge = startAge;
       e.preventDefault();
     }
   });
@@ -5751,24 +6028,24 @@ function setupFireDragListeners() {
       const inp = getInputs();
       const maxAge = Math.min(70, inp.ssClaimAge - 1);
       const clamped = Math.max(calculatedFireAge, Math.min(age, maxAge));
-      const currentEffective = fireAgeOverride != null ? fireAgeOverride : calculatedFireAge;
 
-      if (clamped !== currentEffective) {
+      if (clamped !== _dragPreview.previewAge) {
         // Throttle re-renders for smooth drag
         const now = Date.now();
         if (now - _fireDrag.lastRenderTime < _fireDrag.throttleMs) return;
         _fireDrag.lastRenderTime = now;
 
-        fireAgeOverride = clamped === calculatedFireAge ? null : clamped;
-        if (fireAgeOverride != null && !cachedOriginalLifecycle) {
+        // T026 (FR-014): preview only — do NOT call chartState.setOverride
+        // here. Only the growth chart's marker moves; every other chart/KPI
+        // stays pinned to the real effectiveFireAge until the user confirms.
+        _dragPreview.previewAge = clamped;
+        if (!cachedOriginalLifecycle) {
           const scenario = scenarios.find(s => s.id === selectedScenario);
           cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge);
         }
-
-        // Set rendering flag to prevent mouseleave from canceling drag
         _fireDrag.rendering = true;
-        renderGrowthChart(inp);
-        renderRothLadder(inp); // Sync withdrawal strategy chart with dragged FIRE age
+        _previewFireAge = clamped;
+        try { renderGrowthChart(inp); } catch (_e) {}
         _fireDrag.rendering = false;
       }
     } else {
@@ -5777,14 +6054,177 @@ function setupFireDragListeners() {
     }
   });
 
-  // Use document-level mouseup so drag ends even if mouse leaves canvas
+  // Use document-level mouseup so drag ends even if mouse leaves canvas.
+  // T026 (FR-018): on drag end, if the user actually moved the marker, show
+  // the confirm overlay — chartState is NOT mutated until confirm-click.
   document.addEventListener('mouseup', () => {
     if (_fireDrag.active) {
       _fireDrag.active = false;
       const c = document.getElementById('growthChart');
       if (c) c.style.cursor = 'default';
+      const preview = _dragPreview.previewAge;
+      const startAge = _dragPreview.dragStartAge;
+      _dragPreview.active = false;
+      if (preview != null && startAge != null && preview !== startAge) {
+        _showConfirmOverlay(preview);
+      } else {
+        // No real movement — discard preview and snap the chart back.
+        _cancelPreviewAndRevert();
+      }
     }
   });
+}
+
+// ==================== CONFIRM-OVERLAY HELPERS (T024/T026) ====================
+function _showConfirmOverlay(previewAge) {
+  const overlay = document.getElementById('overrideConfirm');
+  const labelEl = document.getElementById('overrideConfirmLabel');
+  const chart = charts.growth;
+  if (!overlay || !chart) return;
+  // Position overlay horizontally above the marker using the x-scale.
+  const idx = chart.data.labels.findIndex(l => {
+    const m = l && l.match(/\((\d+)\)/);
+    return m ? parseInt(m[1]) === previewAge : false;
+  });
+  if (idx >= 0) {
+    const xPx = chart.scales.x.getPixelForValue(idx);
+    overlay.style.left = `${xPx}px`;
+    overlay.style.transform = 'translateX(-50%)';
+  }
+  if (labelEl) {
+    const tmpl = (typeof t === 'function')
+      ? t('override.confirmLabel', previewAge)
+      : `Recalculate for retirement at age ${previewAge}?`;
+    labelEl.textContent = tmpl;
+  }
+  overlay.hidden = false;
+  overlay.dataset.previewAge = String(previewAge);
+}
+
+function _hideConfirmOverlay() {
+  const overlay = document.getElementById('overrideConfirm');
+  if (overlay) {
+    overlay.hidden = true;
+    delete overlay.dataset.previewAge;
+  }
+}
+
+// Revert the growth-chart preview to the real effectiveFireAge without
+// mutating chartState. Used when the user dismisses the confirm overlay
+// or releases the drag without moving the marker.
+function _cancelPreviewAndRevert() {
+  _previewFireAge = null;
+  try { renderGrowthChart(getInputs()); } catch (_e) {}
+}
+
+// Apply-click: promote the preview into an actual override via chartState.
+// All subscribers registered in T021 fan out automatically from here.
+function _applyConfirmedOverride() {
+  const overlay = document.getElementById('overrideConfirm');
+  if (!overlay) return;
+  const age = Number(overlay.dataset.previewAge);
+  if (!Number.isFinite(age)) { _hideConfirmOverlay(); return; }
+  _previewFireAge = null; // clear preview before chartState notifies subscribers
+  _hideConfirmOverlay();
+  // Mark the drag-hint as seen once the user has completed a full drag→confirm cycle.
+  try { localStorage.setItem('fire:dragHintSeen', '1'); } catch (_e) {}
+  const hintEl = document.getElementById('dragHint');
+  if (hintEl) hintEl.classList.add('drag-hint--seen');
+  const cs = _cs();
+  if (cs) {
+    cs.setOverride(age);
+    // R-A fix: re-evaluate feasibility at the overridden age so the
+    // infeasibility banner (T029) activates immediately on confirm,
+    // not just on a subsequent mode switch.
+    try {
+      const inp = getInputs();
+      const scenario = scenarios.find(s => s.id === selectedScenario);
+      const effectiveSpend = getScenarioEffectiveSpend(scenario);
+      const feasibleAtAge = _evaluateFeasibilityAtAge(inp, effectiveSpend, age, fireMode);
+      cs.revalidateFeasibilityAt(age, feasibleAtAge);
+    } catch (_e) { /* defensive: never block override on feasibility calc */ }
+  }
+  else _setOverrideFire(age);
+}
+
+function _setupOverrideConfirmListeners() {
+  const applyBtn = document.getElementById('overrideConfirmApply');
+  const cancelBtn = document.getElementById('overrideConfirmCancel');
+  const overlay = document.getElementById('overrideConfirm');
+  if (applyBtn && !applyBtn.dataset.bound) {
+    applyBtn.addEventListener('click', _applyConfirmedOverride);
+    applyBtn.dataset.bound = '1';
+  }
+  if (cancelBtn && !cancelBtn.dataset.bound) {
+    cancelBtn.addEventListener('click', () => {
+      _hideConfirmOverlay();
+      _cancelPreviewAndRevert();
+    });
+    cancelBtn.dataset.bound = '1';
+  }
+  if (overlay && !overlay.dataset.keyBound) {
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        _hideConfirmOverlay();
+        _cancelPreviewAndRevert();
+      }
+    });
+    overlay.dataset.keyBound = '1';
+  }
+  // Document-level Escape so the overlay can be dismissed even if focus
+  // is elsewhere while it's open.
+  if (!document.body.dataset.overrideEscBound) {
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const o = document.getElementById('overrideConfirm');
+      if (o && !o.hidden) {
+        _hideConfirmOverlay();
+        _cancelPreviewAndRevert();
+      }
+    });
+    document.body.dataset.overrideEscBound = '1';
+  }
+}
+
+// ==================== RESET CONTROL (T027) ====================
+function _setupOverrideResetListener() {
+  const btn = document.getElementById('overrideReset');
+  if (btn && !btn.dataset.bound) {
+    btn.addEventListener('click', () => {
+      const cs = _cs();
+      if (cs) cs.clearOverride();
+      else _clearOverrideFire();
+    });
+    btn.dataset.bound = '1';
+  }
+}
+
+// ==================== DRAG-HINT POSITIONING (T028) ====================
+function _positionDragHint() {
+  const hintEl = document.getElementById('dragHint');
+  const chart = charts.growth;
+  if (!hintEl || !chart) return;
+  const fp = _getFireMarkerPosition();
+  if (!fp) { hintEl.hidden = true; return; }
+  const pos = fp.element.getCenterPoint();
+  hintEl.style.left = `${pos.x}px`;
+  hintEl.style.top = `${pos.y + 18}px`;
+  hintEl.hidden = false;
+}
+
+function _applyInitialDragHintState() {
+  const hintEl = document.getElementById('dragHint');
+  if (!hintEl) return;
+  let seen = '0';
+  try { seen = localStorage.getItem('fire:dragHintSeen') || '0'; } catch (_e) {}
+  if (seen === '1') {
+    hintEl.classList.add('drag-hint--seen');
+  } else if (!window.__fireDragHintPulsed) {
+    // One-time pulse on first page load per session (FR-019 layer 3).
+    hintEl.classList.add('drag-hint--pulse');
+    window.__fireDragHintPulsed = true;
+    setTimeout(() => hintEl.classList.remove('drag-hint--pulse'), 3100);
+  }
 }
 
 // ==================== LIFECYCLE CHART ====================
@@ -5793,8 +6233,13 @@ function renderGrowthChart(inp) {
   const scenario = scenarios.find(s => s.id === selectedScenario);
   const scenarioSpend = getScenarioEffectiveSpend(scenario);
 
-  // Use override fire age if set, otherwise the calculated one
-  const effectiveFireAge = fireAgeOverride != null ? fireAgeOverride : calculatedFireAge;
+  // T026 (FR-014/FR-018): if a drag preview is active we render the marker at
+  // `_previewFireAge` WITHOUT mutating chartState. Other charts/KPIs continue
+  // to read the real effective age through their chartState subscribers.
+  const realEffectiveFireAge = fireAgeOverride != null ? fireAgeOverride : calculatedFireAge;
+  const effectiveFireAge = (typeof _previewFireAge === 'number' && _previewFireAge != null)
+    ? _previewFireAge
+    : realEffectiveFireAge;
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.ageRoger;
@@ -6120,17 +6565,15 @@ function updateOverrideBanner(inp, scenarioSpend) {
   document.getElementById('overrideEndLabel').textContent = `vs original at age ${endAge}`;
 }
 
-// Reset FIRE age override back to calculated
+// Reset FIRE age override back to calculated. Listeners registered on
+// chartState.onChange rerender every dependent chart — no direct renderX calls.
 function resetFireOverride() {
-  fireAgeOverride = null;
   cachedOriginalLifecycle = null;
   const banner = document.getElementById('fireOverrideBanner');
   if (banner) banner.classList.remove('active');
   const hint = document.getElementById('fireDragHint');
   if (hint) hint.classList.remove('hidden');
-  const inp = getInputs();
-  renderGrowthChart(inp);
-  renderRothLadder(inp); // Sync withdrawal strategy chart on reset
+  _clearOverrideFire();
 }
 
 function renderNetWorthPie(inp) {
@@ -7244,9 +7687,133 @@ buildSSEarningsTable(); // Build SSA earnings table (after restore so it uses re
 if (typeof updateInheritanceNote === 'function') updateInheritanceNote();
 const savedLang = localStorage.getItem('fire_lang');
 if (savedLang && savedLang !== 'en') switchLanguage(savedLang);
-recalcAll();          // Recalculate everything (also triggers saveState)
-renderSnapshotHistory();
-autoLoadCSV();        // Try to read linked CSV file and merge with localStorage
+
+// ==================== CHARTSTATE LISTENER REGISTRATION (T021) ====================
+// Every chart/KPI dependent is registered as a chartState.onChange listener
+// so a mutation (setCalculated / setOverride / clearOverride /
+// revalidateFeasibilityAt) atomically re-renders every view. Listeners
+// re-read inputs from the DOM via getInputs() so they always reflect the
+// current form state. See contracts/chartState.contract.md §Consumers.
+//
+// Renderers that do not read FIRE age today (netWorthPie, expensePie,
+// countryChart) are registered anyway for Principle VI bidirectional
+// enforcement (US4) — they re-render on chartState change and that is a
+// no-op on fire-age-independent data but a useful sync point for future
+// contract-annotation work.
+//
+// Registration + initial hydration happens AFTER the ES-module bootstrap
+// has populated window.chartState.
+function _registerChartStateListeners() {
+  const cs = _cs();
+  if (!cs || window.__fireListenersRegistered) return;
+  window.__fireListenersRegistered = true;
+
+  // Per-renderer listeners — each re-reads fresh inputs from the DOM.
+  cs.onChange(function onFireChange_growthChart(_state) {
+    try { renderGrowthChart(getInputs()); } catch (_e) { /* swallow — logged via chart lib */ }
+  });
+  cs.onChange(function onFireChange_rothLadder(_state) {
+    try { renderRothLadder(getInputs()); } catch (_e) {}
+  });
+  cs.onChange(function onFireChange_ssChart(_state) {
+    try { renderSSChart(getInputs()); } catch (_e) {}
+  });
+  cs.onChange(function onFireChange_timeline(_state) {
+    try { renderTimeline(getInputs()); } catch (_e) {}
+  });
+  // no-op on chartState change; registered for Principle VI bidirectional enforcement in US4
+  cs.onChange(function onFireChange_netWorthPie(_state) {
+    try { renderNetWorthPie(getInputs()); } catch (_e) {}
+  });
+  // no-op on chartState change; registered for Principle VI bidirectional enforcement in US4
+  cs.onChange(function onFireChange_expensePie(_state) {
+    try { renderExpensePie(getExpenses()); } catch (_e) {}
+  });
+  // no-op on chartState change; registered for Principle VI bidirectional enforcement in US4
+  cs.onChange(function onFireChange_countryChart(_state) {
+    try { renderCountryChart(getInputs()); } catch (_e) {}
+  });
+  // Scenario + healthcare + college + second-home cards read FIRE age via
+  // getBlendedHealthcareDelta etc. Register them too.
+  cs.onChange(function onFireChange_scenarios(_state) {
+    try { renderScenarios(getInputs()); } catch (_e) {}
+  });
+  cs.onChange(function onFireChange_healthcareCard(_state) {
+    try { renderHealthcareCard(getInputs()); } catch (_e) {}
+  });
+  cs.onChange(function onFireChange_collegeSummary(_state) {
+    try { renderCollegeSummary(getInputs()); } catch (_e) {}
+  });
+  cs.onChange(function onFireChange_secondHomeImpact(_state) {
+    try { renderSecondHomeImpact(getInputs()); } catch (_e) {}
+  });
+  // Override banner — reflects override vs calculated delta.
+  cs.onChange(function onFireChange_overrideBanner(state) {
+    try {
+      const inp = getInputs();
+      const scenario = scenarios.find(s => s.id === selectedScenario);
+      const scenarioSpend = getScenarioEffectiveSpend(scenario);
+      if (typeof updateOverrideBanner === 'function') {
+        updateOverrideBanner(inp, scenarioSpend);
+      } else {
+        const banner = document.getElementById('fireOverrideBanner');
+        if (banner) {
+          if (state.source === 'override') banner.classList.add('active');
+          else banner.classList.remove('active');
+        }
+      }
+    } catch (_e) {}
+  });
+  // T027: reset-to-calculated control — visible only when override active.
+  cs.onChange(function onFireChange_overrideReset(state) {
+    const btn = document.getElementById('overrideReset');
+    if (btn) btn.hidden = state.source !== 'override';
+  });
+  // T029 (FR-004 / INT-3): infeasibility banner — driven by chartState.feasible.
+  // Deficit value will be wired in T046/T047 via fireCalculator.js.deficitReal.
+  cs.onChange(function onFireChange_infeasibilityBanner(state) {
+    const banner = document.getElementById('infeasibilityBanner');
+    const deficitEl = document.getElementById('infeasibilityDeficit');
+    if (!banner) return;
+    banner.hidden = state.feasible !== false;
+    if (deficitEl) {
+      // Future: surface state.deficitReal when fireCalculator provides it.
+      deficitEl.textContent = '';
+    }
+  });
+  // T028: re-position the drag-hint after every render cycle so it tracks
+  // the FIRE marker's current pixel location.
+  cs.onChange(function onFireChange_dragHintPosition(_state) {
+    // Render listeners above (growthChart) have already fired synchronously.
+    // Defer to the next frame so Chart.js finishes laying out datasets.
+    requestAnimationFrame(_positionDragHint);
+  });
+  // Wire the UI-control event listeners once, now that the DOM is mounted.
+  _setupOverrideConfirmListeners();
+  _setupOverrideResetListener();
+  _applyInitialDragHintState();
+}
+
+// Initial recalc — must run AFTER the ES-module bootstrap so that
+// chartState listeners can be registered and fired. If the module
+// script is already done (re-entry, reload), run immediately; else
+// wait for the calc-bootstrap-ready event.
+function _bootstrapInitialRecalc() {
+  _registerChartStateListeners();
+  recalcAll();          // Recalculate everything (also triggers saveState)
+  renderSnapshotHistory();
+  autoLoadCSV();        // Try to read linked CSV file and merge with localStorage
+}
+if (window.__calcBootstrapReady) {
+  _bootstrapInitialRecalc();
+} else {
+  document.addEventListener('calc-bootstrap-ready', _bootstrapInitialRecalc, { once: true });
+  // Safety fallback: if the module fails to load (offline file:// weirdness),
+  // still paint the dashboard using the legacy fallback path.
+  setTimeout(function () {
+    if (!window.__fireListenersRegistered) _bootstrapInitialRecalc();
+  }, 2000);
+}
 </script>
 </body>
 </html>

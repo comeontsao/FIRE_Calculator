@@ -478,3 +478,20 @@ Reduction at 62: -30% | Increase at 70: +24%
 4. Test with multiple screen sizes (responsive layout is critical)
 5. Verify emoji rendering in Traditional Chinese locale
 
+---
+
+## Feature 001-modular-calc-engine — Drag / Confirm / Reset / Infeasibility (2026-04-19)
+
+New i18n keys added in both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` for the drag-to-confirm retirement-age override flow. All six keys are present under both `en` and `zh` in both files.
+
+| Key | English | Traditional Chinese | Usage |
+|-----|---------|---------------------|-------|
+| `override.confirmLabel` | `Recalculate for retirement at age {0}?` | `以 {0} 歲退休重新計算？` | Label text inside `#overrideConfirm`. `{0}` is substituted with the previewed age via `t(key, age)` when the overlay appears. |
+| `override.applyButton` | `Recalculate` | `重新計算` | Primary action in `#overrideConfirmApply`. Promotes the drag preview into an override via `chartState.setOverride`. |
+| `override.cancelButton` | `✕` | `✕` | Dismiss icon in `#overrideConfirmCancel`. |
+| `override.resetButton` | `Reset to calculated FIRE age` | `重設為計算出的 FIRE 年齡` | Label for `#overrideReset`. Visible only when `chartState.state.source === 'override'`. |
+| `override.dragHint` | `drag me` | `拖曳我` | Italic hint text inside `#dragHint`, positioned near the FIRE marker on the Full Portfolio Lifecycle chart. Fades to 0.3 opacity after the first successful drag→confirm (tracked in `localStorage['fire:dragHintSeen']`). |
+| `infeasibility.banner` | `This retirement age is not sustainable under your current plan.` | `以目前的規劃，這個退休年齡不可持續。` | Text inside `#infeasibilityBanner`. Visible only when `chartState.state.feasible === false`. |
+
+**Template substitution:** The existing `t(key, ...args)` helper replaces `{0}`, `{1}`, etc. in the translated string. `override.confirmLabel` is the only one of the new keys that takes an argument (the previewed age). All other keys are static. The Chinese form `以 {0} 歲退休重新計算？` preserves the placeholder index so the same runtime substitution works.
+
