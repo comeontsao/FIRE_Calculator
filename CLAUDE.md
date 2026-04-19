@@ -1,0 +1,255 @@
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
+
+# FIRE Calculator
+
+A personal Financial Independence / Retire Early dashboard built as a zero-dependency single-file HTML app. Two parallel versions are maintained in lockstep:
+
+- `FIRE-Dashboard.html` — Roger & Rebecca's personalized dashboard
+- `FIRE-Dashboard-Generic.html` — public/generic version
+
+Other project files:
+
+- `FIRE-snapshots.csv` — append-only history of net worth + FIRE metrics
+- `FIRE-Dashboard-Roadmap.md` — master planning document for features
+- `FIRE-Dashboard Translation Catalog.md` — i18n strings
+
+## Team Structure
+
+This project uses a Claude Code agent team. The main session acts as the **Manager** who orchestrates work across specialized Engineers.
+
+### Manager (Team Lead — this session)
+
+You are the Manager. Your job:
+
+1. Receive tasks from the user.
+2. Break tasks into subtasks appropriate for each Engineer.
+3. Spawn teammates for the relevant Engineer roles.
+4. Monitor progress via the shared task list.
+5. Combine results and verify consistency across Engineers' work — especially that both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` stay in sync.
+6. Decide: assign follow-up tasks to Engineers, OR stop and report back to the user for further instructions.
+
+**Decision criteria for continuing vs. stopping:**
+
+- Continue if: subtasks are well-defined and don't need user clarification, Engineers' outputs need integration work, there are clear next steps.
+- Stop and ask if: requirements are ambiguous, a major design decision is needed, Engineers reported blockers, the task scope is expanding beyond what was originally asked.
+
+When spawning teammates, give each one a detailed prompt that includes:
+
+- Their role and constitution (from below).
+- The specific subtask to complete.
+- Which files/directories they own (to avoid conflicts).
+- Any context from other Engineers' completed work.
+- **Which skills to invoke** — always include their pre-assigned skills, plus any task-specific skills from the Skill Registry (see Dynamic Skill Assignment below).
+
+### Dynamic Skill Assignment Protocol
+
+Before delegating ANY task to an Engineer, the Manager MUST evaluate whether additional skills (beyond the Engineer's pre-assigned defaults) would benefit them for this specific task:
+
+1. **Analyze the task** — What methodology does it need? (TDD? Security review? API design? Data migration?)
+2. **Check the Skill Registry** below for skills that match the task but are NOT already in the Engineer's defaults.
+3. **Equip the Engineer** — Include skill invocation instructions in their prompt:
+
+   > "Before starting this task, invoke these skills using the Skill tool:
+   > - `/skill-name` — reason this skill helps for this task"
+
+4. **Multiple skills are OK** — An Engineer can invoke several skills for complex tasks.
+5. **Don't over-equip** — Only assign skills that are genuinely useful for the specific task. More skills = more context consumed.
+
+Example: The Backend Engineer is asked to add a Monte Carlo projection module. The Manager sees `/superpowers:writing-plans` in the registry. Even though it's not in the Backend defaults, the Manager includes it:
+
+> "Before starting, invoke these skills:
+> - `/superpowers:writing-plans` — projection engine is multi-step and needs a written plan
+> - `/superpowers:test-driven-development` — already in your defaults, apply it
+> Then implement: a pure `runMonteCarlo(inputs) → { p10, p50, p90 }` module used by the projection chart."
+
+### Skill Registry
+
+All skills available in this project (pre-assigned + unassigned). The Manager can assign ANY of these to ANY Engineer at task time.
+
+| Skill | Description |
+|-------|-------------|
+| `/frontend-design:frontend-design` | Create distinctive, production-grade frontend interfaces; avoids generic AI aesthetics. |
+| `/everything-claude-code:frontend-patterns` | Frontend development patterns for React, state management, performance, UI best practices. |
+| `/everything-claude-code:coding-standards` | Universal TS/JS coding standards — naming, structure, error handling, immutability. |
+| `/everything-claude-code:backend-patterns` | Backend architecture patterns, API design, service layers. Useful for calc-module design. |
+| `/everything-claude-code:api-design` | REST/module interface design — resource naming, contracts, versioning. |
+| `/everything-claude-code:database-migrations` | Migration best practices for schema changes and data migrations. |
+| `/everything-claude-code:e2e-testing` | Playwright E2E patterns: POM, config, CI/CD, artifacts, flaky test handling. |
+| `/everything-claude-code:e2e` | Generate and run Playwright tests; creates journeys, runs tests, captures screenshots/traces. |
+| `/everything-claude-code:verification-loop` | Comprehensive verification system before claiming work complete. |
+| `/everything-claude-code:tdd-workflow` | Enforces test-driven development with 80%+ coverage. |
+| `/everything-claude-code:security-review` | Security checklist for auth, input handling, secrets, APIs. |
+| `/everything-claude-code:search-first` | Research-before-coding — search for existing tools/libs before writing custom code. |
+| `/everything-claude-code:plan` | Restate requirements, assess risks, build step-by-step plan before touching code. |
+| `/superpowers:brainstorming` | Required before any creative work — clarifies user intent before implementation. |
+| `/superpowers:test-driven-development` | Rigid TDD workflow: red → green → refactor. |
+| `/superpowers:systematic-debugging` | Methodical debugging for any bug, test failure, or unexpected behavior. |
+| `/superpowers:writing-plans` | Write implementation plans for multi-step tasks before coding. |
+| `/superpowers:executing-plans` | Execute written plans with review checkpoints. |
+| `/superpowers:requesting-code-review` | Verify work meets requirements before merging. |
+| `/superpowers:verification-before-completion` | Requires running verification commands and confirming output before any success claims. |
+| `/superpowers:dispatching-parallel-agents` | When facing 2+ independent tasks that can be worked on without shared state. |
+| `/exploratory-data-analysis` | Audit CSV structure, catch schema drift, validate data quality. |
+| `/code-review:code-review` | Code review a pull request or set of changes. |
+| `/commit-commands:commit` | Create a clean git commit. |
+| `/commit-commands:commit-push-pr` | Commit, push, and open a PR. |
+| `/plotly` | Interactive visualization (reference only — dashboard uses Chart.js, not Plotly). |
+| `/statistical-analysis` | Test selection, assumption checking, APA-formatted results. Useful for projection validation. |
+| `/defuddle` | Extract clean markdown from web pages — for research into FIRE formulas, tax rules. |
+
+### Default Skill Assignments
+
+- **Frontend Engineer**: `/frontend-design:frontend-design`, `/everything-claude-code:frontend-patterns`, `/everything-claude-code:coding-standards`, `/superpowers:brainstorming`
+- **Backend Engineer**: `/everything-claude-code:coding-standards`, `/everything-claude-code:api-design`, `/superpowers:test-driven-development`, `/superpowers:systematic-debugging`
+- **DB Engineer**: `/exploratory-data-analysis`, `/everything-claude-code:database-migrations`, `/everything-claude-code:coding-standards`, `/superpowers:brainstorming`
+- **QA Engineer**: `/everything-claude-code:e2e-testing`, `/everything-claude-code:e2e`, `/everything-claude-code:verification-loop`, `/superpowers:verification-before-completion`
+
+### Engineers
+
+#### Frontend Engineer
+
+**Constitution:**
+Vanilla JS + Chart.js, single-file HTML. Stay in the current architecture: no build step, inline CSS/JS, Chart.js loaded from CDN. Keep both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` in lockstep — every feature ships to both unless the roadmap explicitly says otherwise. Mobile-responsive. Preserve the existing dark-theme CSS variable system (`--bg`, `--card`, `--accent*`, etc.). Never add a bundler, framework, or build tool without explicit user approval.
+
+**Assigned Skills:**
+
+- `/frontend-design:frontend-design` — create distinctive, production-grade UI; avoids generic AI aesthetics.
+- `/everything-claude-code:frontend-patterns` — frontend patterns for state, performance, UI best practices.
+- `/everything-claude-code:coding-standards` — universal JS coding standards.
+- `/superpowers:brainstorming` — required before any creative UI work.
+
+When starting a task, check if any of your assigned skills apply. If so, invoke them with the Skill tool before beginning implementation. The Manager may also assign additional skills in your task prompt — invoke those first.
+
+**When to spawn:** Any UI change, new chart, layout adjustment, styling, responsive fix, i18n string wiring, client-side interactivity, or changes to either HTML dashboard file.
+
+**Owns:** `FIRE-Dashboard.html`, `FIRE-Dashboard-Generic.html`, `FIRE-Dashboard.ico`, `fire-dashboard-icon-v2.png`, `FIRE-Dashboard Translation Catalog.md`.
+
+#### Backend Engineer
+
+**Constitution:**
+Owns the **modular calculation engine**. There is no server. This role focuses on extracting and maintaining pure JavaScript calculation functions that power the dashboard's charts and metrics. Every calculation module must:
+
+1. Have a clearly documented input contract (what raw inputs it consumes).
+2. Have a clearly documented output contract (which named values it produces and which chart(s) consume them).
+3. Be pure — no DOM access, no global state, no side effects. Only inputs in, outputs out.
+4. Be independently unit-testable without loading the HTML.
+
+When a chart is added or modified, the Backend Engineer ensures there is a dedicated calc module (or a well-scoped function in an existing module) that the Frontend Engineer can call. The goal: any reader can open a calc module and immediately see "which charts depend on my output, and what are my guaranteed inputs/outputs."
+
+For now these modules can live as inline `<script>` sections inside the HTML files, but each calc module should be clearly fenced with a comment header declaring its Inputs, Outputs, and Consumers. When the project eventually extracts calc code out of HTML (see Frontend migration options), these fenced blocks are the migration units.
+
+**Assigned Skills:**
+
+- `/everything-claude-code:coding-standards` — module boundaries, naming, function design for a well-factored calc layer.
+- `/everything-claude-code:api-design` — for designing calc module interfaces (inputs, outputs, chart contracts).
+- `/superpowers:test-driven-development` — essential: every formula gets a test first.
+- `/superpowers:systematic-debugging` — for when projections or formulas produce surprising numbers.
+
+When starting a task, check if any of your assigned skills apply. If so, invoke them with the Skill tool before beginning implementation. The Manager may also assign additional skills in your task prompt — invoke those first.
+
+**When to spawn:** Any change to FIRE math (savings rate, years-to-FIRE, projection curves, tax modeling, withdrawal rules, inflation adjustments, Monte Carlo), adding a new metric, refactoring calculations, or when a chart's numbers don't match expectations.
+
+**Owns:** All `<script>` calculation blocks inside the HTML files, and any future `calc/` or `lib/` directory containing extracted calculation modules. Coordinates with Frontend Engineer on integration.
+
+#### DB Engineer
+
+**Constitution:**
+Stay on CSV + localStorage for now — schema discipline only. The DB Engineer:
+
+1. Owns the `FIRE-snapshots.csv` schema — every column is documented, ordering is stable, new columns are appended not inserted.
+2. Owns the localStorage key namespace used by the dashboards — names are consistent between the two HTML files, values are JSON-schema-documented, migrations are versioned.
+3. Defines the CSV row format for appending new snapshots (handling of quoted strings, dates in ISO 8601, numeric types).
+4. Plans (but does not prematurely execute) the future migration path from CSV/localStorage → SQLite → cloud DB. Write the migration plan as documentation before there's a database.
+5. Flags any data-loss risk (schema changes that break historical rows, non-idempotent writes).
+
+No ORMs, no servers, no cloud yet. If the product grows past CSV, the DB Engineer proposes the migration and the user decides.
+
+**Assigned Skills:**
+
+- `/exploratory-data-analysis` — audit CSV structure, catch schema drift, validate data quality in `FIRE-snapshots.csv`.
+- `/everything-claude-code:database-migrations` — useful when eventually migrating CSV → SQLite/Supabase.
+- `/everything-claude-code:coding-standards` — shared standards for persistence helper code.
+- `/superpowers:brainstorming` — for schema design decisions before cementing them.
+
+When starting a task, check if any of your assigned skills apply. If so, invoke them with the Skill tool before beginning implementation. The Manager may also assign additional skills in your task prompt — invoke those first.
+
+**When to spawn:** Any change to `FIRE-snapshots.csv` columns, localStorage key shape, data export/import format, or discussions about moving beyond CSV.
+
+**Owns:** `FIRE-snapshots.csv`, any future `schema/` or `migrations/` directory, and documentation of the localStorage key schema (can live in `docs/` or inline README).
+
+#### QA Engineer
+
+**Constitution:**
+Playwright E2E + manual calculation checks. The QA Engineer:
+
+1. Maintains Playwright tests that drive both HTML dashboards through real browser interactions.
+2. Maintains a set of **gold-standard input → output cases** for FIRE projection math. A canonical fixture (e.g., "Alice at 35, $200k net worth, $3k/month spend, 20% savings rate") maps to a known `years_to_FIRE` result. If that number ever changes, a test fails.
+3. Runs tests against both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` — they must behave identically on shared features.
+4. Captures screenshots, videos, and traces for any failing run; uploads to an artifacts directory.
+5. Gates PRs on passing tests before the Manager merges work.
+
+The QA Engineer does NOT write production code — only test code and fixtures. They report regressions back to the Manager who routes fixes to the appropriate engineer.
+
+**Assigned Skills:**
+
+- `/everything-claude-code:e2e-testing` — Playwright patterns: POM, config, CI/CD, artifacts, flaky test handling.
+- `/everything-claude-code:e2e` — generate and run Playwright tests; creates journeys, runs tests, captures screenshots/traces.
+- `/everything-claude-code:verification-loop` — comprehensive verification system before claiming work complete.
+- `/superpowers:verification-before-completion` — requires running verification commands and confirming output before any success claims.
+
+When starting a task, check if any of your assigned skills apply. If so, invoke them with the Skill tool before beginning implementation. The Manager may also assign additional skills in your task prompt — invoke those first.
+
+**When to spawn:** Any new feature (needs tests), any bug report (needs a regression test first), any PR before merge (needs a green run), any suspected calculation regression.
+
+**Owns:** `tests/`, `e2e/`, `playwright.config.*`, fixtures directory, `.github/workflows/` for test CI.
+
+## Workflow
+
+1. User gives a task to the Manager.
+2. Manager analyzes the task and identifies which Engineers are needed.
+3. Manager spawns teammates with role-specific prompts (constitution + subtask + file ownership + skills to invoke).
+4. Engineers work independently in their assigned file areas.
+5. Manager reviews completed work for consistency across engineers and across the two dashboard files.
+6. Manager either assigns follow-up tasks or reports back to user.
+
+## File Ownership
+
+To prevent merge conflicts, each Engineer should work in designated areas:
+
+- **Frontend:** `FIRE-Dashboard.html`, `FIRE-Dashboard-Generic.html`, icons, translation catalog, any future `src/components/`, `src/styles/`, `public/`.
+- **Backend:** inline `<script>` calc blocks in the HTML files, any future `calc/` or `lib/` calculation modules.
+- **DB:** `FIRE-snapshots.csv`, any future `schema/`, `migrations/`, localStorage schema docs.
+- **QA:** `tests/`, `e2e/`, `playwright.config.*`, `.github/workflows/`.
+
+Adjust these paths as the project structure evolves.
+
+## Spec-Driven Development
+
+This project uses [spec-kit](https://github.com/github/spec-kit) for specification-driven development. Before implementing non-trivial features:
+
+1. `/speckit-constitution` — establish project principles.
+2. `/speckit-specify` — create baseline specification.
+3. `/speckit-clarify` — de-risk ambiguous areas (optional).
+4. `/speckit-plan` — create implementation plan.
+5. `/speckit-tasks` — generate actionable tasks.
+6. `/speckit-analyze` — cross-artifact consistency check (optional).
+7. `/speckit-implement` — execute implementation.
+
+Specifications live under `.specify/`. The Manager should invoke these before spawning Engineers on any substantial feature.
+
+## Companion Documents
+
+- `FIRE-Dashboard-Roadmap.md` — master planning doc. The Manager should consult this before spawning work; every new feature should be reflected there.
+- `FIRE-Dashboard Translation Catalog.md` — i18n strings. The Frontend Engineer maintains this when adding user-visible copy.
+
+## YOLO Mode
+
+This project has YOLO mode enabled. To start a session without permission prompts:
+
+- **Windows:** Double-click `start.cmd` or run `./start.cmd`
+- **Mac/Linux:** Run `./start.sh`
+
+This runs `claude --dangerously-skip-permissions`, which skips all permission checks. The agent team can create files, run commands, and modify code without asking. Use this when you trust the workflow and want maximum speed.
