@@ -220,3 +220,201 @@ test('lifecycle: real-nominal-check fixture — nominal healthcare cost converte
     `real value MUST differ materially from nominal (anti-leak check); got real=${realHealthcare}, nominal=${expected.nominalHealthcareCost}`,
   );
 });
+
+/*
+ * US2b extensions (TB11) — four RED tests covering lifecycle-engine support
+ * for the new Inputs fields declared in data-model.md §1:
+ *   (a) contributionSplit override (60/20/20 default → custom 40/40/20)
+ *   (b) employerMatchReal adds to trad401k in accumulation years
+ *   (c) relocationCostReal applies at fireAge
+ *   (d) homeSaleAtFireReal adds to taxable stocks at fireAge
+ *
+ * RED until TB17/TB18 teach the module to consume these fields.
+ *
+ * All four tests extend the `accumulation-only` fixture (simple analytical
+ * case — isolates the effect of each override without coupling to SS / tax
+ * / mortgage / college).
+ */
+
+/**
+ * Deep-clone the accumulation-only inputs so we can apply overrides without
+ * mutating the frozen fixture.
+ */
+function cloneInputs(srcInputs) {
+  // Shallow spreads of the nested objects are sufficient because we only
+  // override top-level fields or replace whole sub-objects.
+  return {
+    ...srcInputs,
+    portfolioPrimary: { ...srcInputs.portfolioPrimary },
+    buffers: { ...srcInputs.buffers },
+    scenario: { ...srcInputs.scenario },
+    tax: {
+      ...srcInputs.tax,
+      ordinaryBrackets: [...srcInputs.tax.ordinaryBrackets],
+      ltcgBrackets: [...srcInputs.tax.ltcgBrackets],
+    },
+    colleges: [...srcInputs.colleges],
+  };
+}
+
+test('lifecycle: contributionSplit override reallocates accumulation contributions away from default 60/20/20', () => {
+  const baseInputs = cloneInputs(accumulationOnly.inputs);
+  // Default (no override) — uses 60/20/20.
+  const defaultResult = runLifecycle({
+    inputs: baseInputs,
+    fireAge: baseInputs.endAge,
+    helpers: {},
+  });
+
+  // Override — 40/40/20 (trad down, roth up, taxable unchanged). Given
+  // identical annualContributionReal, the trad401k growth trajectory must
+  // differ from the default result.
+  const overrideInputs = {
+    ...cloneInputs(baseInputs),
+    contributionSplit: {
+      trad401kFraction: 0.40,
+      rothFraction: 0.40,
+      taxableFraction: 0.20,
+    },
+  };
+  const overrideResult = runLifecycle({
+    inputs: overrideInputs,
+    fireAge: overrideInputs.endAge,
+    helpers: {},
+  });
+
+  // The trad balance trajectory must diverge. Pick a mid-accumulation year.
+  const defaultMidRec = defaultResult.find((r) => r.agePrimary === 50);
+  const overrideMidRec = overrideResult.find((r) => r.agePrimary === 50);
+  assert.ok(defaultMidRec && overrideMidRec, 'mid-accumulation records exist in both runs');
+  // Override routes less to trad (0.40 vs 0.60 of the same annual contribution)
+  // ⇒ trad401kReal must be smaller under the override at the same age.
+  assert.ok(
+    overrideMidRec.trad401kReal < defaultMidRec.trad401kReal,
+    `contributionSplit override (0.40 trad) must produce LESS trad401kReal than default ` +
+      `(0.60 trad); got override=${overrideMidRec.trad401kReal}, default=${defaultMidRec.trad401kReal}`,
+  );
+  // Meaningful delta — this separates an honored override from a ignored field.
+  const relDelta =
+    Math.abs(overrideMidRec.trad401kReal - defaultMidRec.trad401kReal) /
+    defaultMidRec.trad401kReal;
+  assert.ok(
+    relDelta > 0.10,
+    `override must materially change trad401kReal (relative delta > 10%); got ${(relDelta * 100).toFixed(2)}%`,
+  );
+});
+
+test('lifecycle: employerMatchReal augments trad401kReal growth during accumulation', () => {
+  const baseInputs = cloneInputs(accumulationOnly.inputs);
+  const withoutMatch = runLifecycle({
+    inputs: baseInputs,
+    fireAge: baseInputs.endAge,
+    helpers: {},
+  });
+
+  const matchInputs = { ...cloneInputs(baseInputs), employerMatchReal: 5_000 };
+  const withMatch = runLifecycle({
+    inputs: matchInputs,
+    fireAge: matchInputs.endAge,
+    helpers: {},
+  });
+
+  // At every accumulation year >= 1, trad401kReal with match MUST exceed
+  // trad401kReal without match. The match is contributed to the Traditional
+  // pool only, so other pools (roth, taxable) must match within a small
+  // tolerance (no second-order effects from match money leaking to other pools).
+  for (let age = baseInputs.currentAgePrimary + 1; age < baseInputs.endAge; age++) {
+    const base = withoutMatch.find((r) => r.agePrimary === age);
+    const matched = withMatch.find((r) => r.agePrimary === age);
+    assert.ok(base && matched, `records at age ${age} exist in both runs`);
+    assert.ok(
+      matched.trad401kReal > base.trad401kReal,
+      `match must increase trad401kReal at age ${age}; got matched=${matched.trad401kReal}, base=${base.trad401kReal}`,
+    );
+  }
+
+  // Sanity: at age currentAgePrimary + 10, the cumulative match benefit should
+  // be approximately 5000 × ((1+r)^10 - 1)/r compounded — and definitely > 50_000.
+  const tenYearsIn = withMatch.find(
+    (r) => r.agePrimary === baseInputs.currentAgePrimary + 10,
+  );
+  const tenYearsInBase = withoutMatch.find(
+    (r) => r.agePrimary === baseInputs.currentAgePrimary + 10,
+  );
+  const cumulativeMatchEffect =
+    tenYearsIn.trad401kReal - tenYearsInBase.trad401kReal;
+  assert.ok(
+    cumulativeMatchEffect > 50_000,
+    `10 years of $5k/yr match must compound to > $50k extra trad401kReal; got ${cumulativeMatchEffect}`,
+  );
+});
+
+test('lifecycle: relocationCostReal appears as one-time outflow at fireAge', () => {
+  // Accumulation-only fixture retires at endAge; force an earlier fireAge
+  // so relocation has a real year to apply at.
+  const baseInputs = cloneInputs(accumulationOnly.inputs);
+  const fireAge = 55;
+  const relocationCostReal = 50_000;
+  const inputs = { ...baseInputs, relocationCostReal };
+
+  const result = runLifecycle({ inputs, fireAge, helpers: {} });
+
+  const fireYearRec = result.find((r) => r.agePrimary === fireAge);
+  assert.ok(fireYearRec, `record at fireAge ${fireAge} exists`);
+  assert.ok(
+    (fireYearRec.oneTimeOutflowReal || 0) >= relocationCostReal - 1e-6,
+    `relocationCostReal must appear as oneTimeOutflowReal at fireAge; ` +
+      `expected >= ${relocationCostReal}, got ${fireYearRec.oneTimeOutflowReal}`,
+  );
+
+  // Before fireAge: oneTimeOutflowReal attributable to relocation is 0.
+  const preFireAttr = result.filter(
+    (r) =>
+      r.agePrimary < fireAge &&
+      (r.oneTimeOutflowReal || 0) >= relocationCostReal,
+  );
+  assert.equal(
+    preFireAttr.length,
+    0,
+    'relocationCostReal outflow must NOT appear in any pre-fireAge year',
+  );
+});
+
+test('lifecycle: homeSaleAtFireReal adds to taxableStocksReal at fireAge relative to no-sale baseline', () => {
+  // Accumulation-only fixture retires at endAge; force an earlier fireAge.
+  const baseInputs = cloneInputs(accumulationOnly.inputs);
+  const fireAge = 55;
+  const homeSaleAtFireReal = 300_000;
+
+  const baselineResult = runLifecycle({
+    inputs: baseInputs,
+    fireAge,
+    helpers: {},
+  });
+
+  const withSaleInputs = { ...baseInputs, homeSaleAtFireReal };
+  const withSaleResult = runLifecycle({
+    inputs: withSaleInputs,
+    fireAge,
+    helpers: {},
+  });
+
+  const baselineAtFire = baselineResult.find((r) => r.agePrimary === fireAge);
+  const withSaleAtFire = withSaleResult.find((r) => r.agePrimary === fireAge);
+  assert.ok(baselineAtFire && withSaleAtFire, 'records at fireAge exist in both runs');
+
+  // taxableStocksReal at fireAge must increase by approximately homeSaleAtFireReal.
+  const delta = withSaleAtFire.taxableStocksReal - baselineAtFire.taxableStocksReal;
+  // Tolerance allows for small compounding effects if the sale proceeds
+  // are injected at the start or middle of the year; the load-bearing
+  // assertion is that the delta is ≥ 95% of the sale value and ≤ 110%.
+  assert.ok(
+    delta >= homeSaleAtFireReal * 0.95,
+    `homeSaleAtFireReal must increase taxableStocksReal at fireAge by ≈ ${homeSaleAtFireReal}; ` +
+      `got delta=${delta}`,
+  );
+  assert.ok(
+    delta <= homeSaleAtFireReal * 1.10,
+    `delta should not exceed the sale value by more than 10%; got delta=${delta}`,
+  );
+});

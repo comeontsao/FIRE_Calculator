@@ -31,6 +31,8 @@ import threePhase from '../fixtures/three-phase-retirement.js';
 import parity from '../fixtures/rr-generic-parity.js';
 import coastFire from '../fixtures/coast-fire.js';
 import modeSwitchMatrix from '../fixtures/mode-switch-matrix.js';
+import rrRealistic from '../fixtures/rr-realistic.js';
+import genericRealistic from '../fixtures/generic-realistic.js';
 
 test('fireCalculator: canonical single-person (three-phase-retirement) solves with correct structure', () => {
   const { inputs, expected } = threePhase;
@@ -172,4 +174,65 @@ test('fireCalculator: mode-switch matrix — fireAge_safe >= fireAge_exact >= fi
       assert.equal(actual.feasible, variant.feasible, `${mode}: feasible matches locked fixture`);
     }
   }
+});
+
+/*
+ * US2b integration tests (TB12) — canonical-engine parity against the
+ * inline-harness baseline.
+ *
+ * Each test loads the canonical fixture (rr-realistic / generic-realistic),
+ * runs the canonical solver, and asserts `fireAge` within ±1 year of the
+ * harness-captured baseline. The ±1-year tolerance exists explicitly to
+ * absorb the intentional-correctness deltas documented in
+ * baseline-rr-inline.md §C (real/nominal healthcare mixing fix + silent-
+ * shortfall absorption fix).
+ *
+ * RED until TB21 makes the canonical engine feature-complete enough that
+ * runLifecycle + solveFireAge produce the expected fireAge. The canonical
+ * engine today doesn't model mortgage ownership, secondHome, contribution
+ * split, employerMatchReal, relocationCostReal, scenarioSpendReal — all of
+ * which these fixtures exercise.
+ */
+
+test('fireCalculator: rr-realistic fixture produces fireAge within ±1 year of inline baseline', () => {
+  const fixture = rrRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const expectedFireAge = fixture.expected.fireAge;
+  const tolerance = fixture.expected.fireAgeToleranceYears ?? 1;
+
+  assert.equal(typeof result.fireAge, 'number', 'canonical solver returns numeric fireAge');
+  assert.ok(
+    Math.abs(result.fireAge - expectedFireAge) <= tolerance,
+    `rr-realistic: fireAge ${result.fireAge} deviates from inline baseline ${expectedFireAge} ` +
+      `by more than ±${tolerance} year(s). If this is an intentional correctness fix, ` +
+      `document it in baseline-rr-inline.md §C BEFORE re-locking the fixture.`,
+  );
+
+  // Also assert the canonical solver reports feasibility matching the baseline.
+  assert.equal(
+    result.feasible,
+    fixture.expected.feasible,
+    `rr-realistic: feasible must match baseline (${fixture.expected.feasible}); got ${result.feasible}`,
+  );
+});
+
+test('fireCalculator: generic-realistic fixture produces fireAge within ±1 year of inline baseline', () => {
+  const fixture = genericRealistic;
+  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
+  const expectedFireAge = fixture.expected.fireAge;
+  const tolerance = fixture.expected.fireAgeToleranceYears ?? 1;
+
+  assert.equal(typeof result.fireAge, 'number', 'canonical solver returns numeric fireAge');
+  assert.ok(
+    Math.abs(result.fireAge - expectedFireAge) <= tolerance,
+    `generic-realistic: fireAge ${result.fireAge} deviates from inline baseline ${expectedFireAge} ` +
+      `by more than ±${tolerance} year(s). If this is an intentional correctness fix, ` +
+      `document it in baseline-rr-inline.md §C BEFORE re-locking the fixture.`,
+  );
+
+  assert.equal(
+    result.feasible,
+    fixture.expected.feasible,
+    `generic-realistic: feasible must match baseline (${fixture.expected.feasible}); got ${result.feasible}`,
+  );
 });

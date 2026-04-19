@@ -92,3 +92,132 @@ test('college: empty kids array produces empty perYear', () => {
   assert.ok(Array.isArray(result.perYear));
   assert.equal(result.perYear.length, 0, 'no kids ⇒ no cost records');
 });
+
+/*
+ * US2b extension — loan-financing overlay (TB10).
+ *
+ * The following tests exercise `pctFinanced`, `parentPayPct`, `loanRateReal`,
+ * `loanTermYears` — fields `calc/college.js` does not yet honor. RED until
+ * TB16 extends the module to emit `inSchoolShareReal` + `loanShareReal` and
+ * to split tuition between in-school and post-graduation loan windows.
+ *
+ * Contract invariants (college.contract.md §Invariants — loan overlay):
+ *   - Per-year in-school cost = fourYearCostReal/4 × (1 - pctFinanced).
+ *   - Loan window runs [startAge+4, startAge+4+loanTermYears−1] inclusive.
+ *   - Per-year loan payment = amortized(pctFinanced × fourYearCostReal,
+ *                                       loanRateReal, loanTermYears) × parentPayPct.
+ *   - pctFinanced === 1 AND parentPayPct === 0 ⇒ costReal === 0 every year.
+ */
+
+/** Closed-form analytical annual payment for a standard amortizing loan. */
+function analyticalAnnualPaymentForCollege(principal, annualRate, termYears) {
+  if (annualRate === 0) return principal / termYears;
+  const r = annualRate / 12;
+  const n = termYears * 12;
+  const monthly = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  return monthly * 12;
+}
+
+test('college: pctFinanced 0.5 + parentPayPct 1.0 — in-school years cost half tuition; post-grad years carry amortized loan payment', () => {
+  // Kid age 14 today; college starts age 18 (4 years out) → in-school
+  // years 18..21 (calendar 2030..2033). Loan repayment window: ages
+  // 22..31 (calendar 2034..2043, 10-year term).
+  const kidCurrentAge = 14;
+  const startAge = 18;
+  const fourYearCostReal = 160_000; // $40k/yr
+  const pctFinanced = 0.5;
+  const parentPayPct = 1.0;
+  const loanRateReal = 0.0353;
+  const loanTermYears = 10;
+
+  const result = computeCollegeCosts({
+    kids: [
+      {
+        name: 'Alex',
+        currentAge: kidCurrentAge,
+        fourYearCostReal,
+        startAge,
+        pctFinanced,
+        parentPayPct,
+        loanRateReal,
+        loanTermYears,
+      },
+    ],
+    currentYear,
+  });
+
+  // In-school years: per-year cost = annualCost × (1 - pctFinanced) = 40k × 0.5 = 20k.
+  const expectedAnnualInSchool = (fourYearCostReal / 4) * (1 - pctFinanced);
+  const inSchoolYears = [0, 1, 2, 3].map((i) => ({
+    year: currentYear + (startAge - kidCurrentAge) + i,
+    age: startAge + i,
+  }));
+  for (const { year, age } of inSchoolYears) {
+    const rec = result.perYear.find((r) => r.year === year);
+    assert.ok(rec, `in-school record for year ${year} (age ${age}) exists`);
+    assert.ok(
+      Math.abs(rec.costReal - expectedAnnualInSchool) < 1,
+      `in-school per-year cost (pctFinanced=0.5) === ${expectedAnnualInSchool}; ` +
+        `got ${rec.costReal} at year ${year}`,
+    );
+  }
+
+  // Loan window: ages startAge+4..startAge+4+loanTermYears-1 (10 years).
+  const loanPrincipal = fourYearCostReal * pctFinanced; // $80k financed
+  const expectedLoanAnnualPayment =
+    analyticalAnnualPaymentForCollege(loanPrincipal, loanRateReal, loanTermYears) *
+    parentPayPct;
+
+  const loanWindowEntries = result.perYear.filter((r) => {
+    const attendingAge = r.age; // representative kid age
+    return attendingAge >= startAge + 4 && attendingAge < startAge + 4 + loanTermYears;
+  });
+  // The module may represent the age differently; we also check by year-index.
+  const loanStartYear = currentYear + (startAge - kidCurrentAge) + 4;
+  const loanEndYear = loanStartYear + loanTermYears - 1;
+  const loanYearEntries = result.perYear.filter(
+    (r) => r.year >= loanStartYear && r.year <= loanEndYear,
+  );
+  assert.ok(
+    loanYearEntries.length > 0 || loanWindowEntries.length > 0,
+    'at least one loan-window record exists',
+  );
+  const samplePick = loanYearEntries[0] || loanWindowEntries[0];
+  assert.ok(
+    samplePick,
+    `at least one loan-window entry exists (window ${loanStartYear}..${loanEndYear})`,
+  );
+  assert.ok(
+    Math.abs(samplePick.costReal - expectedLoanAnnualPayment) < 1,
+    `post-grad loan year cost === amortized payment (${expectedLoanAnnualPayment}); ` +
+      `got ${samplePick.costReal}`,
+  );
+});
+
+test('college: pctFinanced 1.0 + parentPayPct 0 — kid absorbs loan fully; costReal === 0 every year', () => {
+  const result = computeCollegeCosts({
+    kids: [
+      {
+        name: 'Kai',
+        currentAge: 10,
+        fourYearCostReal: 200_000,
+        startAge: 18,
+        pctFinanced: 1.0,
+        parentPayPct: 0,
+        loanRateReal: 0.0353,
+        loanTermYears: 10,
+      },
+    ],
+    currentYear,
+  });
+
+  // Every year in the schedule must report costReal === 0 (kid absorbs the loan fully).
+  // The module MAY emit zero-cost rows or omit them entirely; both are acceptable,
+  // but any emitted row must have costReal === 0.
+  for (const rec of result.perYear) {
+    assert.ok(
+      Math.abs(rec.costReal) < 1e-6,
+      `pctFinanced=1, parentPayPct=0 ⇒ costReal === 0; got ${rec.costReal} at year ${rec.year}`,
+    );
+  }
+});
