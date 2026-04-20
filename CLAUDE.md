@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **002-inline-bugfix** (branch `002-inline-bugfix`).
+Active feature: **003-browser-smoke-harness** (branch `003-browser-smoke-harness`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/002-inline-bugfix/plan.md](./specs/002-inline-bugfix/plan.md)
-- Spec: [specs/002-inline-bugfix/spec.md](./specs/002-inline-bugfix/spec.md)
-- Research: [specs/002-inline-bugfix/research.md](./specs/002-inline-bugfix/research.md)
-- Data model: [specs/002-inline-bugfix/data-model.md](./specs/002-inline-bugfix/data-model.md)
-- Contracts: [specs/002-inline-bugfix/contracts/](./specs/002-inline-bugfix/contracts/)
-- Quickstart: [specs/002-inline-bugfix/quickstart.md](./specs/002-inline-bugfix/quickstart.md)
+- Plan: [specs/003-browser-smoke-harness/plan.md](./specs/003-browser-smoke-harness/plan.md)
+- Spec: [specs/003-browser-smoke-harness/spec.md](./specs/003-browser-smoke-harness/spec.md)
+- Research: [specs/003-browser-smoke-harness/research.md](./specs/003-browser-smoke-harness/research.md)
+- Data model: [specs/003-browser-smoke-harness/data-model.md](./specs/003-browser-smoke-harness/data-model.md)
+- Contracts: [specs/003-browser-smoke-harness/contracts/](./specs/003-browser-smoke-harness/contracts/)
+- Quickstart: [specs/003-browser-smoke-harness/quickstart.md](./specs/003-browser-smoke-harness/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
-- Backlog: [BACKLOG.md](./BACKLOG.md) — all unfinished items from feature 001; feature 002 covers B1 + B3
-- Predecessor closeout: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md)
+- Backlog: [BACKLOG.md](./BACKLOG.md) — feature 003 covers items F1 + T1 + T6
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

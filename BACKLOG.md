@@ -57,7 +57,9 @@ These bugs exist in the inline engine that currently drives both dashboards. The
 
 These items were explicitly scoped into `001-modular-calc-engine` but deferred at merge.
 
-### F1. Browser-side smoke test harness (blocker for everything below)
+### ~~F1. Browser-side smoke test harness (blocker for everything below)~~ — DONE, see feature 003
+
+**Status**: Closed in feature `003-browser-smoke-harness` (2026-04-20). Shipped the Node-runnable design (extended `tests/baseline/*` with a zero-dep smoke harness + CI workflow at `.github/workflows/tests.yml`). Playwright path deferred pending constitution-amendment discussion (P3 below).
 
 - **Why**: `node --test` validates calc modules in isolation but cannot catch "module works, but throws on the HTML's default form values and freezes the dashboard". This is exactly what caused U2B-4a to be reverted.
 - **Two viable designs**:
@@ -65,6 +67,7 @@ These items were explicitly scoped into `001-modular-calc-engine` but deferred a
   - **Playwright** — actual browser automation. Better coverage (chart rendering, drag interactions), but violates Principle V as currently written. Requires a **constitution amendment** discussion before adoption.
 - **Estimated effort**: 2–4 hours for the Node harness; 1 day for Playwright setup + initial E2E suite.
 - **Recommendation**: start with the Node harness. Add Playwright later if the team feels the gap.
+- **Shipped**: `tests/baseline/browser-smoke.test.js` (RR + Generic + parity smokes), `tests/baseline/rr-defaults.mjs`, `tests/baseline/generic-defaults.mjs`, `.github/workflows/tests.yml`. Prototype `_prototypeGetCanonicalInputs` marker is in place for feature 004 to replace.
 
 ### F2. US2 HTML wire-up (TB22–T25 in `specs/001-modular-calc-engine/tasks-us2b.md`)
 
@@ -130,7 +133,9 @@ These items were explicitly scoped into `001-modular-calc-engine` but deferred a
 
 ## 🧪 P4 — Testing & infrastructure gaps
 
-### T1. No browser-side automated testing
+### ~~T1. No browser-side automated testing~~ — DONE, see feature 003
+
+**Status**: Closed in feature `003-browser-smoke-harness` (2026-04-20). Covered by F1's shipped smoke harness. Browser-automated coverage (Playwright) still deferred pending P3 constitution-amendment discussion; the Node smoke harness closes the single-biggest gap (cold-load canonical validation).
 
 See F1 — this is the single biggest testing gap and the root cause of the U2B-4a revert.
 
@@ -154,7 +159,9 @@ See F1 — this is the single biggest testing gap and the root cause of the U2B-
 - **Current**: `tests/fixtures/rr-generic-parity.js` lists only `ssPrimary.annualEarningsNominal`.
 - **Fix**: expand after F3 lands and reveals which other fields legitimately differ (e.g., RR's kid college years vs Generic's parametric kids).
 
-### T6. No CI integration
+### ~~T6. No CI integration~~ — DONE, see feature 003
+
+**Status**: Closed in feature `003-browser-smoke-harness` (2026-04-20). `.github/workflows/tests.yml` shipped — 14-line minimal workflow, `ubuntu-latest`, Node 20, invokes `bash tests/runner.sh`. No `npm install`, no `package.json`, Principle V preserved.
 
 - **Current**: tests run locally via `tests/runner.sh`. No `.github/workflows/*` yet.
 - **Fix**: add a GitHub Actions workflow running `node --test tests/` on push. Zero-dep, aligns with Principle V. ~20 minutes.
@@ -306,3 +313,4 @@ A pragmatic order: 002 (quick wins first), 003 (unblock), 004 (big one), then pi
 
 - **B1 (~~Real/nominal mixing~~)** — Closed in feature `002-inline-bugfix` (2026-04-19). Investigated, no fix required. Original §C.1 audit claim contradicted by line-level evidence (Verdict A, 9/10 confidence). Record preserved in `specs/002-inline-bugfix/audit-B1-real-vs-nominal.md`.
 - **B3 (~~Generic secondary-person ignored~~)** — Closed in feature `002-inline-bugfix` (2026-04-19). Pool summation was already correct (`pStocks = person1Stocks + person2Stocks` at Generic HTML L3480). Regression test added to `tests/baseline/inline-harness.test.js` locks the 7-year sensitivity so future edits can't silently break it.
+- **F1 + T1 + T6 (~~Browser smoke harness + CI~~)** — Closed in feature `003-browser-smoke-harness` (2026-04-20). Shipped: `tests/baseline/browser-smoke.test.js` (RR + Generic + parity smokes), frozen defaults snapshots (`tests/baseline/rr-defaults.mjs`, `generic-defaults.mjs`), and `.github/workflows/tests.yml` (14-line minimal workflow, Node 20, `ubuntu-latest`). Prototype `_prototypeGetCanonicalInputs` inside the test file is marked `TEMPORARY` for feature 004 to replace with a production adapter inside the HTML bootstrap. Runner count: 77 → 80 (three new tests; wall-clock still under 1s).
