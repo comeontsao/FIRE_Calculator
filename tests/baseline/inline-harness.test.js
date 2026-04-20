@@ -203,3 +203,54 @@ test('inline-harness: mode ordering holds (Safe >= Exact >= DWZ fireAge)', () =>
   assert.ok(exact.fireAge >= dwz.fireAge,
     `Exact ${exact.fireAge} < DWZ ${dwz.fireAge}`);
 });
+
+// ============================================================================
+// FEATURE 002 REGRESSION TEST — B3 (Generic secondary-person sensitivity)
+// ============================================================================
+// Contract: `specs/002-inline-bugfix/contracts/harness-regression.contract.md`
+// (Test 2). B1 was investigated and found to be a misdiagnosis — the inline
+// engine's healthcare + college tables are already in real dollars, so no
+// real/nominal conversion is needed. See
+// `specs/002-inline-bugfix/audit-B1-real-vs-nominal.md` (Verdict A, 9/10
+// confidence) for the full evidence chain. Only B3 survives as an engine fix,
+// and even B3 was "verified already-correct; regression-locked" — the Generic
+// pool summation at HTML L3480 already includes the secondary person; this
+// test is a lock so a future refactor cannot silently regress it.
+
+test('B3 regression: Generic secondary-person portfolio change shifts yearsToFire by ≥ 1 yr', () => {
+  // B3 regression test — Generic secondary-person sensitivity.
+  //
+  // This test locks behavior that was already correct in the current engine.
+  // The April 2026 audit in baseline-rr-inline.md §C.3 claimed Generic's
+  // solver ignored the secondary person; line-level re-audit during feature
+  // 002 (see site-audit.md) found pool summation already present at Generic
+  // HTML L3480. This test acts as a regression oracle: if a future change
+  // accidentally removes `+ inp.person2Stocks` from the pool sum, delta
+  // collapses to 0 and this test fails immediately.
+  const baseInputs = genericBundle.inputs;
+  const inputsSecondaryZero = Object.freeze({
+    ...baseInputs,
+    person2Stocks: 0,
+  });
+  const inputsSecondaryLoaded = Object.freeze({
+    ...baseInputs,
+    person2Stocks: 300_000,
+  });
+  const rZero = runInlineLifecycle({
+    inputs: inputsSecondaryZero,
+    env: genericBundle.env,
+    mode: 'safe',
+  });
+  const rLoaded = runInlineLifecycle({
+    inputs: inputsSecondaryLoaded,
+    env: genericBundle.env,
+    mode: 'safe',
+  });
+  assert.ok(rZero.feasible === true,
+    `B3: rZero must be feasible; got feasible=${rZero.feasible}`);
+  assert.ok(rLoaded.feasible === true,
+    `B3: rLoaded must be feasible; got feasible=${rLoaded.feasible}`);
+  const delta = rZero.fireAge - rLoaded.fireAge;
+  assert.ok(delta >= 1,
+    `B3: secondary portfolio change has no effect on yearsToFire. Generic solver is still single-person. rZero.fireAge=${rZero.fireAge}, rLoaded.fireAge=${rLoaded.fireAge}, delta=${delta}. Check specs/002-inline-bugfix/research.md §R2.`);
+});

@@ -587,6 +587,9 @@ function signedLifecycleEndBalance(env, inp, annualSpend, fireAge) {
 
   let pTrad = inp.roger401kTrad;
   let pRoth = inp.roger401kRoth;
+  // B3 fix: include secondary person per specs/002-inline-bugfix/research.md §R2
+  // (taxable stocks sum primary + secondary; 401k/Roth/cash/other are
+  // single-pool or household-level so no secondary split exists).
   let pStocks = inp.rogerStocks + inp.rebeccaStocks;
   let pCash = inp.cashSavings + inp.otherAssets;
 
