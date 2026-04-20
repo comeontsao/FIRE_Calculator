@@ -1,14 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **001-modular-calc-engine** (branch `001-modular-calc-engine`).
+Active feature: **002-inline-bugfix** (branch `002-inline-bugfix`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/001-modular-calc-engine/plan.md](./specs/001-modular-calc-engine/plan.md)
-- Spec: [specs/001-modular-calc-engine/spec.md](./specs/001-modular-calc-engine/spec.md)
-- Research: [specs/001-modular-calc-engine/research.md](./specs/001-modular-calc-engine/research.md)
-- Data model: [specs/001-modular-calc-engine/data-model.md](./specs/001-modular-calc-engine/data-model.md)
-- Module contracts: [specs/001-modular-calc-engine/contracts/](./specs/001-modular-calc-engine/contracts/)
-- Quickstart: [specs/001-modular-calc-engine/quickstart.md](./specs/001-modular-calc-engine/quickstart.md)
+- Plan: [specs/002-inline-bugfix/plan.md](./specs/002-inline-bugfix/plan.md)
+- Spec: [specs/002-inline-bugfix/spec.md](./specs/002-inline-bugfix/spec.md)
+- Research: [specs/002-inline-bugfix/research.md](./specs/002-inline-bugfix/research.md)
+- Data model: [specs/002-inline-bugfix/data-model.md](./specs/002-inline-bugfix/data-model.md)
+- Contracts: [specs/002-inline-bugfix/contracts/](./specs/002-inline-bugfix/contracts/)
+- Quickstart: [specs/002-inline-bugfix/quickstart.md](./specs/002-inline-bugfix/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
+- Backlog: [BACKLOG.md](./BACKLOG.md) — all unfinished items from feature 001; feature 002 covers B1 + B3
+- Predecessor closeout: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

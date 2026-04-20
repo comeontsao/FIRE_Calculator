@@ -19,12 +19,15 @@ This file catalogs every unfinished item surfaced during the session that shippe
 
 These bugs exist in the inline engine that currently drives both dashboards. The canonical engine under `calc/` fixes each of them; they reach users only after the HTML wire-up (item F1 below).
 
-### B1. Real/nominal dollar mixing in healthcare + college costs
+### ~~B1. Real/nominal dollar mixing in healthcare + college costs~~ — INVESTIGATED, NO FIX REQUIRED
 
-- **Where**: `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` — inline `projectFullLifecycle` adds healthcare / college costs as **nominal** dollars while the rest of the projection uses **real** returns.
-- **Impact**: Inflates FIRE age by ~1 year on typical inputs (Roger/Rebecca baseline shifts by ~1 yr when corrected).
-- **Fix**: Canonical `calc/lifecycle.js` converts at the module boundary via `calc/inflation.js` (`§C.1` in `specs/001-modular-calc-engine/baseline-rr-inline.md`). Waiting on HTML wire-up.
-- **Standalone fix possible?** Yes — can be patched directly in the inline engine as a fast win without HTML wire-up. ~1 hour.
+**Status**: Closed in feature `002-inline-bugfix` (2026-04-19) after an independent line-level audit contradicted the original §C.1 claim.
+
+- **Original claim** (feature 001 audit, `baseline-rr-inline.md §C.1`): inline `projectFullLifecycle` adds healthcare / college costs as nominal dollars; fix by dividing by `(1+inflation)^n`.
+- **Finding** (feature 002 audit, `specs/002-inline-bugfix/audit-B1-real-vs-nominal.md`, Verdict A at 9/10 confidence): The `HEALTHCARE_BY_COUNTRY` table comment literally says "TODAY's USD"; the receiving variable `retireSpend` is a constant-dollar slider value; the projection loop uses `realReturn = returnRate - inflationRate`. Tables are already real. Real + real = real. The proposed B1 "fix" would INTRODUCE a bug by shrinking real-dollar costs artificially over time.
+- **Applied fix and reverted**: We did apply the B1 conversion experimentally; it shifted RR fireAge by 1 year (wrongly — plan became rosier than it should be) and did NOT shift Generic at all (Safe-mode integer-year solver absorbed the effect). The test that would have locked this shift failed to meet the [0.5, 1.5] delta gate on Generic, triggering the FR-011 investigation path — which is what exposed the misdiagnosis. Fully reverted; no code change shipped.
+- **Record**: `specs/002-inline-bugfix/audit-B1-real-vs-nominal.md` preserves the line-level evidence. `specs/002-inline-bugfix/site-audit.md` has the post-audit resolution note.
+- **Note for future healthcare-override work**: if a future feature adds a DIFFERENT healthcare pathway that explicitly accepts nominal-dollar inputs (e.g., a "cost in 2035 dollars" override), THAT pathway would need a real/nominal conversion at its boundary. The current scenario-table pathway does not.
 
 ### B2. Silent shortfall absorption in withdrawal phase
 
@@ -33,12 +36,14 @@ These bugs exist in the inline engine that currently drives both dashboards. The
 - **Fix**: Canonical `calc/withdrawal.js` returns typed `{feasible: false, deficitReal}` (§C.2). FR-013. Waiting on HTML wire-up.
 - **Standalone fix possible?** Partial — flagging the case in the inline engine (returning a warning) is ~30 minutes. Cleaner typed-result path requires the full canonical swap.
 
-### B3. Generic's FIRE solver ignores the secondary person's portfolio
+### ~~B3. Generic's FIRE solver ignores the secondary person's portfolio~~ — ALREADY CORRECT; REGRESSION-LOCKED
 
-- **Where**: `FIRE-Dashboard-Generic.html` — the inline solver reads `inp.ageRoger`-equivalent (`inp.agePerson1`) but doesn't sum `portfolioSecondary` fields into the accumulation pool.
-- **Impact**: For a two-person household on Generic, doubling the spouse's 401(k) has zero effect on `yearsToFire`. Real bug for any couple using Generic.
-- **Fix**: Canonical `calc/fireCalculator.js` + `calc/lifecycle.js` already sum both portfolios. The `SC-005` parity test in `tests/unit/fireCalculator.test.js` locks this. Waiting on HTML wire-up.
-- **Standalone fix possible?** Yes — directly patch Generic's inline solver to include `portfolioSecondary`. ~45 minutes. **Recommended fast win.**
+**Status**: Closed in feature `002-inline-bugfix` (2026-04-19).
+
+- **Original claim** (feature 001 audit, `baseline-rr-inline.md §C.3`): Generic's inline solver doesn't sum `portfolioSecondary` into the accumulation pool; doubling spouse's portfolio has zero effect on `yearsToFire`.
+- **Finding** (feature 002 site-audit, line 3480 of `FIRE-Dashboard-Generic.html`): the pool summation `pStocks = inp.person1Stocks + inp.person2Stocks` is ALREADY in place. Generic's form has no `person2_401kTrad/Roth` or `ssClaimAgeSecondary` fields, so the "portfolio + contributions + SS" scope we asked about in the clarification pass was moot — only the taxable-stocks pool is separately maintained per person, and it IS summed correctly. Behavior observed: doubling `inp.person2Stocks` from $0 to $300k shifts fireAge from 65 to 58 (7-year change — huge sensitivity, matching what you'd expect).
+- **What shipped**: a one-line code comment pointer at the pool-summation site in both Generic HTML and the harness, plus a regression test (`tests/baseline/inline-harness.test.js`) that locks the 7-year sensitivity. If a future change accidentally removes the pool summation, the test fails immediately with a named message.
+- **Note for future**: the audit's §C.3 claim conflated "Generic doesn't have per-person 401(k) / SS fields" (true — form limitation) with "Generic ignores the secondary person entirely" (false — pool summation works). If a future feature adds per-person 401(k) / SS fields to Generic, that's a separate spec to design the form and wire the solver to the new fields.
 
 ### B4. "Monte Carlo" is deterministic
 
@@ -299,4 +304,5 @@ A pragmatic order: 002 (quick wins first), 003 (unblock), 004 (big one), then pi
 
 ## Changelog (items completed)
 
-*(Empty — items are added here with a one-line "Done in feature 00X" pointer as they ship.)*
+- **B1 (~~Real/nominal mixing~~)** — Closed in feature `002-inline-bugfix` (2026-04-19). Investigated, no fix required. Original §C.1 audit claim contradicted by line-level evidence (Verdict A, 9/10 confidence). Record preserved in `specs/002-inline-bugfix/audit-B1-real-vs-nominal.md`.
+- **B3 (~~Generic secondary-person ignored~~)** — Closed in feature `002-inline-bugfix` (2026-04-19). Pool summation was already correct (`pStocks = person1Stocks + person2Stocks` at Generic HTML L3480). Regression test added to `tests/baseline/inline-harness.test.js` locks the 7-year sensitivity so future edits can't silently break it.
