@@ -10,5 +10,9 @@
 # Glob pattern (not a bare "tests/" directory) avoids a Node 22 Windows
 # quirk where directory args can be resolved as CJS module paths.
 set -euo pipefail
+shopt -s globstar nullglob
 cd "$(dirname "$0")/.."
-node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test "tests/**/*.test.js"
+# Bash expands tests/**/*.test.js via globstar; passing unquoted lets Node 20
+# (CI) and Node 22 (local Git Bash) both receive an explicit file list rather
+# than relying on Node's native glob (Node 20 doesn't have it).
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/**/*.test.js
