@@ -22,6 +22,7 @@ Master planning document for ongoing development of the FIRE Dashboard suite. Ev
 
 ## ✅ Recently shipped
 
+- [x] **Feature 006 — UI Noise Reset + Lifecycle Dock** (2026-04-21). Three-story visual + UX pass: pinnable right-edge lifecycle sidebar (US1) that mirrors the primary chart via a shared `_lastLifecycleDataset` cache (no parallel calc); sticky compact header (US2) using IntersectionObserver + live Years-to-FIRE / Progress chips reading `_lastKpiSnapshot`; 12-item noise-reduction pass (US3) with surface tiers, KPI neutral color, quiet card titles, section dividers, FIRE-progress rail refactor, filter demotion, emoji discipline, footer-tip softening. Shipped to both files with 13 new i18n keys in EN + zh-TW. Spec: [specs/006-ui-noise-reset-lifecycle-dock/spec.md](./specs/006-ui-noise-reset-lifecycle-dock/spec.md) · Closeout: [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md).
 - [x] **Double-mortgage-adjustment bug fix** (2026-04-17). SS drawdown chart was silently withdrawing ~$20–30K/yr extra because the pre-adjusted `mtgAdj.annualSpend` was passed into `simulateDrawdown`, which then re-applied the adjustment inside `projectFullLifecycle`. Now both the lifecycle chart and the SS drawdown chart pass the raw scenario spend so mortgage adjustment is applied exactly once. Also wired up `fireAgeOverride` honoring in the SS chart so dragging the FIRE triangle keeps both charts in sync. Fixed in both files.
 
 ---

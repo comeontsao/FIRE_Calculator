@@ -34,29 +34,71 @@
     padding: 20px;
   }
 
+  /* Feature 006 — Sticky compact header (US2).
+     Sentinel is a 1px element placed immediately before the header; an
+     IntersectionObserver toggles .header--compact when the sentinel leaves
+     the viewport. CSS transitions handle all visual interpolation so the
+     scroll path stays JS-free. See contracts/sticky-header.contract.md. */
+  #headerSentinel { height: 1px; width: 1px; }
+
   .header {
-    text-align: center;
-    padding: 30px 0 20px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 30px;
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 32px 20px;
+    transition: padding 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+                background 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    /* Opaque background matching the page bg. Invisible at top-of-page; hides
+       content that scrolls up underneath during the pre-threshold window where
+       the sentinel is still intersecting but the page has shifted. */
+    background: var(--bg);
+    border-bottom: 1px solid transparent;
   }
 
+  .header--compact {
+    padding: 10px 24px;
+    background: rgba(15,16,22,0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom-color: var(--border);
+  }
+
+  /* h1 shrinks, gradient drops, subtitle collapses out */
   .header h1 {
     font-size: 2.2em;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 8px;
+    transition: font-size 240ms, background 240ms, color 240ms;
+  }
+  .header--compact h1 {
+    font-size: 1.1em;
+    background: none;
+    -webkit-background-clip: initial;
+    -webkit-text-fill-color: initial;
+    color: var(--accent2);
+    margin-bottom: 0;
   }
 
   .header .subtitle {
     color: var(--text-dim);
     font-size: 1.05em;
+    transition: max-height 240ms, opacity 200ms, margin 240ms;
+    overflow: hidden;
+    max-height: 40px;
+  }
+  .header--compact .subtitle {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
   }
 
   .header .fire-status {
-    margin-top: 15px;
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -64,6 +106,66 @@
     border-radius: 30px;
     font-weight: 600;
     font-size: 1.1em;
+  }
+
+  /* Header sub-regions (Feature 006). */
+  .header__brand { min-width: 0; text-align: left; }
+  .header__status {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: flex-end;
+  }
+  .header__controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+  .header__lang-toggle {
+    display: flex;
+    gap: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .header__lang-toggle button {
+    min-height: 36px;
+  }
+  #sidebarToggle {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px 10px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    line-height: 1;
+  }
+  #sidebarToggle:hover { border-color: var(--accent); }
+
+  /* Live chips hidden in expanded, revealed in compact */
+  .header__live-chips { display: none; }
+  .header--compact .header__live-chips { display: flex; gap: 12px; }
+  .header__live-chips .chip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.85em;
+    color: var(--text-dim);
+  }
+  .header__live-chips .chip strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .header, .header *, .header--compact, .header--compact * {
+      transition: none !important;
+    }
   }
 
   .fire-status.on-track { background: rgba(0,212,170,0.15); color: var(--success); border: 1px solid rgba(0,212,170,0.3); }
@@ -86,12 +188,17 @@
     transition: border-color 0.3s;
   }
 
-  .card:hover { border-color: var(--accent); }
+  /* V1 — Surface tiers: border-only charts vs filled controls.
+     Hover feedback only on explicitly interactive cards. */
+  .card.surface--secondary { background: transparent; }
+  .card.is-interactive { cursor: pointer; }
+  .card.is-interactive:hover { border-color: var(--accent); }
 
+  /* V3 — Card title: quiet title-case (NOT uppercase kicker — that moved to
+     .section-divider in V4). */
   .card-title {
-    font-size: 0.85em;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
+    font-size: 0.95em;
+    font-weight: 500;
     color: var(--text-dim);
     margin-bottom: 16px;
     display: flex;
@@ -128,10 +235,12 @@
     margin-bottom: 8px;
   }
 
+  /* V2 — KPI accent policy: neutral value, accent moves to the sub line. */
   .kpi .value {
     font-size: 2em;
     font-weight: 700;
     line-height: 1.1;
+    color: var(--text);
   }
 
   .kpi .sub {
@@ -139,6 +248,10 @@
     color: var(--text-dim);
     margin-top: 6px;
   }
+
+  .kpi .sub--delta-up { color: var(--success); }
+  .kpi .sub--delta-down { color: var(--danger); }
+  .kpi .sub--delta-flat { color: var(--text-dim); }
 
   .text-green { color: var(--success); }
   .text-yellow { color: var(--warning); }
@@ -545,8 +658,84 @@
     line-height: 1.55;
     color: var(--text);
     background: rgba(108,99,255,0.08);
-    border-left: 3px solid var(--accent);
+    /* V11 — softened from --accent to --border to reduce eye-magnet noise. */
+    border-left: 3px solid var(--border);
     border-radius: 4px;
+  }
+
+  /* ==================== V4 — Section divider ====================
+     Small uppercase kicker between semantic card groups. The uppercase +
+     letter-spacing treatment lives ONLY here (V3 removed it from .card-title).
+     `grid-column: 1 / -1` makes it span the full dashboard grid row. */
+  .section-divider {
+    grid-column: 1 / -1;
+    margin: 32px 0 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ==================== V6 — FIRE Progress rail ====================
+     Replaces the span-3 FIRE Progress card with a thin rail sitting directly
+     under the KPI row. `grid-column: 1 / -1` makes it span the full grid. */
+  .progress-rail {
+    grid-column: 1 / -1;
+    margin: 0 0 24px;
+  }
+  .progress-rail__ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .progress-rail__track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-rail__fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 240ms ease;
+  }
+
+  /* ==================== V7 — Filter pills (country grid filter) ====================
+     Demoted from tab-style buttons: "Filter:" label prefix, smaller pills, active
+     state = underline-only (not filled), lives inside .filter-row. */
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filter-row__label {
+    font-size: 0.78em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .filter-pill {
+    padding: 4px 12px;
+    font-size: 0.78em;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 200ms, border-color 200ms;
+  }
+  .filter-pill:hover { color: var(--text); }
+  .filter-pill--active {
+    color: var(--text);
+    border-bottom: 2px solid var(--accent);
+    border-radius: 14px 14px 0 0;
   }
   .footer-panel__headline {
     font-size: 0.9em;
@@ -953,19 +1142,164 @@
   .infeasibility-banner__icon { font-size: 1.15em; }
   .infeasibility-banner__deficit { margin-left: auto; color: var(--text-dim); font-size: 0.88em; font-weight: 400; }
 
+  /* =============================================================
+     Feature 006 (US1 — T012) — Pinnable lifecycle sidebar.
+     Full spec: specs/006-ui-noise-reset-lifecycle-dock/contracts/lifecycle-sidebar.contract.md
+     Desktop (>=780px): docked mode reflows .dashboard via margin-right.
+     Mobile (<780px):   overlay mode (scrim) only; docked margin is suppressed.
+     ============================================================= */
+  /* --sidebar-width defaults to ~1/3 of viewport but is clamped in use.
+     Updated via JS on init (read from localStorage) and during drag on the
+     .sidebar__resize-handle. Persisted at drag-end. */
+  :root { --sidebar-width: 33vw; }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: clamp(320px, var(--sidebar-width), 80vw);
+    max-width: 100vw;
+    transform: translateX(100%);
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    background: var(--card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 90;
+  }
+  .sidebar--open { transform: translateX(0); }
+  /* Drag handle — thin vertical bar on the sidebar's left edge. Hidden on mobile. */
+  .sidebar__resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 2;
+    transition: background 160ms;
+  }
+  .sidebar__resize-handle:hover,
+  .sidebar__resize-handle.is-resizing { background: rgba(108,99,255,0.28); }
+  body.sidebar-resizing { user-select: none; cursor: col-resize; }
+  .sidebar__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar__title {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+  .sidebar__controls {
+    display: flex;
+    gap: 8px;
+  }
+  .sidebar__controls button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: color 150ms, border-color 150ms, background 150ms;
+  }
+  .sidebar__controls button:hover { color: var(--text); border-color: var(--accent); }
+  .sidebar__pin[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  .sidebar__chart {
+    flex: 1;
+    padding: 16px 20px;
+    position: relative;
+    min-height: 0;
+  }
+  .sidebar__chart canvas { max-width: 100%; max-height: 100%; }
+  .sidebar__caption {
+    padding: 12px 20px 18px;
+    border-top: 1px solid var(--border);
+    font-size: 0.8em;
+    color: var(--text-dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .sidebar__caption strong { color: var(--text); font-weight: 600; }
+  .sidebar__caption .sep { opacity: 0.45; }
+
+  .sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 240ms;
+    z-index: 80;
+  }
+  .sidebar-scrim--visible { opacity: 1; pointer-events: auto; }
+
+  /* Docked mode — main content reflows right so the sidebar doesn't overlap. */
+  body.sidebar-docked .dashboard,
+  body.sidebar-docked .footer-panel {
+    margin-right: clamp(320px, var(--sidebar-width), 80vw);
+    transition: margin-right 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  /* Suppress reflow transition while the user is actively dragging the handle
+     so width tracking feels instant; transition reinstates after mouseup. */
+  body.sidebar-resizing.sidebar-docked .dashboard,
+  body.sidebar-resizing.sidebar-docked .footer-panel,
+  body.sidebar-resizing .sidebar { transition: none !important; }
+
+  /* Mobile viewport: no docked reflow, no drag handle — use scrim overlay. */
+  @media (max-width: 779.98px) {
+    .sidebar { width: 100vw; }
+    body.sidebar-docked .dashboard,
+    body.sidebar-docked .footer-panel { margin-right: 0; }
+    .sidebar__resize-handle { display: none; }
+  }
+
+  /* Reduced motion — collapse all transition durations to 0. */
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .sidebar-scrim,
+    body.sidebar-docked .dashboard,
+    body.sidebar-docked .footer-panel {
+      transition: none !important;
+    }
+  }
+
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div style="position:absolute;top:12px;right:16px;display:flex;gap:0;border-radius:20px;overflow:hidden;border:1px solid var(--border)">
-    <button id="langEN" onclick="switchLanguage('en')" style="padding:4px 12px;font-size:0.75em;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:600">EN</button>
-    <button id="langZH" onclick="switchLanguage('zh')" style="padding:4px 12px;font-size:0.75em;border:none;cursor:pointer;background:var(--card);color:var(--text-dim);font-weight:600">中文</button>
+<div id="headerSentinel" aria-hidden="true"></div>
+<header id="siteHeader" class="header">
+  <div class="header__brand">
+    <h1 data-i18n="header.title">Roger & Rebecca FIRE Command Center</h1>
+    <p class="subtitle" data-i18n="header.subtitle">Financial Independence, Retire Early — Fat FIRE with Geo-Arbitrage Strategy</p>
   </div>
-  <h1 data-i18n="header.title">Roger & Rebecca FIRE Command Center</h1>
-  <p class="subtitle" data-i18n="header.subtitle">Financial Independence, Retire Early — Fat FIRE with Geo-Arbitrage Strategy</p>
-  <div id="fireStatus" class="fire-status warning">Calculating...</div>
-</div>
+  <div class="header__status">
+    <div id="fireStatus" class="fire-status warning">Calculating...</div>
+    <div class="header__live-chips" aria-live="polite">
+      <span class="chip"><span data-i18n="header.yearsChipLabel">Years to FIRE</span>
+        <strong id="headerYearsValue">—</strong></span>
+      <span class="chip"><span data-i18n="header.progressChipLabel">Progress</span>
+        <strong id="headerProgressValue">—</strong></span>
+    </div>
+  </div>
+  <div class="header__controls">
+    <div class="header__lang-toggle">
+      <button id="langEN" onclick="switchLanguage('en')" style="padding:4px 12px;font-size:0.75em;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:600">EN</button>
+      <button id="langZH" onclick="switchLanguage('zh')" style="padding:4px 12px;font-size:0.75em;border:none;cursor:pointer;background:var(--card);color:var(--text-dim);font-weight:600">中文</button>
+    </div>
+    <button id="sidebarToggle" aria-pressed="false" data-i18n-aria="sidebar.toggleAria" aria-label="Toggle lifecycle sidebar">⚓</button>
+  </div>
+</header>
 
 <div class="dashboard">
 
@@ -973,41 +1307,46 @@
   <div class="kpi-row">
     <div class="kpi">
       <div class="label" data-i18n="kpi.netWorth">Current Net Worth</div>
-      <div class="value text-accent" id="kpiNetWorth">—</div>
+      <div class="value" id="kpiNetWorth">—</div>
       <div class="sub" id="kpiNetWorthSub" data-i18n="kpi.netWorthSub">as of Apr 2026</div>
     </div>
     <div class="kpi">
       <div class="label" data-i18n="kpi.fireNumber">FIRE Number (Primary)</div>
-      <div class="value text-green" id="kpiFIRENum">—</div>
+      <div class="value" id="kpiFIRENum">—</div>
       <div class="sub" id="kpiFIRENumSub" data-i18n="kpi.fireNumberSub">based on selected scenario</div>
     </div>
     <div class="kpi">
       <div class="label" data-i18n="kpi.progress">Progress to FIRE</div>
-      <div class="value text-yellow" id="kpiProgress">—</div>
+      <div class="value" id="kpiProgress">—</div>
       <div class="sub" id="kpiProgressSub" data-i18n="kpi.progressSub">of target reached</div>
     </div>
     <div class="kpi">
       <div class="label" data-i18n="kpi.yearsToFire">Years to FIRE</div>
-      <div class="value text-accent" id="kpiYears">—</div>
+      <div class="value" id="kpiYears">—</div>
       <div class="sub" id="kpiYearsSub" data-i18n="kpi.yearsToFireSub">estimated at current pace</div>
     </div>
   </div>
 
-  <!-- FIRE Progress Bar -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">🔥</span> <span data-i18n="sec.fireProgress">FIRE Progress</span></div>
-    <div class="flex-between" style="margin-bottom:4px">
-      <span style="font-size:0.9em;color:var(--text-dim)">$0</span>
-      <span style="font-size:0.9em;color:var(--text-dim)" id="progressTarget">—</span>
+  <!-- V6 — FIRE Progress rail (replaces the old span-3 card).
+       #progressBar, #progressTarget, #progressCurrent, #progressPct are
+       preserved because existing JS (renderKpiCards and the progress setter in
+       recalcAll) writes to them; #progressCurrent + #progressPct are kept as
+       hidden sr-only nodes so the setter lines in ~L6510-6513 stay valid. -->
+  <div class="progress-rail">
+    <div class="progress-rail__ticks">
+      <span>$0</span>
+      <span id="progressMidTick">$—</span>
+      <span id="progressTarget">—</span>
     </div>
-    <div class="progress-container">
-      <div class="progress-bar" id="progressBar" style="width:0%"></div>
+    <div class="progress-rail__track">
+      <div class="progress-rail__fill" id="progressBar" style="width:0%"></div>
     </div>
-    <div class="flex-between">
-      <span style="font-size:0.85em;color:var(--text-dim)" id="progressCurrent">—</span>
-      <span style="font-size:0.85em;font-weight:600" id="progressPct">—</span>
-    </div>
+    <span id="progressCurrent" style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">—</span>
+    <span id="progressPct" style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">—</span>
   </div>
+
+  <!-- V4 — Section divider: Profile & Plan -->
+  <div class="section-divider"><span data-i18n="section.profile">Profile &amp; Plan</span></div>
 
   <!-- Input Panel: Profile & Finances -->
   <div class="card">
@@ -1447,9 +1786,12 @@
   </div>
 
   <!-- ====== Lifetime Withdrawal Strategy — Tax-Optimized ====== -->
-  <div class="card span-3">
+  <!-- V4 — Section divider: Outlook -->
+  <div class="section-divider"><span data-i18n="section.outlook">Outlook</span></div>
+
+  <div class="card span-3 surface--secondary">
     <div class="card-title">
-      <span class="icon">🪜</span> <span data-i18n="sec.lifetimeWithdrawal">Lifetime Withdrawal Strategy</span> <span style="font-weight:400;color:var(--text-dim);font-size:0.85em" data-i18n="sec.lifetimeWithdrawalNote">— tax-bracket-optimized mix across all retirement years</span>
+      <span data-i18n="sec.lifetimeWithdrawal">Lifetime Withdrawal Strategy</span> <span style="font-weight:400;color:var(--text-dim);font-size:0.85em" data-i18n="sec.lifetimeWithdrawalNote">— tax-bracket-optimized mix across all retirement years</span>
     </div>
     <p style="font-size:0.82em;color:var(--text-dim);margin-top:0;margin-bottom:12px" data-i18n="tw.prose" data-i18n-html></p>
 
@@ -1550,8 +1892,8 @@
   </div>
 
   <!-- Healthcare by Country — age-aware pre-65 vs Medicare/senior post-65 -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">🏥</span> <span data-i18n="sec.healthcare">Healthcare by Country — Pre-65 vs Post-65</span></div>
+  <div class="card span-3 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.healthcare">Healthcare by Country — Pre-65 vs Post-65</span></div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:12px" data-i18n="hc.intro" data-i18n-html></p>
     <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:16px">
       <!-- Current scenario card -->
@@ -1588,8 +1930,8 @@
   </div>
 
   <!-- Social Security — Realistic Estimator + Safety Margin -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">🏛️</span> <span data-i18n="sec.socialSecurity">Social Security — Realistic Estimator &amp; Three-Phase FIRE</span></div>
+  <div class="card span-3 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.socialSecurity">Social Security — Realistic Estimator &amp; Three-Phase FIRE</span></div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:16px" data-i18n="ss.introFull" data-i18n-html>
       SS benefits are based on your <strong>highest 35 years of earnings</strong>. With only a few years of US work history, most of those 35 slots are $0 — drastically reducing your real benefit. Your FIRE has three phases: FIRE→59.5 (<em>taxable only</em>) → 59.5→SS (<em>401K unlocks</em>) → SS onward.
     </p>
@@ -1681,19 +2023,23 @@
   </div>
 
   <!-- SS Impact Chart -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">📉</span> <span data-i18n="sec.drawdown">Portfolio Drawdown: With vs Without Social Security</span></div>
+  <div class="card span-3 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.drawdown">Portfolio Drawdown: With vs Without Social Security</span></div>
     <div style="position:relative;width:100%;height:320px">
       <canvas id="ssChart"></canvas>
     </div>
   </div>
+
+  <!-- V4 — Section divider: Compare -->
+  <div class="section-divider"><span data-i18n="section.compare">Compare</span></div>
 
   <!-- Geo-Arbitrage Scenarios -->
   <div class="card span-3">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="card-title" style="margin-bottom:0"><span class="icon">🌏</span> <span data-i18n="sec.geoArbitrage">Geo-Arbitrage Scenarios — Where to FIRE?</span></div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-        <div style="display:flex;gap:0;border-radius:20px;overflow:hidden;border:1px solid var(--border)">
+        <!-- V10 — removed inner wrapper border; buttons sit inline within parent card's frame. -->
+        <div style="display:flex;gap:0;border-radius:20px;overflow:hidden">
           <button id="btnComfortable" onclick="setLifestyle('comfortable')" data-i18n="lifestyle.comfortable" style="padding:5px 14px;font-size:0.75em;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:600;white-space:nowrap">🛋️ Comfortable</button>
           <button id="btnNormal" onclick="setLifestyle('normal')" data-i18n="lifestyle.normal" style="padding:5px 14px;font-size:0.75em;border:none;cursor:pointer;background:var(--card);color:var(--text-dim);font-weight:600;white-space:nowrap">📊 Normal</button>
         </div>
@@ -1701,13 +2047,15 @@
     </div>
     <div id="lifestyleDesc" style="font-size:0.72em;color:var(--text-dim);margin-bottom:6px;text-align:right">International school, nice area, dining out, private healthcare</div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:12px" data-i18n="geo.instruction">Click a country to set it as your primary FIRE target. Use filters to narrow down.</p>
-    <div class="tab-row" style="margin-bottom:12px">
-      <button class="tab-btn active" onclick="filterScenarios('all', this)" data-i18n="geo.allCountries">All Countries</button>
-      <button class="tab-btn" onclick="filterScenarios('zh', this)" data-i18n="geo.chineseSpoken">🗣️ Chinese Spoken</button>
-      <button class="tab-btn" onclick="filterScenarios('en', this)" data-i18n="geo.englishSpoken">🗣️ English Spoken</button>
-      <button class="tab-btn" onclick="filterScenarios('notax', this)" data-i18n="geo.noTax">💰 No Foreign Income Tax</button>
-      <button class="tab-btn" onclick="filterScenarios('asia', this)" data-i18n="geo.asia">🌏 Asia</button>
-      <button class="tab-btn" onclick="filterScenarios('cheap', this)" data-i18n="geo.under50k">🔥 Under $50K/yr</button>
+    <!-- V7 — filter pills (was .tab-row with .tab-btn). Active state toggled via .filter-pill--active in filterScenarios(). -->
+    <div class="filter-row" style="margin-bottom:12px">
+      <span class="filter-row__label" data-i18n="filter.label">Filter:</span>
+      <button class="filter-pill filter-pill--active" onclick="filterScenarios('all', this)" data-i18n="geo.allCountries">All Countries</button>
+      <button class="filter-pill" onclick="filterScenarios('zh', this)" data-i18n="geo.chineseSpoken">🗣️ Chinese Spoken</button>
+      <button class="filter-pill" onclick="filterScenarios('en', this)" data-i18n="geo.englishSpoken">🗣️ English Spoken</button>
+      <button class="filter-pill" onclick="filterScenarios('notax', this)" data-i18n="geo.noTax">💰 No Foreign Income Tax</button>
+      <button class="filter-pill" onclick="filterScenarios('asia', this)" data-i18n="geo.asia">🌏 Asia</button>
+      <button class="filter-pill" onclick="filterScenarios('cheap', this)" data-i18n="geo.under50k">🔥 Under $50K/yr</button>
     </div>
     <div class="scenario-grid" id="scenarioGrid">
       <!-- filled by JS -->
@@ -1737,8 +2085,8 @@
   </div>
 
   <!-- Full Lifecycle Chart -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">📊</span> <span data-i18n="sec.lifecycle">Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security</span></div>
+  <div class="card span-3 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.lifecycle">Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security</span></div>
     <!-- Infeasibility banner (FR-004) — driven by chartState.state.feasible -->
     <div class="infeasibility-banner" id="infeasibilityBanner" hidden role="alert">
       <span class="infeasibility-banner__icon" aria-hidden="true">⚠</span>
@@ -1801,24 +2149,24 @@
   </div>
 
   <!-- Net Worth Breakdown -->
-  <div class="card">
-    <div class="card-title"><span class="icon">🥧</span> <span data-i18n="sec.netWorthPie">Net Worth Breakdown</span></div>
+  <div class="card surface--secondary">
+    <div class="card-title"><span data-i18n="sec.netWorthPie">Net Worth Breakdown</span></div>
     <div class="chart-container-sm">
       <canvas id="netWorthPie"></canvas>
     </div>
   </div>
 
   <!-- Milestone Timeline -->
-  <div class="card span-2">
-    <div class="card-title"><span class="icon">🏁</span> <span data-i18n="sec.milestones">FIRE Milestone Timeline</span></div>
+  <div class="card span-2 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.milestones">FIRE Milestone Timeline</span></div>
     <div class="timeline" id="timeline">
       <!-- filled by JS -->
     </div>
   </div>
 
   <!-- Expense Pie -->
-  <div class="card">
-    <div class="card-title"><span class="icon">📉</span> <span data-i18n="sec.expenseDist">Expense Distribution</span></div>
+  <div class="card surface--secondary">
+    <div class="card-title"><span data-i18n="sec.expenseDist">Expense Distribution</span></div>
     <div class="chart-container-sm">
       <canvas id="expensePie"></canvas>
     </div>
@@ -1847,8 +2195,8 @@
   </div>
 
   <!-- FIRE by Country Comparison Chart -->
-  <div class="card span-3">
-    <div class="card-title"><span class="icon">🌐</span> <span data-i18n="sec.countryChart">Years to FIRE by Retirement Location</span></div>
+  <div class="card span-3 surface--secondary">
+    <div class="card-title"><span data-i18n="sec.countryChart">Years to FIRE by Retirement Location</span></div>
     <div style="position:relative;width:100%;height:400px">
       <canvas id="countryChart"></canvas>
     </div>
@@ -1857,7 +2205,9 @@
 </div>
 
 <!-- ==================== SNAPSHOT HISTORY ==================== -->
+<!-- V4 — Section divider: Track (outside .dashboard grid, inside snapshot-section) -->
 <div class="snapshot-section">
+  <div class="section-divider" style="grid-column:auto;max-width:1400px;margin:0 auto 16px"><span data-i18n="section.track">Track</span></div>
   <div class="card">
     <div class="card-title"><span class="icon">📸</span> <span data-i18n="sec.snapshots">Snapshot History — Track Your Progress Over Time</span></div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:16px">
@@ -2922,6 +3272,20 @@ const TRANSLATIONS = {
     'footer.lastUpdated': 'Last updated:',
     'footer.method': 'Uses real (inflation-adjusted) returns',
     'footer.tip': '💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!',
+    // Feature 006 — UI noise reset + lifecycle dock
+    'section.profile': 'Profile & Plan',
+    'section.outlook': 'Outlook',
+    'section.compare': 'Compare',
+    'section.track': 'Track',
+    'filter.label': 'Filter:',
+    'header.yearsChipLabel': 'Years to FIRE',
+    'header.progressChipLabel': 'Progress',
+    'sidebar.title': 'Lifecycle',
+    'sidebar.pinAria': 'Pin lifecycle sidebar',
+    'sidebar.closeAria': 'Close lifecycle sidebar',
+    'sidebar.toggleAria': 'Toggle lifecycle sidebar',
+    'sidebar.fireAgeLabel': 'FIRE age',
+    'sidebar.endPortfolioLabel': 'End-of-life portfolio',
     'chart.lifecycle': 'Full Portfolio Lifecycle',
     'chart.portfolioBalance': 'Portfolio Balance Over Time',
     'chart.withVsWithout': 'With vs Without Social Security',
@@ -2971,7 +3335,7 @@ const TRANSLATIONS = {
     'infeasibility.banner': 'This retirement age is not sustainable under your current plan.',
     // Feature 005-canonical-public-launch (T035) — legal/CYA disclaimer footer
     'disclaimer.intro': '⚠️ For research and educational purposes only — not financial advice.',
-    'disclaimer.body': 'Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.',
+    'disclaimer.body': 'Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. All data you enter stays on your device — this site never saves, uploads, or transmits any of your information. Source code: MIT-licensed, open-source.',
     // i18n Phase 3 additions (2026-04-20) — JS-rendered dynamic strings
     'chart.axis.age': 'Age',
     'chart.axis.annualDollars': 'Annual $',
@@ -3593,6 +3957,20 @@ const TRANSLATIONS = {
     'footer.lastUpdated': '最後更新：',
     'footer.method': '使用實質（扣除通膨）回報率',
     'footer.tip': '💡 提示：調整任何滑桿或輸入欄位，所有計算即時更新。將此頁加入書籤，每月更新你的數據！',
+    // Feature 006 — UI noise reset + lifecycle dock
+    'section.profile': '檔案與計劃',
+    'section.outlook': '前景預測',
+    'section.compare': '比較',
+    'section.track': '追蹤',
+    'filter.label': '篩選：',
+    'header.yearsChipLabel': '距 FIRE 年數',
+    'header.progressChipLabel': '進度',
+    'sidebar.title': '生涯預測',
+    'sidebar.pinAria': '釘選生涯側欄',
+    'sidebar.closeAria': '關閉生涯側欄',
+    'sidebar.toggleAria': '切換生涯側欄',
+    'sidebar.fireAgeLabel': 'FIRE 歲數',
+    'sidebar.endPortfolioLabel': '終老投資組合',
     'chart.lifecycle': '完整投資組合生命週期',
     'chart.portfolioBalance': '投資組合餘額走勢',
     'chart.withVsWithout': '有/無社會安全金比較',
@@ -3642,7 +4020,7 @@ const TRANSLATIONS = {
     'infeasibility.banner': '以目前的規劃，這個退休年齡不可持續。',
     // Feature 005-canonical-public-launch (T035) — legal/CYA disclaimer footer
     'disclaimer.intro': '⚠️ 僅供研究及教育用途，非投資建議。',
-    'disclaimer.body': '本工具的預測數字僅為估計值，請自行研究（DYOR）並於做任何財務決定前諮詢合格的財務顧問。作者不對任何基於本工具做出的決策負責。原始碼採 MIT 開源授權。',
+    'disclaimer.body': '本工具的預測數字僅為估計值，請自行研究（DYOR）並於做任何財務決定前諮詢合格的財務顧問。作者不對任何基於本工具做出的決策負責。您輸入的所有資料只保留在您的裝置上 — 本網站絕不儲存、上傳或傳輸您的任何資訊。原始碼採 MIT 開源授權。',
     // i18n Phase 3 additions (2026-04-20) — JS-rendered dynamic strings
     'chart.axis.age': '年齡',
     'chart.axis.annualDollars': '年金額 $',
@@ -4154,23 +4532,18 @@ function setFireMode(mode) {
     bufferControls.style.display = 'none';
     terminalControls.style.display = 'none';
   }
-  // T023b / FR-015: if an override is active, preserve it and only re-evaluate
-  // feasibility under the new mode. Otherwise run a full recalc.
+  // Feature 006 fix — strategy switch always clears any active drag override
+  // and runs a full recalc. Previously (T023b / FR-015) we preserved the
+  // override and only revalidated feasibility under the new mode, but users
+  // reported the chart then felt "stuck" on the old-mode shape when they
+  // clicked Safe/Exact/DWZ expecting a fresh result. The user can always
+  // re-drag under the new mode to explore a custom age.
   const cs = _cs();
-  if (cs && cs.state.source === 'override' && cs.state.overrideFireAge != null) {
-    const inp = getInputs();
-    const scenario = scenarios.find(s => s.id === selectedScenario);
-    const effectiveSpend = getScenarioEffectiveSpend(scenario);
-    const feasibleUnderNewMode = _evaluateFeasibilityAtAge(inp, effectiveSpend, cs.state.overrideFireAge, mode);
-    // T050 (FR-022): refresh aggregate deficit under the newly-selected mode
-    // before the chartState mutation so the banner listener reflects it.
-    _lastDeficitReal = feasibleUnderNewMode
-      ? 0
-      : _computeDeficitReal(inp, effectiveSpend, cs.state.overrideFireAge, mode);
-    cs.revalidateFeasibilityAt(cs.state.overrideFireAge, feasibleUnderNewMode);
-  } else {
-    recalcAll();
+  if (cs && cs.state.source === 'override') {
+    try { cs.clearOverride(); } catch (_e) {}
+    _clearOverrideFire();
   }
+  recalcAll();
 }
 
 // ==================== EXPENSE TABLE ====================
@@ -4451,6 +4824,11 @@ function _fireFeasible() {
 // ---------------------------------------------------------------------------
 let _lastDeficitReal = 0;
 let _lastKpiSnapshot = null;
+// Feature 006 — Shared lifecycle dataset cache.
+// Populated by renderGrowthChart after it computes `lifecycle`. Consumed by
+// renderLifecycleSidebarChart (the mirror chart in the pinnable sidebar).
+// Consumers: renderGrowthChart (primary), renderLifecycleSidebarChart (mirror).
+let _lastLifecycleDataset = null;
 
 /**
  * Aggregate deficit for banner surfacing. Runs the canonical lifecycle at
@@ -4541,6 +4919,220 @@ function renderKpiCards(state) {
         ? t('kpi.yearsSubFireBy', 2026 + yrsToFire, fireAge)
         : t('kpi.yearsSubIncrease');
     }
+  }
+}
+
+// Feature 006 — Compact-header live stats.
+// Reads the cached _lastKpiSnapshot populated by recalcAll; writes the two
+// compact-header chip values. Never triggers a recalc. Per Constitution
+// Principle III (Single Source of Truth) — subscribes to the same event
+// pipeline as the KPI cards so both stay in sync by construction.
+// See contracts/sticky-header.contract.md §Live Data Contract.
+function renderCompactHeaderStats(_state) {
+  const snap = _lastKpiSnapshot;
+  const yearsEl = document.getElementById('headerYearsValue');
+  const progressEl = document.getElementById('headerProgressValue');
+  if (!yearsEl || !progressEl) return;
+  if (!snap) { yearsEl.textContent = '—'; progressEl.textContent = '—'; return; }
+  const years = Number.isFinite(snap.yrsToFire) ? Math.round(snap.yrsToFire).toString() : '—';
+  const pct = Number.isFinite(snap.progress) ? Math.round(snap.progress) + '%' : '—';
+  yearsEl.textContent = years;
+  progressEl.textContent = pct;
+}
+
+// =============================================================================
+// Feature 006 (US1 — T014) — Mirror lifecycle chart in the pinnable sidebar.
+// -----------------------------------------------------------------------------
+// Inputs : _lastLifecycleDataset (populated by renderGrowthChart — {lifecycle,
+//          fireAge, scenarioSpend, currentAge}). Lifecycle row shape: {age,
+//          total, p401k, phase, ...} (see renderGrowthChart datasets[0]).
+// Outputs: Updates the sidebar's Chart.js instance on #lifecycleSidebarCanvas
+//          plus the FIRE-age and end-of-life portfolio caption strongs.
+// Consumers: #lifecycleSidebarCanvas, #sidebarFireAge, #sidebarEndPortfolio.
+// Policy : NO calc — reads the module-scope cache only. NO DOM access outside
+//          the sidebar elements. Re-run as a chartState.onChange listener.
+// See specs/006-ui-noise-reset-lifecycle-dock/contracts/lifecycle-sidebar.contract.md
+// =============================================================================
+let _sidebarLifecycleChart = null; // lazy-created Chart.js instance (MC-3/BH-12)
+function renderLifecycleSidebarChart(_state) {
+  // MC-5 — no-op when sidebar is closed. Caption stays whatever it last was.
+  if (typeof sidebarMode !== 'undefined' && sidebarMode === 'hidden') return;
+  const canvas = document.getElementById('lifecycleSidebarCanvas');
+  if (!canvas) return;
+  const ds = _lastLifecycleDataset;
+  if (!ds || !Array.isArray(ds.lifecycle) || ds.lifecycle.length === 0) return;
+
+  const lifecycle = ds.lifecycle;
+  const ages = lifecycle.map(function (r) { return r.age; });
+  const fireAge = ds.fireAge;
+  const ssClaimAge = ds.ssClaimAge;
+  const fireIdx = lifecycle.findIndex(function (d) { return d.age === fireAge; });
+  const ssIdx = lifecycle.findIndex(function (d) { return d.age === ssClaimAge; });
+  const hasOverride = ds.fireAgeOverride != null && ds.calculatedFireAge !== ds.fireAgeOverride;
+  const originalFireIdx = hasOverride
+    ? lifecycle.findIndex(function (d) { return d.age === ds.calculatedFireAge; })
+    : -1;
+
+  const totals = lifecycle.map(function (r) { return (typeof r.total === 'number') ? Math.round(r.total) : 0; });
+  const p401k  = lifecycle.map(function (r) { return (typeof r.p401k === 'number') ? Math.round(r.p401k) : 0; });
+  const pStocks = lifecycle.map(function (r) { return (typeof r.pStocks === 'number') ? Math.round(r.pStocks) : 0; });
+  const fireMarker = lifecycle.map(function (_d, i) { return i === fireIdx ? totals[i] : null; });
+  const unlockMarker = lifecycle.map(function (d, i) { return d.age === 60 ? totals[i] : null; });
+  const ssMarker = lifecycle.map(function (_d, i) { return i === ssIdx ? totals[i] : null; });
+  const ghostMarker = originalFireIdx >= 0
+    ? lifecycle.map(function (_d, i) { return i === originalFireIdx ? totals[i] : null; })
+    : null;
+
+  // Mirror the primary growth chart's phase coloring — accumulation → phase1 →
+  // phase2 (401K unlocked) → phase3 (SS active). Segment colors match.
+  const datasets = [
+    {
+      label: 'Total Portfolio',
+      data: totals,
+      borderColor: '#6c63ff',
+      backgroundColor: 'rgba(108,99,255,0.08)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 2,
+      segment: {
+        borderColor: function (ctx) {
+          const d = lifecycle[ctx.p0DataIndex];
+          if (!d) return '#6c63ff';
+          if (d.phase === 'accumulation') return '#6c63ff';
+          if (d.phase === 'phase1-taxable-only') return '#ff6b6b';
+          if (d.phase === 'phase2-401k-unlocked') return '#ffd93d';
+          return '#00d4aa';
+        },
+        backgroundColor: function (ctx) {
+          const d = lifecycle[ctx.p0DataIndex];
+          if (!d) return 'rgba(108,99,255,0.08)';
+          if (d.phase === 'accumulation') return 'rgba(108,99,255,0.08)';
+          if (d.phase === 'phase1-taxable-only') return 'rgba(255,107,107,0.08)';
+          if (d.phase === 'phase2-401k-unlocked') return 'rgba(255,217,61,0.08)';
+          return 'rgba(0,212,170,0.08)';
+        },
+      },
+    },
+    {
+      label: '401K',
+      data: p401k,
+      borderColor: 'rgba(0,212,170,0.5)',
+      borderDash: [4, 4],
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.2,
+      fill: false,
+    },
+    {
+      label: 'Stocks',
+      data: pStocks,
+      borderColor: 'rgba(255,217,61,0.5)',
+      borderDash: [4, 4],
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.2,
+      fill: false,
+    },
+    {
+      label: 'FIRE',
+      data: fireMarker,
+      borderColor: '#ff6b6b',
+      backgroundColor: '#ff6b6b',
+      pointRadius: 7,
+      pointStyle: 'triangle',
+      showLine: false,
+      pointBorderWidth: 1.5,
+    },
+    {
+      label: '401K Unlocks',
+      data: unlockMarker,
+      borderColor: '#ffd93d',
+      backgroundColor: '#ffd93d',
+      pointRadius: 5,
+      pointStyle: 'rect',
+      showLine: false,
+      pointBorderWidth: 1.5,
+    },
+    {
+      label: 'SS',
+      data: ssMarker,
+      borderColor: '#00d4aa',
+      backgroundColor: '#00d4aa',
+      pointRadius: 6,
+      pointStyle: 'star',
+      showLine: false,
+      pointBorderWidth: 1.5,
+    },
+  ];
+  if (ghostMarker) {
+    datasets.push({
+      label: 'Original FIRE',
+      data: ghostMarker,
+      borderColor: 'rgba(255,107,107,0.35)',
+      backgroundColor: 'rgba(255,107,107,0.35)',
+      pointRadius: 5,
+      pointStyle: 'triangle',
+      showLine: false,
+      pointBorderWidth: 1,
+    });
+  }
+
+  const chartData = { labels: ages, datasets: datasets };
+
+  if (!_sidebarLifecycleChart) {
+    _sidebarLifecycleChart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: chartData,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 }, // drag-preview friendly
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true, mode: 'index', intersect: false },
+        },
+        scales: {
+          x: {
+            display: true,
+            ticks: { color: '#8b8fa3', font: { size: 10 }, maxTicksLimit: 7 },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+          },
+          y: {
+            display: true,
+            ticks: {
+              color: '#8b8fa3',
+              font: { size: 10 },
+              callback: function (v) {
+                if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+                return '$' + (v / 1000).toFixed(0) + 'K';
+              },
+            },
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  } else {
+    _sidebarLifecycleChart.data = chartData;
+    _sidebarLifecycleChart.update('none');
+  }
+
+  // MC-6 — caption mirrors FIRE age + end-of-life portfolio.
+  const fireAgeEl = document.getElementById('sidebarFireAge');
+  const endPortfolioEl = document.getElementById('sidebarEndPortfolio');
+  if (fireAgeEl) {
+    fireAgeEl.textContent = (fireAge != null && Number.isFinite(fireAge))
+      ? String(Math.round(fireAge))
+      : '—';
+  }
+  const endTotal = totals.length ? totals[totals.length - 1] : null;
+  if (endPortfolioEl) {
+    endPortfolioEl.textContent = (endTotal != null && Number.isFinite(endTotal))
+      ? '$' + Math.round(endTotal).toLocaleString()
+      : '—';
   }
 }
 
@@ -4916,47 +5508,43 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
       pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
       pCash *= 1.005;
     } else {
-      // Retirement — withdraw target spend. Allow pools to go NEGATIVE.
-      // Target is NET spend; gross up Trad by taxTrad.
-      // Apply age-exact per-country healthcare delta (pre-65 vs post-65).
+      // Retirement — use the SAME tax-optimized withdrawal algorithm as
+      // `projectFullLifecycle` (the chart renderer). Feature-006 fix: the
+      // previous implementation used `taxAwareWithdraw` (simple proportional,
+      // flat Trad rate) while the chart used `taxOptimizedWithdrawal`
+      // (progressive brackets + LTCG). That divergence let Safe/Exact
+      // solvers OK a FIRE age where the chart's own math depleted pools
+      // before plan age, producing the visible flat-at-$0 tail before death.
+      // `taxOptimizedWithdrawal` handles the 59.5 lock + 73+ RMD internally,
+      // so Phase 1 / Phase 2 / Phase 3 collapse to one call — same as chart.
       const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
-      const netSpend = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry - ssThisYear);
-      if (!is401kUnlocked) {
-        // Phase 1: only taxable can fund (pStocks + pCash). 401K locked.
-        const posTax = Math.max(0, pStocks) + Math.max(0, pCash);
-        if (posTax > 0) {
-          const sR = Math.max(0, pStocks) / Math.max(1e-9, posTax);
-          pStocks -= netSpend * sR;
-          pCash -= netSpend * (1 - sR);
-        } else {
-          pStocks -= netSpend; // accumulate shortfall here
-        }
-        pTrad *= (1 + realReturn401k); // locked, grows untouched
-        pRoth *= (1 + realReturn401k);
-      } else {
-        // Phase 2/3: all 4 pools available. Tax gross-up on Trad share.
-        const pos = Math.max(0, pTrad) + Math.max(0, pRoth) + Math.max(0, pStocks) + Math.max(0, pCash);
-        if (pos > 0) {
-          const w = taxAwareWithdraw(netSpend, pTrad, pRoth, pStocks, pCash, taxTrad);
-          pTrad -= w.gTrad;
-          pRoth -= w.gRoth;
-          pStocks -= w.gStocks;
-          pCash -= w.gCash;
-        } else {
-          // All pools depleted — shortfall goes to stocks (as signed debt).
-          // Use gross shortfall assuming pure-Trad (conservative: largest gap).
-          pStocks -= netSpend / Math.max(1e-9, 1 - taxTrad);
-        }
-        pTrad *= (1 + realReturn401k);
-        pRoth *= (1 + realReturn401k);
-      }
+      const grossSpend = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry);
+      const brackets = getTaxBrackets(true); // MFJ — same as chart
+      const mix = taxOptimizedWithdrawal(
+        grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
+        age, brackets, inp.stockGainPct
+      );
+      pTrad -= mix.wTrad;
+      pRoth -= mix.wRoth;
+      pStocks -= mix.wStocks;
+      pCash -= mix.wCash;
+      // Any unmet spending becomes signed debt on stocks (matches chart logic).
+      if (mix.shortfall > 0) pStocks -= mix.shortfall;
+      // Signed sim does NOT clamp before compounding — preserves shortfall
+      // so `endBalance` goes truly negative when the plan fails. The chart
+      // clamps pools to ≥0 before compounding (for display), which would
+      // hide accumulated debt; the signed sim's purpose is to detect it.
+      pTrad *= (1 + realReturn401k);
+      pRoth *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
     }
   }
-  // Signed total: effective after-tax value of Trad is counted
-  // (matches the "spending-equivalent" framing of DWZ).
-  const endBalance = pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
+  // Signed total: RAW pre-tax sum (matches chart's `total` field). Each
+  // retirement year's tax is already paid through `taxOptimizedWithdrawal`,
+  // so leftover Trad is worth its face value. If any pool accumulated signed
+  // shortfall debt, this sum will be negative → infeasible.
+  const endBalance = pTrad + pRoth + pStocks + pCash;
   // Fallback: if FIRE age is already past a transition, snapshot = endBalance
   // (won't bind the Safe-mode constraint because there's no "extra" cushion to demand).
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
@@ -6149,6 +6737,14 @@ function recalcAll() {
   document.getElementById('progressTarget').textContent = t('dyn.progressNeeded', Math.round(accessibleFireNum).toLocaleString());
   document.getElementById('progressCurrent').textContent = t('dyn.progressCurrent', Math.round(accessible).toLocaleString());
   document.getElementById('progressPct').textContent = t('dyn.progressComplete', progress.toFixed(1));
+  // Feature 006 fix — midpoint tick scales to target so the rail is honest at any scale.
+  const midTickEl = document.getElementById('progressMidTick');
+  if (midTickEl) {
+    const mid = accessibleFireNum / 2;
+    midTickEl.textContent = (mid >= 1000000)
+      ? '$' + (mid / 1000000).toFixed(mid >= 10000000 ? 0 : 1) + 'M'
+      : '$' + Math.round(mid / 1000) + 'K';
+  }
 
   // Fire status — Phase 4: routed through t() so toggle re-renders in zh-TW
   const statusEl = document.getElementById('fireStatus');
@@ -6902,7 +7498,8 @@ function renderScenarios(inp) {
   scenarios.forEach(s => {
     const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
     const card = document.createElement('div');
-    card.className = 'scenario-card' + (s.id === selectedScenario ? ' selected' : '');
+    // V1 — `is-interactive` opts this card into the .card.is-interactive:hover accent rule.
+    card.className = 'scenario-card is-interactive' + (s.id === selectedScenario ? ' selected' : '');
     card.onclick = () => { selectedScenario = s.id; recalcAll(); };
 
     // Language badges
@@ -7020,9 +7617,9 @@ function updateVisaCost(scenarioId, value) {
 let currentFilter = 'all';
 function filterScenarios(filter, btn) {
   currentFilter = filter;
-  // Update active tab
-  document.querySelectorAll('.tab-row .tab-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  // V7 — toggle .filter-pill--active (pills) instead of the old .active (tabs).
+  document.querySelectorAll('.filter-row .filter-pill').forEach(b => b.classList.remove('filter-pill--active'));
+  if (btn) btn.classList.add('filter-pill--active');
   applyScenarioFilter();
 }
 
@@ -7356,6 +7953,12 @@ function _applyInitialDragHintState() {
 }
 
 // ==================== LIFECYCLE CHART ====================
+// Feature 006 — Consumers of the lifecycle dataset (Constitution Principle VI):
+//   Primary: renderGrowthChart         — in-page chart on #growthChart
+//   Mirror : renderLifecycleSidebarChart — pinnable sidebar chart on
+//            #lifecycleSidebarCanvas (reads _lastLifecycleDataset populated below).
+// Any new consumer MUST read _lastLifecycleDataset — never re-run
+// projectFullLifecycle (Principle III, single source of truth).
 function renderGrowthChart(inp) {
   const ctx = document.getElementById('growthChart').getContext('2d');
   const scenario = scenarios.find(s => s.id === selectedScenario);
@@ -7371,6 +7974,18 @@ function renderGrowthChart(inp) {
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.ageRoger;
+  // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
+  // The mirror renders the same multi-series view, so it needs the phase-colored total
+  // line, the 401K + Stocks dashed lines, and the FIRE / 401K-unlock / SS markers.
+  _lastLifecycleDataset = {
+    lifecycle,
+    fireAge,
+    scenarioSpend,
+    currentAge: inp.ageRoger,
+    ssClaimAge: inp.ssClaimAge,
+    calculatedFireAge,
+    fireAgeOverride,
+  };
 
   // Cache original lifecycle for comparison metrics
   if (!cachedOriginalLifecycle && calculatedFireAge) {
@@ -7635,6 +8250,12 @@ function renderGrowthChart(inp) {
   if (hasOverride) {
     updateOverrideBanner(inp, scenarioSpend);
   }
+
+  // Feature 006 fix — mirror sidebar immediately so drag-preview renders stay in
+  // sync. chartState.onChange only fires on committed state transitions, not on
+  // preview renders triggered by _previewFireAge, so the sidebar would otherwise
+  // lag one commit behind.
+  try { renderLifecycleSidebarChart(null); } catch (_e) { /* swallow */ }
 }
 
 // Update the comparison banner when FIRE age is overridden
@@ -8781,6 +9402,8 @@ function renderSnapshotHistory() {
     const dSpend = prev ? deltaHTML(snap.monthlySpend, prev.monthlySpend, true) : '';
 
     const tr = document.createElement('tr');
+    // V1 — snapshot rows carry `is-interactive` for the hover accent (primary tier).
+    tr.className = 'is-interactive';
     tr.innerHTML = `
       <td style="font-weight:600">${dateStr}</td>
       <td>${fmtMoney(snap.netWorth)}${dNW}</td>
@@ -8822,6 +9445,301 @@ if (typeof updateInheritanceNote === 'function') updateInheritanceNote();
 const savedLang = localStorage.getItem('fire_lang');
 if (savedLang && savedLang !== 'en') switchLanguage(savedLang);
 
+// Feature 006 (US2 — T028) — Sticky compact header state toggle.
+// IntersectionObserver on a 1px sentinel before the header is cheaper + more
+// accurate than a scroll event listener. When the sentinel leaves the viewport,
+// the header collapses to compact; when it re-enters, the header expands.
+(function _wireStickyHeader() {
+  const sentinel = document.getElementById('headerSentinel');
+  const header = document.getElementById('siteHeader');
+  if (!sentinel || !header || typeof IntersectionObserver !== 'function') return;
+  const observer = new IntersectionObserver(function onSentinel(entries) {
+    const entry = entries[0];
+    header.classList.toggle('header--compact', !entry.isIntersecting);
+  }, { threshold: 0 });
+  observer.observe(sentinel);
+})();
+
+// Feature 006 (US2) — initial placeholder render so the chips show '—' at
+// cold-load, before the first recalc populates _lastKpiSnapshot.
+renderCompactHeaderStats(null);
+
+// =============================================================================
+// Feature 006 (US1 — T018/T020/T023 + T032) — Lifecycle sidebar state machine.
+// -----------------------------------------------------------------------------
+// Modes: 'hidden' | 'docked' | 'overlay'. Pin preference persists (BH-1/BH-2).
+// State transitions implement BH-1..BH-12 from the lifecycle-sidebar contract.
+// Focus management per A11y-5: opening moves focus to pin button; closing
+// restores focus to the element that triggered the open.
+// =============================================================================
+let sidebarMode = 'hidden';
+const SIDEBAR_KEY = 'fire_dashboard_sidebar_pinned';
+let _lastSidebarTrigger = null; // element focus is restored to on close (A11y-5)
+
+function _sidebarIsDesktop() { return window.innerWidth >= 780; }
+
+function _persistSidebarPin(v) {
+  // BH-11 — swallow storage errors (private mode, quota full, etc.).
+  try { localStorage.setItem(SIDEBAR_KEY, v); } catch (_e) {}
+}
+
+function _setSidebarMode(nextMode) {
+  const sidebar = document.getElementById('lifecycleSidebar');
+  const scrim = document.getElementById('sidebarScrim');
+  const toggle = document.getElementById('sidebarToggle');
+  const pinBtn = document.querySelector('#lifecycleSidebar .sidebar__pin');
+  const closeBtn = document.querySelector('#lifecycleSidebar .sidebar__close');
+  if (!sidebar || !scrim) return;
+  const prevMode = sidebarMode;
+  sidebarMode = nextMode;
+
+  if (nextMode === 'hidden') {
+    sidebar.classList.remove('sidebar--open');
+    scrim.classList.remove('sidebar-scrim--visible');
+    document.body.classList.remove('sidebar-docked');
+    sidebar.setAttribute('aria-hidden', 'true');
+    scrim.setAttribute('aria-hidden', 'true');
+    if (toggle) toggle.setAttribute('aria-pressed', 'false');
+    if (pinBtn) pinBtn.setAttribute('aria-pressed', 'false');
+    // A11y-5 — restore focus to the element that opened the sidebar.
+    if (prevMode !== 'hidden' && _lastSidebarTrigger && typeof _lastSidebarTrigger.focus === 'function') {
+      try { _lastSidebarTrigger.focus(); } catch (_e) {}
+    }
+  } else if (nextMode === 'docked') {
+    sidebar.classList.add('sidebar--open');
+    scrim.classList.remove('sidebar-scrim--visible');
+    document.body.classList.add('sidebar-docked');
+    sidebar.setAttribute('aria-hidden', 'false');
+    scrim.setAttribute('aria-hidden', 'true');
+    if (toggle) toggle.setAttribute('aria-pressed', 'true');
+    if (pinBtn) pinBtn.setAttribute('aria-pressed', 'true');
+    // A11y-5 — focus the pin (first focusable child).
+    if (pinBtn && prevMode === 'hidden') {
+      try { pinBtn.focus(); } catch (_e) {}
+    }
+  } else if (nextMode === 'overlay') {
+    sidebar.classList.add('sidebar--open');
+    scrim.classList.add('sidebar-scrim--visible');
+    document.body.classList.remove('sidebar-docked');
+    sidebar.setAttribute('aria-hidden', 'false');
+    scrim.setAttribute('aria-hidden', 'false');
+    if (toggle) toggle.setAttribute('aria-pressed', 'true');
+    if (pinBtn) pinBtn.setAttribute('aria-pressed', 'false');
+    // A11y-5 — focus the close button in overlay mode (primary dismissal).
+    if (closeBtn && prevMode === 'hidden') {
+      try { closeBtn.focus(); } catch (_e) {}
+    }
+  }
+
+  // Render mirror chart on first open (lazy mount — BH-12).
+  if (nextMode !== 'hidden') {
+    try { renderLifecycleSidebarChart(null); } catch (_e) {}
+  }
+}
+
+function openSidebarDocked() {
+  _setSidebarMode('docked');
+  _persistSidebarPin('1');
+  _resizeAllChartsAfterTransition();
+}
+function openSidebarOverlay() {
+  // BH-3 — overlay is transient; do NOT persist preference.
+  _setSidebarMode('overlay');
+}
+function closeSidebar() {
+  const wasDocked = sidebarMode === 'docked';
+  _setSidebarMode('hidden');
+  // BH-4 — closing from docked (desktop) also clears pin preference.
+  if (wasDocked) {
+    _persistSidebarPin('0');
+    _resizeAllChartsAfterTransition();
+  }
+}
+function toggleSidebarPin() {
+  if (sidebarMode === 'hidden') openSidebarDocked();
+  else closeSidebar();
+}
+
+// BH-10 — after the dashboard's margin-right transition completes, re-measure
+// every Chart.js instance so they fit the new width. Includes a 350ms fallback
+// timeout for browsers that skip transitionend when motion is reduced.
+function _resizeAllChartsAfterTransition() {
+  const dash = document.querySelector('.dashboard');
+  let fired = false;
+  const fire = function () {
+    if (fired) return;
+    fired = true;
+    try {
+      if (typeof charts === 'object' && charts) {
+        Object.keys(charts).forEach(function (k) {
+          const ch = charts[k];
+          try { if (ch && typeof ch.resize === 'function') ch.resize(); } catch (_e) {}
+        });
+      }
+    } catch (_e) {}
+    if (_sidebarLifecycleChart) {
+      try { _sidebarLifecycleChart.resize(); } catch (_e) {}
+    }
+  };
+  if (dash) {
+    const handler = function (ev) {
+      // Only fire on the margin-right transition; ignore other properties.
+      if (ev && ev.propertyName && ev.propertyName.indexOf('margin') !== 0) return;
+      dash.removeEventListener('transitionend', handler);
+      fire();
+    };
+    dash.addEventListener('transitionend', handler);
+  }
+  setTimeout(fire, 350);
+}
+
+// Feature 006 fix — defer DOM-dependent sidebar init until the sidebar markup
+// below this <script> tag has been parsed. At script-eval time the <aside> is
+// not yet in the DOM, so any querySelector against it returns null and every
+// listener attachment silently no-ops. DOMContentLoaded fires once the rest of
+// the body (including the sidebar) is parsed.
+function _whenSidebarDomReady(fn) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fn, { once: true });
+  } else {
+    fn();
+  }
+}
+
+// Wire sidebar controls (pin, close, scrim click, Escape key).
+_whenSidebarDomReady(function _wireSidebarControls() {
+  const pinBtn = document.querySelector('#lifecycleSidebar .sidebar__pin');
+  const closeBtn = document.querySelector('#lifecycleSidebar .sidebar__close');
+  const scrim = document.getElementById('sidebarScrim');
+  if (pinBtn) pinBtn.addEventListener('click', function () {
+    _lastSidebarTrigger = pinBtn;
+    toggleSidebarPin();
+  });
+  if (closeBtn) closeBtn.addEventListener('click', function () {
+    closeSidebar();
+  });
+  // BH-7 — scrim click closes overlay.
+  if (scrim) scrim.addEventListener('click', function () {
+    if (sidebarMode === 'overlay') closeSidebar();
+  });
+  // BH-8 — Escape closes overlay (docked intentionally not closed by Esc).
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sidebarMode === 'overlay') closeSidebar();
+  });
+});
+
+// BH-9 — viewport resize crossing 780px re-evaluates the mode.
+window.addEventListener('resize', function _onSidebarResize() {
+  if (sidebarMode === 'docked' && !_sidebarIsDesktop()) {
+    // Pinned on desktop → user shrunk to mobile. Convert to overlay (stay open).
+    _setSidebarMode('overlay');
+  } else if (sidebarMode === 'overlay' && _sidebarIsDesktop()) {
+    // Overlay on mobile → user widened to desktop. If pinned, dock; else hide.
+    let pinned = '0';
+    try { pinned = localStorage.getItem(SIDEBAR_KEY) || '0'; } catch (_e) {}
+    if (pinned === '1') _setSidebarMode('docked');
+    else _setSidebarMode('hidden');
+  }
+});
+
+// BH-1 — initial mount: read pin preference; open docked on desktop if pinned.
+// Deferred to DOMContentLoaded so `_setSidebarMode` can find the sidebar aside.
+_whenSidebarDomReady(function _initSidebar() {
+  let pinned = '0';
+  try { pinned = localStorage.getItem(SIDEBAR_KEY) || '0'; } catch (_e) {}
+  if (pinned === '1' && _sidebarIsDesktop()) {
+    _setSidebarMode('docked');
+    // Resize existing charts once the reflow settles.
+    _resizeAllChartsAfterTransition();
+  }
+  // Else leave sidebarMode='hidden' (default).
+});
+
+// Feature 006 fix — resizable sidebar with persisted width.
+// Default: ~1/3 of viewport, clamped to [320px, 80vw]. Dragged via the left-edge
+// handle. Width persists per-file in localStorage.
+const SIDEBAR_WIDTH_KEY = 'fire_dashboard_sidebar_width';
+function _sidebarClampWidth(px) {
+  const minPx = 320;
+  const maxPx = Math.round(window.innerWidth * 0.8);
+  return Math.max(minPx, Math.min(maxPx, Math.round(px)));
+}
+function _applySidebarWidth(px) {
+  const clamped = _sidebarClampWidth(px);
+  document.documentElement.style.setProperty('--sidebar-width', clamped + 'px');
+  return clamped;
+}
+(function _initSidebarWidth() {
+  let saved = null;
+  try { saved = localStorage.getItem(SIDEBAR_WIDTH_KEY); } catch (_e) {}
+  const parsed = saved != null ? parseInt(saved, 10) : NaN;
+  const defaultPx = Math.round(window.innerWidth / 3);
+  _applySidebarWidth(Number.isFinite(parsed) && parsed > 0 ? parsed : defaultPx);
+})();
+// Deferred to DOMContentLoaded — the resize handle sits inside the sidebar
+// aside, which is parsed AFTER this <script> tag.
+_whenSidebarDomReady(function _wireSidebarResize() {
+  const handle = document.querySelector('#lifecycleSidebar .sidebar__resize-handle');
+  if (!handle) return;
+  let dragging = false;
+  function onMove(ev) {
+    if (!dragging) return;
+    const clientX = (ev.touches && ev.touches[0]) ? ev.touches[0].clientX : ev.clientX;
+    if (typeof clientX !== 'number') return;
+    // Sidebar is anchored to the right: width = viewport - clientX.
+    _applySidebarWidth(window.innerWidth - clientX);
+  }
+  function onUp() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove('sidebar-resizing');
+    handle.classList.remove('is-resizing');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+    // Persist final width.
+    const cur = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width').trim();
+    const px = parseInt(cur, 10);
+    if (Number.isFinite(px) && px > 0) {
+      try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(px)); } catch (_e) {}
+    }
+    // Re-measure all Chart.js instances now that the layout is settled.
+    if (typeof _resizeAllChartsAfterTransition === 'function') _resizeAllChartsAfterTransition();
+  }
+  function onDown(ev) {
+    // Only desktop — mobile hides the handle via CSS.
+    if (window.innerWidth < 780) return;
+    dragging = true;
+    document.body.classList.add('sidebar-resizing');
+    handle.classList.add('is-resizing');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onUp);
+    ev.preventDefault();
+  }
+  handle.addEventListener('mousedown', onDown);
+  handle.addEventListener('touchstart', onDown, { passive: false });
+});
+
+// Feature 006 (T020 + T032) — wire the header #sidebarToggle button.
+// Desktop → pin/unpin (persists); mobile → open/close overlay (transient).
+// Runs AFTER the state machine above is defined.
+(function _wireHeaderSidebarToggle() {
+  const btn = document.getElementById('sidebarToggle');
+  if (!btn) return;
+  btn.addEventListener('click', function onHeaderSidebarToggle() {
+    _lastSidebarTrigger = btn;
+    if (_sidebarIsDesktop()) {
+      toggleSidebarPin();
+    } else {
+      if (sidebarMode === 'hidden') openSidebarOverlay();
+      else closeSidebar();
+    }
+  });
+})();
+
 // ==================== CHARTSTATE LISTENER REGISTRATION (T021) ====================
 // Every chart/KPI dependent is registered as a chartState.onChange listener
 // so a mutation (setCalculated / setOverride / clearOverride /
@@ -8845,6 +9763,12 @@ function _registerChartStateListeners() {
   // Per-renderer listeners — each re-reads fresh inputs from the DOM.
   cs.onChange(function onFireChange_growthChart(_state) {
     try { renderGrowthChart(getInputs()); } catch (_e) { /* swallow — logged via chart lib */ }
+  });
+  // Feature 006 (US1 — T016) — Mirror sidebar chart. MUST fire AFTER
+  // onFireChange_growthChart because it reads _lastLifecycleDataset that the
+  // growth-chart listener just populated (per MC-1).
+  cs.onChange(function onFireChange_lifecycleSidebar(_state) {
+    try { renderLifecycleSidebarChart(_state); } catch (_e) {}
   });
   cs.onChange(function onFireChange_rothLadder(_state) {
     try { renderRothLadder(getInputs()); } catch (_e) {}
@@ -8927,6 +9851,12 @@ function _registerChartStateListeners() {
   cs.onChange(function onFireChange_kpiCards(state) {
     renderKpiCards(state);
   });
+  // Feature 006 (US2 — T030): compact-header chips share the KPI pipeline.
+  // Reads the same `_lastKpiSnapshot` so both stay in sync by construction
+  // (Constitution Principle III — single source of truth).
+  cs.onChange(function onFireChange_compactHeader(state) {
+    try { renderCompactHeaderStats(state); } catch (_e) {}
+  });
   // T028: re-position the drag-hint after every render cycle so it tracks
   // the FIRE marker's current pixel location.
   cs.onChange(function onFireChange_dragHintPosition(_state) {
@@ -8984,10 +9914,36 @@ if (window.__calcBootstrapReady) {
         ⚠️ For research and educational purposes only — not financial advice.
       </p>
       <p class="footer-panel__body" data-i18n="disclaimer.body">
-        Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.
+        Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. All data you enter stays on your device — this site never saves, uploads, or transmits any of your information. Source code: MIT-licensed, open-source.
       </p>
     </section>
   </div>
 </footer>
+
+<!-- Feature 006 (US1 — T010) — Pinnable lifecycle sidebar.
+     Sits at end of <body> so position:fixed is relative to the viewport. The
+     scrim is rendered below the sidebar (lower z-index); click-dismiss on
+     mobile overlay mode. See contracts/lifecycle-sidebar.contract.md. -->
+<aside id="lifecycleSidebar" class="sidebar" aria-hidden="true" aria-labelledby="sidebarTitle">
+  <div class="sidebar__resize-handle" aria-hidden="true" title="Drag to resize"></div>
+  <div class="sidebar__header">
+    <h2 id="sidebarTitle" class="sidebar__title" data-i18n="sidebar.title">Lifecycle</h2>
+    <div class="sidebar__controls">
+      <button class="sidebar__pin" data-i18n-aria="sidebar.pinAria" aria-pressed="false" aria-label="Pin lifecycle sidebar">📌</button>
+      <button class="sidebar__close" data-i18n-aria="sidebar.closeAria" aria-label="Close lifecycle sidebar">✕</button>
+    </div>
+  </div>
+  <div class="sidebar__chart">
+    <canvas id="lifecycleSidebarCanvas"></canvas>
+  </div>
+  <div class="sidebar__caption">
+    <span data-i18n="sidebar.fireAgeLabel">FIRE age</span>
+    <strong id="sidebarFireAge">—</strong>
+    <span class="sep">·</span>
+    <span data-i18n="sidebar.endPortfolioLabel">End-of-life portfolio</span>
+    <strong id="sidebarEndPortfolio">—</strong>
+  </div>
+</aside>
+<div id="sidebarScrim" class="sidebar-scrim" aria-hidden="true"></div>
 </body>
 </html>
