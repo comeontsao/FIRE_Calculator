@@ -34,6 +34,10 @@ import { resolveSecondHome } from '../../calc/secondHome.js';
 import { computeStudentLoan } from '../../calc/studentLoan.js';
 import { solveFireAge } from '../../calc/fireCalculator.js';
 
+// Production adapter — feature 005 replaces the inline prototype that lived
+// here for feature 003. See specs/005-canonical-public-launch/contracts/adapter.contract.md.
+import { getCanonicalInputs } from '../../calc/getCanonicalInputs.js';
+
 // Parity fixture — canonical couple used by the parity smoke (degenerate
 // today; activates real divergence when feature 004 lands personal-rr.js).
 import parityFixture from '../fixtures/rr-generic-parity.js';
@@ -66,222 +70,6 @@ function buildHelpers(inputs) {
   });
 }
 
-/**
- * Standard 2025 MFJ US tax brackets — used as a default TaxConfig for the
- * prototype adapter. The cold-load dashboards don't expose bracket edits;
- * this table mirrors the canonical fixtures in tests/fixtures/*.js.
- */
-const DEFAULT_TAX_CONFIG = Object.freeze({
-  ordinaryBrackets: Object.freeze([
-    Object.freeze({ threshold: 0, rate: 0.10 }),
-    Object.freeze({ threshold: 23_200, rate: 0.12 }),
-    Object.freeze({ threshold: 94_300, rate: 0.22 }),
-    Object.freeze({ threshold: 201_050, rate: 0.24 }),
-  ]),
-  ltcgBrackets: Object.freeze([
-    Object.freeze({ threshold: 0, rate: 0.00 }),
-    Object.freeze({ threshold: 94_050, rate: 0.15 }),
-    Object.freeze({ threshold: 583_750, rate: 0.20 }),
-  ]),
-  rmdAgeStart: 73,
-});
-
-/**
- * Per-scenario cold-load annual-spend lookup — mirrors the inline engine's
- * SCENARIOS_BY_ID table (FIRE-Dashboard.html L2383+, Generic L2443+). Only
- * the scenarios both dashboards agree on are listed; unknown keys fall back
- * to a conservative US baseline so the smoke NEVER produces spend <= 0
- * (which would throw canonical validation).
- */
-const SCENARIO_ANNUAL_SPEND = Object.freeze({
-  us: 120_000,
-  taiwan: 60_000,
-  japan: 72_000,
-  thailand: 45_600,
-  malaysia: 42_000,
-  singapore: 102_000,
-  vietnam: 36_000,
-  philippines: 38_400,
-  mexico: 48_000,
-  costarica: 54_000,
-  portugal: 62_400,
-});
-
-/*
- * TEMPORARY — feature 003 (browser smoke harness) prototype.
- * Feature 004 will replace calls to this with a production
- * getCanonicalInputs() inside each HTML file's module bootstrap.
- * Track: specs/003-browser-smoke-harness/ and BACKLOG.md F2.
- */
-function _prototypeGetCanonicalInputs(inp) {
-  if (!inp || typeof inp !== 'object') {
-    throw new TypeError(
-      `_prototypeGetCanonicalInputs: expected object, got ${typeof inp}`,
-    );
-  }
-
-  // Accept either RR-shape (`ageRoger`, `rogerStocks`) or Generic-shape
-  // (`agePerson1`, `person1Stocks`). Integer-age per data-model §1.
-  const agePrimaryRaw = inp.ageRoger ?? inp.agePerson1;
-  const ageSecondaryRaw = inp.ageRebecca ?? inp.agePerson2;
-  if (typeof agePrimaryRaw !== 'number') {
-    throw new Error(
-      `_prototypeGetCanonicalInputs: primary age missing — expected inp.ageRoger OR inp.agePerson1, got ${agePrimaryRaw}`,
-    );
-  }
-  const currentAgePrimary = Math.floor(agePrimaryRaw);
-  const currentAgeSecondary = typeof ageSecondaryRaw === 'number'
-    ? Math.floor(ageSecondaryRaw)
-    : undefined;
-
-  // Portfolio — merge Roth 401(k) + Roth IRA into rothIraReal per data-model
-  // §1 Portfolio note. 401(k) Roth lives in `roger401kRoth` / `person1_401kRoth`.
-  const trad401k = inp.roger401kTrad ?? inp.person1_401kTrad ?? 0;
-  const roth401k = inp.roger401kRoth ?? inp.person1_401kRoth ?? 0;
-  const taxablePrimary = inp.rogerStocks ?? inp.person1Stocks ?? 0;
-  const cashPrimary = (inp.cashSavings ?? 0) + (inp.otherAssets ?? 0);
-  const monthlySavings = inp.monthlySavings ?? 0;
-  const contrib401kTrad = inp.contrib401kTrad ?? 0;
-  const contrib401kRoth = inp.contrib401kRoth ?? 0;
-  const empMatch = inp.empMatch ?? 0;
-  // Total primary annual contribution: monthly-savings × 12 + 401k tra + 401k roth + employer match.
-  const annualContribPrimary =
-    monthlySavings * 12 + contrib401kTrad + contrib401kRoth + empMatch;
-
-  const portfolioPrimary = Object.freeze({
-    trad401kReal: trad401k,
-    rothIraReal: roth401k,
-    taxableStocksReal: taxablePrimary,
-    cashReal: cashPrimary,
-    annualContributionReal: annualContribPrimary,
-  });
-
-  // Secondary person: present only if the dashboard reports a secondary age.
-  // Secondary's taxable pool is in `rebeccaStocks` / `person2Stocks`. All
-  // other pools are household-level (primary only) per inline convention.
-  let portfolioSecondary;
-  if (currentAgeSecondary !== undefined) {
-    const taxableSecondary = inp.rebeccaStocks ?? inp.person2Stocks ?? 0;
-    portfolioSecondary = Object.freeze({
-      trad401kReal: 0,
-      rothIraReal: 0,
-      taxableStocksReal: taxableSecondary,
-      cashReal: 0,
-      annualContributionReal: 0,
-    });
-  }
-
-  // Real returns: dashboard sliders are nominal. data-model §1 requires
-  // returnRateReal / returnRateCashReal (decimals). Convert via
-  // realReturn = nominal − inflation.
-  const returnNominal = inp.returnRate ?? 0.07;
-  const inflationRate = inp.inflationRate ?? 0.03;
-  const returnRateReal = returnNominal - inflationRate;
-  // Inline cash pool grows at CASH_ANNUAL_GROWTH = 1.005 → 0.5% real.
-  const returnRateCashReal = 0.005;
-
-  // Spend: scenario table lookup (cold-load scenarios ship with scenario-
-  // specific annual-spend). Fall back to US baseline so spend > 0 always.
-  const scenarioKey = inp.selectedScenario ?? 'us';
-  const annualSpendReal = SCENARIO_ANNUAL_SPEND[scenarioKey]
-    ?? SCENARIO_ANNUAL_SPEND.us;
-
-  // Solver mode — both dashboards default 'safe'.
-  const solverMode = inp.fireMode ?? 'safe';
-
-  // Buffers — integer years-of-spend at unlock (60) and SS start.
-  const buffers = Object.freeze({
-    bufferUnlockMultiple: inp.bufferUnlock ?? 0,
-    bufferSSMultiple: inp.bufferSS ?? 0,
-  });
-
-  // Scenario metadata for healthcare / country contexts.
-  const scenario = Object.freeze({
-    country: scenarioKey,
-    healthcareScenario: scenarioKey,
-  });
-
-  // Colleges — RR has ageKid1/ageKid2 + collegeKid1/collegeKid2; Generic has
-  // childAges[] + childCollegePlans[]. Normalize to the canonical College[]
-  // shape. Omit kids with 'none' plan (cost-zero by construction).
-  const colleges = [];
-  if (Array.isArray(inp.childAges)) {
-    // Generic path — dynamic child list.
-    for (let i = 0; i < inp.childAges.length; i += 1) {
-      const kidAge = inp.childAges[i];
-      const plan = (inp.childCollegePlans ?? [])[i] ?? 'us-private';
-      if (plan === 'none') continue;
-      colleges.push(Object.freeze({
-        name: `child${i + 1}`,
-        currentAge: Math.floor(kidAge),
-        fourYearCostReal: 85_000 * 4, // conservative default; exact plan $s
-                                      // live in the scenario table, but the
-                                      // canonical engine needs a positive
-                                      // real-dollar cost to exercise the path.
-      }));
-    }
-  } else {
-    // RR path — fixed two-kid slots. Skip when plan === 'none'.
-    const kid1Age = inp.ageKid1;
-    const kid1Plan = inp.collegeKid1 ?? 'us-private';
-    if (typeof kid1Age === 'number' && kid1Plan !== 'none') {
-      colleges.push(Object.freeze({
-        name: 'kid1',
-        currentAge: Math.floor(kid1Age),
-        fourYearCostReal: 85_000 * 4,
-      }));
-    }
-    const kid2Age = inp.ageKid2;
-    const kid2Plan = inp.collegeKid2 ?? 'us-private';
-    if (typeof kid2Age === 'number' && kid2Plan !== 'none') {
-      colleges.push(Object.freeze({
-        name: 'kid2',
-        currentAge: Math.floor(kid2Age),
-        fourYearCostReal: 85_000 * 4,
-      }));
-    }
-  }
-
-  // SS: dashboards default ssClaimAge=67 (integer in [62,70] per validation).
-  const ssStartAgePrimary = inp.ssClaimAge ?? 67;
-  const ssStartAgeSecondary = currentAgeSecondary !== undefined
-    ? ssStartAgePrimary
-    : undefined;
-
-  const endAge = inp.endAge ?? 95;
-
-  // Build the canonical Inputs object. `Object.freeze` prevents accidental
-  // mutation downstream. Conditional fields (portfolioSecondary,
-  // ssStartAgeSecondary) are attached only when non-empty to respect the
-  // canonical engine's shape-based validation (portfolioSecondary present
-  // ⇒ currentAgeSecondary must also be present, enforced at lifecycle.js
-  // L175–177).
-  /** @type {any} */
-  const canonical = {
-    currentAgePrimary,
-    endAge,
-    portfolioPrimary,
-    annualSpendReal,
-    returnRateReal,
-    returnRateCashReal,
-    inflationRate,
-    tax: DEFAULT_TAX_CONFIG,
-    solverMode,
-    buffers,
-    scenario,
-    colleges: Object.freeze(colleges),
-    ssStartAgePrimary,
-    employerMatchReal: empMatch,
-    taxTradRate: inp.taxTrad ?? 0.15,
-  };
-  if (currentAgeSecondary !== undefined) {
-    canonical.currentAgeSecondary = currentAgeSecondary;
-    canonical.portfolioSecondary = portfolioSecondary;
-    canonical.ssStartAgeSecondary = ssStartAgeSecondary;
-  }
-  return Object.freeze(canonical);
-}
-
 // ============================================================================
 // Test 1 — RR cold-load smoke
 // ============================================================================
@@ -290,8 +78,8 @@ test('RR cold-load smoke: canonical solveFireAge returns sane shape', () => {
   // Assertion 1: adapter does not throw on RR defaults.
   let canonical;
   assert.doesNotThrow(
-    () => { canonical = _prototypeGetCanonicalInputs(RR_DEFAULTS); },
-    'RR smoke: _prototypeGetCanonicalInputs threw on RR_DEFAULTS. '
+    () => { canonical = getCanonicalInputs(RR_DEFAULTS); },
+    'RR smoke: getCanonicalInputs threw on RR_DEFAULTS. '
       + 'Fix the adapter or update tests/baseline/rr-defaults.mjs.',
   );
 
@@ -303,7 +91,7 @@ test('RR cold-load smoke: canonical solveFireAge returns sane shape', () => {
       result = solveFireAge({ inputs: canonical, helpers });
     },
     'RR smoke: solveFireAge threw on canonical RR inputs. '
-      + 'Check that _prototypeGetCanonicalInputs produces a shape that '
+      + 'Check that getCanonicalInputs produces a shape that '
       + 'passes calc/lifecycle.js validateInputs.',
   );
 
@@ -371,8 +159,8 @@ test('Generic cold-load smoke: canonical solveFireAge returns sane shape', () =>
   // Assertion 1: adapter does not throw on Generic defaults.
   let canonical;
   assert.doesNotThrow(
-    () => { canonical = _prototypeGetCanonicalInputs(GENERIC_DEFAULTS); },
-    'Generic smoke: _prototypeGetCanonicalInputs threw on GENERIC_DEFAULTS. '
+    () => { canonical = getCanonicalInputs(GENERIC_DEFAULTS); },
+    'Generic smoke: getCanonicalInputs threw on GENERIC_DEFAULTS. '
       + 'Fix the adapter or update tests/baseline/generic-defaults.mjs.',
   );
 
@@ -384,7 +172,7 @@ test('Generic cold-load smoke: canonical solveFireAge returns sane shape', () =>
       result = solveFireAge({ inputs: canonical, helpers });
     },
     'Generic smoke: solveFireAge threw on canonical Generic inputs. '
-      + 'Check that _prototypeGetCanonicalInputs produces a shape that '
+      + 'Check that getCanonicalInputs produces a shape that '
       + 'passes calc/lifecycle.js validateInputs.',
   );
 
@@ -465,12 +253,11 @@ const PARITY_FIELDS = Object.freeze([
 test('Parity smoke: RR-path and Generic-path outputs match on non-divergent fields', () => {
   // The parity fixture already holds a CANONICAL Inputs object (not the
   // legacy inp shape). Feature 004's personal-rr.js will enrich canonical
-  // inputs directly, so we pass the fixture's canonical inputs through
-  // `_prototypeGetCanonicalInputs` in legacy-shape wrappers to exercise the
-  // adapter path once feature 004 adds divergence. TODAY: we feed the
-  // canonical inputs directly to solveFireAge on both paths — the adapter
-  // is a no-op on already-canonical data, and both paths compute
-  // identically (degenerate-today semantics; research.md §R3).
+  // inputs directly, so the adapter-path exercise happens through the two
+  // cold-load smokes above (which DO drive `getCanonicalInputs` end-to-end).
+  // TODAY: we feed the canonical inputs directly to solveFireAge on both
+  // paths — the adapter is a no-op on already-canonical data, and both paths
+  // compute identically (degenerate-today semantics; research.md §R3).
 
   // rrPath — feature 004 will extend this with a personal-rr.js adapter call.
   const rrInputs = parityFixture.inputs; // canonical; RR-path is passthrough today

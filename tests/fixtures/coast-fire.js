@@ -6,9 +6,9 @@
  * even zero further contributions leave the portfolio growing indefinitely.
  * The solver must return yearsToFire = 0.
  *
- * Analytical fixture for the core solver output. Lifecycle balance checkpoints
- * live as placeholders — they depend on tax/withdrawal details not yet
- * implemented.
+ * Analytical fixture for the core solver output. The age-95 lifecycle
+ * checkpoint is locked against the canonical engine's observed output
+ * (feature 005, T058-T060).
  *
  * @typedef {import('./types.js').FixtureCase} FixtureCase
  */
@@ -69,13 +69,13 @@ const fixture = Object.freeze({
     // ~27M before withdrawals. 60k/yr spend is only 2% SWR. Coast.
     coastHeadroom: 'FV(3M, 5%, 45y) ≈ 27M >> 45y * 60k = 2.7M cumulative spend',
     lifecycleCheckpoints: Object.freeze([
-      Object.freeze({ age: 95, totalReal: 'TBD_LOCK_IN_T038', tolerance: 0.05 }),
+      Object.freeze({ age: 95, totalReal: 8_519_863.55, tolerance: 0.05 }),
     ]),
   }),
   notes:
     'Analytical fixture for solver headline (yearsToFire / fireAge / feasible). ' +
-    'Portfolio at endAge placeholder — depends on tax / withdrawal details ' +
-    'locked in T038. The defining invariant is: zero contributions + $3M + 5% ' +
+    'Portfolio at endAge locked against canonical engine output (feature 005, ' +
+    'T058-T060). The defining invariant is: zero contributions + $3M + 5% ' +
     'real return + $60k spend = solver finds FIRE immediately.',
 });
 

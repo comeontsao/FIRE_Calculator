@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **003-browser-smoke-harness** (branch `003-browser-smoke-harness`).
+Active feature: **005-canonical-public-launch** (branch `005-canonical-public-launch`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/003-browser-smoke-harness/plan.md](./specs/003-browser-smoke-harness/plan.md)
-- Spec: [specs/003-browser-smoke-harness/spec.md](./specs/003-browser-smoke-harness/spec.md)
-- Research: [specs/003-browser-smoke-harness/research.md](./specs/003-browser-smoke-harness/research.md)
-- Data model: [specs/003-browser-smoke-harness/data-model.md](./specs/003-browser-smoke-harness/data-model.md)
-- Contracts: [specs/003-browser-smoke-harness/contracts/](./specs/003-browser-smoke-harness/contracts/)
-- Quickstart: [specs/003-browser-smoke-harness/quickstart.md](./specs/003-browser-smoke-harness/quickstart.md)
+- Plan: [specs/005-canonical-public-launch/plan.md](./specs/005-canonical-public-launch/plan.md)
+- Spec: [specs/005-canonical-public-launch/spec.md](./specs/005-canonical-public-launch/spec.md)
+- Research: [specs/005-canonical-public-launch/research.md](./specs/005-canonical-public-launch/research.md)
+- Data model: [specs/005-canonical-public-launch/data-model.md](./specs/005-canonical-public-launch/data-model.md)
+- Contracts: [specs/005-canonical-public-launch/contracts/](./specs/005-canonical-public-launch/contracts/)
+- Quickstart: [specs/005-canonical-public-launch/quickstart.md](./specs/005-canonical-public-launch/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
-- Backlog: [BACKLOG.md](./BACKLOG.md) — feature 003 covers items F1 + T1 + T6
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/)
+- Backlog: [BACKLOG.md](./BACKLOG.md) — feature 005 covers F2 retry + U1/U2 + D1/D3/D6 + disclaimer + public-launch prep
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator
@@ -245,6 +245,73 @@ To prevent merge conflicts, each Engineer should work in designated areas:
 - **QA:** `tests/`, `e2e/`, `playwright.config.*`, `.github/workflows/`.
 
 Adjust these paths as the project structure evolves.
+
+## Process Lessons
+
+Codified from past features. Apply these to every future refactor that touches
+calc modules, inline helpers, or the dual-HTML bootstrap.
+
+### Caller-audit before extraction
+
+Before any refactor that deletes or extracts inline helpers, run
+`grep -n "<helper-name>" FIRE-Dashboard.html FIRE-Dashboard-Generic.html` and
+every relevant `calc/*.js` / `tests/**` file that might use them. Count call
+sites. Confirm every caller is handled by the refactor (either rewired,
+rewritten, or also scheduled for deletion in the same commit).
+
+**Why:** Feature 004 (`specs/004-html-canonical-swap/ABANDONED.md`) attempted
+to delete `isFireAgeFeasible` without first auditing that its caller
+`findMinAccessibleAtFireNumerical` was shimmed. The deletion stopped short and
+the refactor left an inconsistent state that cascaded into the browser-level
+NaN issue.
+
+**How to apply:** Before every `Edit` that deletes a function, grep the whole
+repo for the function name. Document the caller count in the commit message.
+If any caller is out-of-scope, stop and expand the spec.
+
+### Shim defense-in-depth
+
+Every shim that wraps a potentially-throwing canonical call MUST satisfy all
+four of:
+
+1. Live in a Node-importable module (`calc/shims.js`) — not as an inline
+   `<script>` definition that only runs in the browser.
+2. Use `try/catch` with a documented fallback value per
+   `specs/005-canonical-public-launch/contracts/shims.contract.md`.
+3. Log `console.error('[<shim-name>] canonical threw:', err, <context>);` on
+   every catch. The `[<shim-name>]` prefix is non-negotiable — it's what makes
+   the failure grep-findable in a 7000-line browser console.
+4. Have a Node unit test in `tests/unit/shims.test.js` that stubs the canonical
+   helper to throw and asserts the fallback return + the `[shim-name]` prefix.
+
+**Why:** Feature 004 shipped green CI (smoke harness + unit tests) but the
+browser showed a full NaN cascade. The cause was that the shim's `try/catch`
+was working — but its fallback VALUE (`NaN`) was cascading visually through
+the DOM. The smoke harness tested `adapter → canonical` but never exercised
+`shim → canonical`. Closing this gap is the central discipline of feature 005.
+
+**How to apply:** Every commit that changes shim behavior MUST also touch the
+shim unit test in the same commit. If you can't write the test, you don't
+understand the fallback contract well enough to ship the code.
+
+### Browser smoke before claiming a feature "done"
+
+CI green + runner green is necessary but insufficient. For any feature that
+touches the HTML boot path or anything `window`-exposed:
+
+1. Open both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` in a real
+   browser (either via a local `python -m http.server` or by loading the repo
+   into GitHub Pages preview).
+2. Wait 2 seconds for cold load.
+3. Confirm every KPI card shows a numeric value (NOT "Calculating…", NaN, $0,
+   `—`, or "40+").
+4. Open DevTools console. Confirm zero red errors AND zero
+   `[<shim-name>] canonical threw:` messages.
+5. Drag the FIRE marker; confirm same-frame update.
+
+Skip this and you risk feature-004-class failures where the runner is green
+but the dashboard is visibly broken. Treat this as a Manager-executed gate
+BEFORE merging.
 
 ## Spec-Driven Development
 

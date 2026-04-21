@@ -137,7 +137,7 @@
  * level liabilities (household's own student debt, professional-school
  * loan, etc.).
  *
- * @property {string} [name]                  cosmetic display ('Roger grad school')
+ * @property {string} [name]                  cosmetic display (e.g., 'grad school loan')
  * @property {number} principalReal           real dollars outstanding today
  * @property {number} annualRateReal          decimal real rate (nominal − inflation)
  * @property {number} termYears               integer remaining term

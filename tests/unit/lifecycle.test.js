@@ -5,9 +5,8 @@
  *   specs/001-modular-calc-engine/contracts/lifecycle.contract.md §Fixtures:
  *     1. accumulation-only — 30yo single, $100k portfolio, $24k spend, $20k contribs.
  *        Analytical closed-form: FV(PV, r, n) + PMT·((1+r)^n - 1)/r.
- *     2. three-phase-retirement — 45yo $1.2M, FIRE at 53. Complex fixture
- *        with TBD_LOCK_IN_T038 placeholders; tests assert structural
- *        invariants and fall back to sane-range checks until values lock.
+ *     2. three-phase-retirement — 45yo $1.2M, FIRE at 53. Complex fixture;
+ *        tests assert structural invariants + sane-range checks.
  *     3. infeasible — $500k portfolio, $80k spend, retire-now. Must flag
  *        feasible:false with deficitReal>0; no silent absorption.
  *     4. real-nominal-check — healthcare cost supplied as nominal; lifecycle

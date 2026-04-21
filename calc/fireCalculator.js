@@ -1,6 +1,12 @@
 /*
  * calc/fireCalculator.js — binary-search solver for the earliest feasible
- * FIRE age.
+ * FIRE age, plus standalone feasibility evaluator for a given FIRE age.
+ *
+ * Public exports:
+ *   - solveFireAge({inputs, helpers}) → FireSolverResult
+ *   - evaluateFeasibility({inputs, fireAge, helpers}) → boolean
+ *       Mode-aware feasibility check for a single candidate fireAge. Used by
+ *       the `_evaluateFeasibilityAtAge` shim (see specs/005-canonical-public-launch).
  *
  * Inputs:
  *   {
@@ -8,6 +14,7 @@
  *     helpers: {...optional DI bundle} forwarded to runLifecycle. Missing
  *                                      members fall through to the direct
  *                                      imports in lifecycle.js.
+ *     fireAge: number                  (evaluateFeasibility only — candidate age)
  *   }
  *
  * Outputs: FireSolverResult (data-model.md §4)
@@ -17,6 +24,7 @@
  *     endBalanceEffReal, balanceAtUnlockEffReal, balanceAtSSEffReal,
  *     lifecycle  // the projection that justifies this answer
  *   }
+ *   evaluateFeasibility returns a plain boolean.
  *
  *   The `*EffReal` companions are presentation-layer mirrors of the
  *   corresponding `*Real` checkpoints. They read the same lifecycle record
@@ -31,6 +39,7 @@
  *   - KPI cards      (yearsToFire, fireAge, balanceAtUnlockEffReal for display)
  *   - growthChart    (lifecycle + fireAge marker)
  *   - scenario card  (yearsToFire delta)
+ *   - calc/shims.js  (evaluateFeasibility → _evaluateFeasibilityAtAge glue)
  *
  * Invariants:
  *   - fireAge is integer; currentAgePrimary + yearsToFire === fireAge.
@@ -96,11 +105,14 @@ function effBalAtAge(lifecycle, age) {
  * current solver mode. Returns { ok, endBalance } where ok drives the
  * binary search decision.
  *
+ * Internal helper — consumed by solveFireAge and the public
+ * evaluateFeasibility wrapper below.
+ *
  * @param {LifecycleRecord[]} lifecycle
  * @param {Inputs} inputs
  * @returns {{ok: boolean, endBalance: number, balanceAtUnlock: number, balanceAtSS: number}}
  */
-function evaluateFeasibility(lifecycle, inputs) {
+function _evaluateFeasibilityFromLifecycle(lifecycle, inputs) {
   const endBalance = lifecycle[lifecycle.length - 1].totalReal;
   const balanceAtUnlock = balanceAtAge(lifecycle, UNLOCK_AGE);
   const balanceAtSS = balanceAtAge(lifecycle, inputs.ssStartAgePrimary);
@@ -205,7 +217,7 @@ export function solveFireAge({ inputs, helpers }) {
 
   for (let age = currentAge; age <= endAge; age += 1) {
     const lifecycle = runLifecycle({ inputs, fireAge: age, helpers: helpersBundle });
-    const evalRes = evaluateFeasibility(lifecycle, inputs);
+    const evalRes = _evaluateFeasibilityFromLifecycle(lifecycle, inputs);
     fallback = buildResult(lifecycle, age, false, currentAge, inputs);
 
     if (evalRes.ok) {
@@ -223,4 +235,26 @@ export function solveFireAge({ inputs, helpers }) {
   // Use the lifecycle generated for endAge as the representative projection.
   const finalLifecycle = runLifecycle({ inputs, fireAge: endAge, helpers: helpersBundle });
   return buildResult(finalLifecycle, endAge, false, currentAge, inputs);
+}
+
+/**
+ * Public mode-aware feasibility check for a single candidate fireAge.
+ *
+ * Thin wrapper around the internal `_evaluateFeasibilityFromLifecycle` helper:
+ * builds a lifecycle at the requested fireAge (via immutable input override)
+ * and returns a plain boolean. Consumed by `calc/shims.js` →
+ * `_evaluateFeasibilityAtAge` which is exposed on `window` in both dashboards.
+ *
+ * Pure: no DOM, no globals, no side effects. Inputs are NOT mutated — the
+ * fireAge override is applied via object spread.
+ *
+ * @param {{inputs: Inputs, fireAge: number, helpers?: object}} args
+ * @returns {boolean}
+ */
+export function evaluateFeasibility({ inputs, fireAge, helpers }) {
+  const overridden = { ...inputs, fireAge };
+  const helpersBundle = helpers ?? {};
+  const lifecycle = runLifecycle({ inputs: overridden, fireAge, helpers: helpersBundle });
+  const evalRes = _evaluateFeasibilityFromLifecycle(lifecycle, overridden);
+  return evalRes.ok;
 }

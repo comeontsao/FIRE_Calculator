@@ -6,7 +6,7 @@
  * range-slider defaults in FIRE-Dashboard-Generic.html).
  *
  * Shape: legacy "inline" shape (Generic's variant — person1/person2/child
- * naming instead of RR's Roger/Rebecca/kid1/kid2).
+ * naming instead of the RR variant's primary/secondary/kid1/kid2 naming).
  *
  * Infeasibility expected: §B.analytical concludes this cold-load scenario
  * is NOT solvable under Safe mode — the zero starting portfolio can't
