@@ -31,6 +31,20 @@ const FORBIDDEN_TOKENS = Object.freeze([
   'navigator',
 ]);
 
+/**
+ * Glue-layer allowlist — files exempt from the forbidden-token scan only.
+ *
+ * calc/shims.js is a glue layer per research.md §R1 (feature
+ * 005-canonical-public-launch); exempt from the no-window rule because it
+ * delegates 100% to canonical calc modules and wraps the boundary with
+ * try/catch + documented fallbacks. Its fallback behavior is Node-unit-tested
+ * in tests/unit/shims.test.js.
+ *
+ * The Inputs/Outputs/Consumers header check (second test below) STILL applies
+ * to every file in calc/ — including allowlisted glue layers.
+ */
+const GLUE_LAYER_ALLOWLIST = Object.freeze([join(calcDir, 'shims.js')]);
+
 /** Lines at the top of a calc module that must declare the contract. */
 const HEADER_WINDOW = 80;
 const REQUIRED_HEADER_FIELDS = Object.freeze(['Inputs:', 'Outputs:', 'Consumers:']);
@@ -63,6 +77,11 @@ test('calc modules: no forbidden DOM/browser tokens', async () => {
   const offenses = [];
 
   for (const file of files) {
+    // Glue-layer allowlist bypass: shims.js is permitted to read window.*
+    // at call time (see GLUE_LAYER_ALLOWLIST doc above + research.md §R1).
+    if (GLUE_LAYER_ALLOWLIST.includes(file)) {
+      continue;
+    }
     const src = await readFile(file, 'utf8');
     const lines = src.split(/\r?\n/);
     lines.forEach((line, idx) => {

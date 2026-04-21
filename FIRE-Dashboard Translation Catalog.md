@@ -495,3 +495,312 @@ New i18n keys added in both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.ht
 
 **Template substitution:** The existing `t(key, ...args)` helper replaces `{0}`, `{1}`, etc. in the translated string. `override.confirmLabel` is the only one of the new keys that takes an argument (the previewed age). All other keys are static. The Chinese form `以 {0} 歲退休重新計算？` preserves the placeholder index so the same runtime substitution works.
 
+---
+
+## Feature 005-canonical-public-launch — Legal/CYA Disclaimer Footer (2026-04-20)
+
+New i18n keys added in both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` for the public-launch disclaimer footer (per FR-011). Both keys are present under both `en` and `zh` in both files. The `<footer class="disclaimer" role="contentinfo">` block sits at the bottom of `<body>` and uses existing CSS tokens only (no new colors, per FR-013).
+
+| Key | English | Traditional Chinese | Usage |
+|-----|---------|---------------------|-------|
+| `disclaimer.intro` | `⚠️ For research and educational purposes only — not financial advice.` | `⚠️ 僅供研究及教育用途，非投資建議。` | Intro headline inside `<p class="disclaimer-intro">` — bold, centered, always visible. |
+| `disclaimer.body` | `Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.` | `本工具的預測數字僅為估計值，請自行研究（DYOR）並於做任何財務決定前諮詢合格的財務顧問。作者不對任何基於本工具做出的決策負責。原始碼採 MIT 開源授權。` | Body paragraph inside `<p class="disclaimer-body">`. Four points: projections-are-estimates, DYOR, author-disclaimer, MIT-open-source. |
+
+**Template substitution:** Neither key takes arguments; both are static. The EN text is inlined as fallback so pre-i18n-runtime renders still show correct content.
+
+---
+
+## Phase 2 additions (2026-04-20)
+
+This phase expanded static DOM i18n coverage. **Generic was brought roughly to parity with RR** for card titles, form labels, buttons, and footer copy. **RR received fewer net-new keys** because most of its DOM was already wired in Phase 1; Phase 2 mainly reconciled dict text to match the DOM (preferred update dict, not DOM, to keep file stable) and added a small set of new keys for sections that were entirely unwired (Second Property, Lifetime Withdrawal title, Healthcare card, mortgage Home Location / Ownership Status / Capital Gains / College Plan / Student Loan Plan).
+
+### Phase 1 dict/DOM mismatches — how each was resolved
+
+| Key | Resolution | New EN value |
+|-----|------------|--------------|
+| `invest.return401k` | Dict → match DOM | `401K Annual Return` |
+| `invest.swr` | Dict → match DOM (removed trailing `%`, DOM appends it via `.val` span) | `Safe Withdrawal Rate` |
+| `invest.monthlySavings` | Dict → match DOM | `Monthly Investment (New Savings)` |
+| `invest.contrib401k` | Dict → match DOM | `401K: Traditional Contribution (pre-tax)` |
+| `invest.empMatch` | Dict → match DOM | `401K: Employer Match (annual)` |
+| `mtg.sellAtFire` | Dict → match DOM (select label) | `What happens to the home?` |
+| `mtg.keepHome` | Dict → match DOM (option 0 with emoji) | `🏡 Live in — Keep & occupy` |
+| `mtg.sellHome` | Dict → match DOM (option 1 with emoji) | `💰 Sell at FIRE — Geo-arbitrage` |
+| `snap.yearsToFire` | Dict → match DOM (short form in table) | `Yrs to FIRE` |
+| `snap.targetCountry` | Dict → match DOM (uses globe emoji) | `Target 🌏` |
+| `footer.disclaimer` | Dict → match DOM; **split** into new `footer.lastUpdated` + body | `All projections use real (inflation-adjusted) returns \| This is a planning tool, not financial advice` |
+| `footer.tip` | Dict → match DOM (prepend `💡 `) | `💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!` |
+
+### New keys added (both EN + zh-TW in both dicts unless noted RR-only or Generic-only)
+
+**Section / card titles (`sec.*`)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `sec.fireProgress` | FIRE Progress | FIRE 進度 |
+| `sec.profileIncome` | Profile & Income | 個人資料與收入 |
+| `sec.currentAssets` | Current Assets | 目前資產 |
+| `sec.investSavings` | Investment & Savings | 投資與儲蓄 |
+| `sec.mortgage` | Mortgage Scenario | 房貸情境 |
+| `sec.secondProperty` | Second Property | 第二間房產 |
+| `sec.secondPropertyNote` | (vacation home, rental, or foreign retirement home) | （度假屋、出租屋，或海外退休房） |
+| `sec.lifetimeWithdrawal` | Lifetime Withdrawal Strategy | 終身提領策略 |
+| `sec.lifetimeWithdrawalNote` | — tax-bracket-optimized mix across all retirement years | — 以稅率級距優化整個退休期間的提領組合 |
+| `sec.healthcare` | Healthcare by Country — Pre-65 vs Post-65 | 各國醫療保健 — 65 歲前 vs 65 歲後 |
+| `sec.socialSecurity` (Generic) | Social Security — Realistic Estimator & Three-Phase FIRE | 社會安全金 — 實際估算與三階段 FIRE |
+| `sec.drawdown` (Generic) | Portfolio Drawdown: With vs Without Social Security | 投資組合提領：有/無社會安全金比較 |
+| `sec.savingsRate` (Generic) | Savings Rate | 儲蓄率 |
+| `sec.lifecycle` (Generic) | Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security | 完整投資組合生命週期 — 累積 → FIRE → 提領 → 社會安全金 |
+| `sec.expenses` (Generic) | Monthly Expense Breakdown (Editable) | 每月支出明細（可編輯） |
+| `sec.netWorthPie` (Generic) | Net Worth Breakdown | 淨資產分佈 |
+| `sec.milestones` (Generic) | FIRE Milestone Timeline | FIRE 里程碑時間線 |
+| `sec.expenseDist` (Generic) | Expense Distribution | 支出分佈 |
+| `sec.whatIf` (Generic) | Quick What-If | 快速假設分析 |
+| `sec.countryChart` (Generic) | Years to FIRE by Retirement Location | 各國 FIRE 所需年數 |
+| `sec.snapshots` (Generic) | Snapshot History — Track Your Progress Over Time | 快照紀錄 — 追蹤你的進度 |
+
+**Profile & Income (`profile.*`) — Generic only**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `profile.person1Bday` | Person 1 Birthday | 成員 1 生日 |
+| `profile.person2Bday` | Person 2 Birthday | 成員 2 生日 |
+| `profile.addChild` | + Add Child | + 新增小孩 |
+| `profile.removeChild` | − Remove Child | − 移除小孩 |
+| `profile.income` (Generic) | Annual Gross Income (Combined) | 年度總收入（合併） |
+| `profile.raise` (Generic) | Annual Raise | 年度加薪率 |
+| `profile.taxRate` (Generic) | Effective Tax Rate (%) | 有效稅率 (%) |
+
+**Assets (`assets.*`) — Generic parity entries (RR already had Roger/Rebecca-prefixed variants)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `assets.person1Stocks` | Person 1 Stocks/Brokerage | 成員 1 股票/券商帳戶 |
+| `assets.person2Stocks` | Person 2 Stocks/Brokerage | 成員 2 股票/券商帳戶 |
+| `assets.person1_401kTrad` | Person 1 Traditional 401K | 成員 1 傳統 401K (稅前) |
+| `assets.person1_401kRoth` | Person 1 Roth 401K | 成員 1 Roth 401K (稅後) |
+
+**Investment & Savings (`invest.*`) — new keys**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `invest.contrib401kRoth` | 401K: Roth Contribution (after-tax) | 401K：Roth 提撥（稅後） |
+| `invest.taxTrad` | Effective Tax on Trad 401K Withdrawals | 傳統 401K 提領的有效稅率 |
+
+**Mortgage (`mtg.*`) — new keys**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `mtg.inherit` | 👪 Inherit — Give to children | 👪 繼承 — 留給子女 |
+| `mtg.homeLocation` | Home Location | 房屋地點 |
+| `mtg.capGainsTreatment` | Capital Gains Treatment (on sale) | 資本利得稅處理（售屋時） |
+| `mtg.ownershipStatus` | Ownership Status | 所有權狀態 |
+| `mtg.alreadyOwn` | 🏠 Already Own | 🏠 已擁有 |
+| `mtg.buyingNow` | 🔑 Buying Now | 🔑 現在購買 |
+| `mtg.buyingIn` | 📅 Buying in X Yrs | 📅 N 年後購買 |
+| `mtg.yearsPaid` | Years of mortgage already paid | 已繳房貸年數 |
+| `mtg.purchaseIn` | Purchase in | 購買於 |
+| `mtg.yearsUnit` | years | 年後 |
+
+**Second Property (`mtg2.*`) — all new**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `mtg2.location` | Location | 地點 |
+| `mtg2.label` | Label (your nickname) | 標籤（暱稱） |
+| `mtg2.buyInYears` | Buy in N years (0 = already own / buy now) | N 年後購買（0 = 已擁有 / 立即買） |
+| `mtg2.homePrice` | Home Price ($) | 房價 ($) |
+| `mtg2.downPayment` | Down Payment ($) | 頭期款 ($) |
+| `mtg2.closingCosts` | Closing Costs ($) | 交易成本 ($) |
+| `mtg2.rate` | Mortgage Rate (%, 0 if cash) | 貸款利率（%，現金則填 0） |
+| `mtg2.term` | Loan Term (years) | 貸款年限 |
+| `mtg2.propertyTax` | Annual Property Tax ($) | 年度房產稅 ($) |
+| `mtg2.otherCarry` | Insurance + HOA + Maint (annual $) | 保險 + 管理費 + 維修（年度 $） |
+| `mtg2.rentalIncome` | Rental Income (annual $, 0 if not rented) | 租金收入（年度 $，未出租填 0） |
+| `mtg2.apprec` | Appreciation Rate (%/yr) | 增值率（%/年） |
+| `mtg2.destiny` | What happens at FIRE? | FIRE 時怎麼處理？ |
+| `mtg2.keep` | 🏡 Keep & live in | 🏡 保留並自住 |
+| `mtg2.sell` | 💰 Sell at FIRE | 💰 FIRE 時賣掉 |
+| `mtg2.inherit` | 👪 Inherit — Give to children | 👪 繼承 — 留給子女 |
+
+**Healthcare (`hc.*`) — all new**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `hc.currentScenario` | Current Scenario | 目前情境 |
+| `hc.overrideMonthly` | Override (monthly $) | 覆蓋（每月 $） |
+| `hc.pre65` | Pre-65 healthcare ($/mo) | 65 歲前醫療（$/月） |
+| `hc.post65` | Post-65 healthcare ($/mo) | 65 歲後醫療（$/月） |
+| `hc.allCountries` | All Countries (Family of 4) | 所有國家（四口之家） |
+
+**College / Student Loans (`college.*`, `loan.*`) — all new**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `college.plan` | 🎓 College Plan | 🎓 大學規劃 |
+| `college.planNote` | (4-yr costs added to plan during attendance years) | （入學期間每年加入規劃） |
+| `loan.plan` | 🏦 Student Loan Plan | 🏦 助學貸款 |
+| `loan.planNote` | (Federal Direct Subsidized — no interest while in school) | （Federal Direct Subsidized — 在學期間免息） |
+| `loan.rate` | Loan rate % | 貸款利率 % |
+| `loan.rateHint` | (Fed Direct Sub undergrad ≈ 6.53%) | （Fed Direct Sub 大學生約 6.53%） |
+| `loan.term` | Repayment term (yrs) | 還款年限 |
+| `loan.termHint` | (standard = 10) | （標準 = 10） |
+
+**Social Security (`ss.*`) — Generic-new (RR already had these); `ss.spouseOwn` is Generic-only (RR uses `ss.rebeccaSS`)**
+
+Covers: `ss.earningsRecord`, `ss.earningsDesc`, `ss.year`, `ss.earnings`, `ss.credits`, `ss.addYear`, `ss.creditCount`, `ss.creditTotal`, `ss.spouseOwn` (Generic only), `ss.fireStrategy`, `ss.safe`, `ss.exact`, `ss.dieWithZero`, `ss.bufferUnlock`, `ss.bufferSS`, `ss.terminalBuffer`, `ss.planAge`, `ss.ssaEstimate`, `ss.claimAge`, `ss.age62`, `ss.age67`, `ss.age70`, `ss.threePhase`, `ss.vsSimple`.
+
+**Savings / Expense / What-If / Snapshots / Footer / Badges — Generic parity entries**
+
+Covers: `savings.ofGross/min/max/coastFire`, `exp.category/monthly/annual/pctIncome/total`, `whatif.income/spend/return/fireLabel`, `snap.desc/date/netWorth/accessible/k401/cash/income/monthlySpend/savingsRate/fireTarget/save/linkCSV/exportCSV/importCSV/clearAll`, `snap.person1Stocks` + `snap.person2Stocks` (Generic only — RR uses Roger/Rebecca variants), `footer.lastUpdated` (new both files), `badge.obj/est`, `mode.safe/exact/dieWithZero`.
+
+### Items deliberately skipped (Phase 3 or later)
+
+- **`data-tip` tooltips** — skipped across the board (task scope note).
+- **Help/glossary long-form body text** inside the Lifetime Withdrawal `<details>` block (the "Strategy in 30 Seconds", "Tax Terms — Plain English Glossary", "Why This Order?" sections) — very long, educational, would roughly double translation effort. All three `<h4>` section headings within the glossary block are still English-only.
+- **`RR`-specific first-person name labels** — Roger / Rebecca / Janet / Ian birthday labels, Roger's/Rebecca's Stocks labels. These are intentional RR-only content and already have RR-specific keys where needed (e.g., `assets.rogerStocks`, `assets.rebeccaStocks`).
+- **Mortgage pre-existing descriptive `<p>` summary lines** (`#mortgageSummaryLine`, `#secondHomeSummaryLine`) — these are dynamically updated by `recalcAll()`, so `data-i18n` on them would be clobbered. Needs a different strategy (i18n inside the JS update functions) — out of Phase 2 scope.
+- **Children's `<label>Child {N} Birthday</label>`** (Generic) — these are created dynamically by `renderChildrenUI()` via innerHTML string templates. Wiring them requires touching JS rendering, not DOM. Phase 3.
+- **Dynamic second-home/mortgage impact summaries** (`#mortgageImpact`, `#secondHomeImpact`) — rendered dynamically from JS, same reason as above.
+- **Dropdown `<option>` country flags inside mortgage/second-home `<select>`s** — already intelligible across languages (flag + country name).
+
+
+## Phase 3 additions (2026-04-20) — JS-rendered dynamic strings
+
+Frontend Phase 3 refactor: extracted JavaScript template literals into `t(key, ...args)` calls so language switches re-render dynamic content. All new keys live in both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` (lockstep). `switchLanguage()` already calls `recalcAll()`, so dynamic strings flip with the EN / 中文 toggle.
+
+### New keys (EN reference; zh-TW parallels added alongside)
+
+| Key | English value | Interpolates |
+|-----|---------------|--------------|
+| `chart.axis.age` | `Age` | — |
+| `chart.axis.annualDollars` | `Annual $` | — |
+| `chart.axis.effectiveTax` | `Effective tax %` | — |
+| `chart.axis.yearsToFire` | `Years to FIRE` | — |
+| `chart.axis.fireNumber` | `FIRE Number ($)` | — |
+| `chart.lifecycleSubtitle` | lifecycle phase legend | — |
+| `chart.lifecycleSubtitleOverride` | same legend + override note | `{0}` adjusted age, `{1}` calc age |
+| `chart.countrySubtitle` | country-chart language legend | — |
+| `dyn.ageLabel` | `Age {0}` | `{0}` age |
+| `dyn.progressComplete` | `{0}% complete` | `{0}` percent |
+| `dyn.accessibleNeededAtFire` | `Accessible assets needed at FIRE (age {0}) — {1} mode{2}` | age / mode / suffix |
+| `dyn.cushionSuffix` | ` (incl. {0}yr end-of-life cushion)` | years |
+| `dyn.accessibleNeededSub` | `{0} accessible needed (3-phase){1}` | flag / mortgage icon |
+| `dyn.phase1Info` | `FIRE ({0}) → 59.5: {1} yrs, taxable only, {2}{3}` | age / yrs / spend / suffix |
+| `dyn.phase1MtgAdjusted` | ` (mtg-adjusted)` | — |
+| `dyn.phase2Info` | `59.5 → {0}: {1} yrs, 401K unlocks` | ss age / yrs |
+| `dyn.phase3Info` | `{0} → {1}: {2} yrs, SS ${3}/mo, portfolio covers ${4}/yr` | ages / yrs / SS mo / portfolio yr |
+| `dyn.overrideTitle` | `What if you retire at age {0} instead of {1}?` | override / calc age |
+| `dyn.overrideExtraYears` | `+{0} yr` | years |
+| `dyn.overrideExtraYearsPlural` | `+{0} yrs` | years |
+| `dyn.overrideEndLabel` | `vs original at age {0}` | end age |
+| `dyn.coastFireReady` | `You've hit <strong>Coast FIRE</strong>! ...` | future / flag / target |
+| `dyn.coastFireGap` | `Not at Coast FIRE yet. ...` | future / target / gap |
+| `dyn.scenarioCardYrs` | `{0} yrs (age {1})` | yrs / age |
+| `dyn.scenarioCardSpend` | `${0}/yr` | spend |
+| `dyn.childBirthdayLabel` | `Child {0} Birthday` | child number (Generic call-site) |
+| `dyn.childFinancedLabel` | `Child {0}: % financed` | child number |
+| `dyn.childParentLabel` | `Child {0}: % parent repays` | child number |
+| `geo.noForeignTax` | `No Foreign Tax` | — (Generic catch-up to match RR) |
+
+### Refactor sites
+
+- **Generic (`FIRE-Dashboard-Generic.html`)** — 19 JS template-literal sites rewritten: 3 age displays, progress %, `#fireNumberSub`, `#twoPhaseDetail`, `#phase1Info` / `#phase2Info` / `#phase3Info`, override title / extra-years / end-label, coast-FIRE ready and gap branches, scenario card innerHTML, scenario-insight header + deep-dive `geo.*` wiring, `renderChildrenUI` birthday label, two child-loan slider labels, five Chart.js axis/subtitle texts, "No Foreign Tax" badge.
+- **RR (`FIRE-Dashboard.html`)** — 15 JS template-literal sites rewritten: 4 age displays, progress %, `#fireNumberSub`, `#twoPhaseDetail`, `#phase1Info` / `#phase2Info` / `#phase3Info`, override title / extra-years / end-label, coast-FIRE ready and gap branches, scenario card innerHTML, five Chart.js axis/subtitle texts.
+
+### `t()` helper hardening
+
+Upgraded the interpolation engine in both files: naive `str.replace('{0}', arg)` (first-occurrence only) was replaced with regex-based `str.replace(/\{(\d+)\}/g, ...)`. Repeated placeholders now work and `undefined` / `null` args render as empty strings.
+
+### Deliberately skipped (acceptable tech debt)
+
+- **`#mortgageImpact` multi-paragraph verdict block** — dozens of interpolated variables, conditional HTML fragments, and buy-vs-rent narrative. Very high translation churn for marginal above-the-fold value; leave for a future mortgage-UI pass.
+- **`#ssCalcOutput` Social Security summary HTML** — dense inline styling, 6+ interpolated $ values, conditional qualification/ineligibility branches.
+- **SS chart dynamic subtitle** (`renderSSChart`) — combines flag + country + age + spend + mode flags; needs a dedicated templating pass.
+- **Chart.js tooltip callbacks** (`label: (tCtx) => ...`) — per-point hover content; moderate volume, low-frequency user visibility.
+- **`console.error` / internal debug** — not user-facing.
+- **`data-tip` attribute values** — still deferred (need a `data-i18n-tip` path extension to `switchLanguage`).
+- **Milestones timeline labels** (`renderTimeline` — "Child {N} → College", "Coast FIRE — can stop saving", etc.) — medium volume; separate pass when timeline overhaul lands.
+
+
+
+## Phase 3 additions (2026-04-20) — JS-rendered dynamic strings
+
+Frontend Phase 3 refactor: extracted JavaScript template literals into `t(key, ...args)` calls so language-switches re-render dynamic content. All new keys live in both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` (lockstep). `switchLanguage()` calls `recalcAll()` which re-runs charts and dynamic UI, so these flip with the EN / 中文 toggle.
+
+### New keys (EN reference — same structure in zh-TW)
+
+| Key | English value | Interpolates |
+|-----|---------------|--------------|
+| `chart.axis.age` | `Age` | — |
+| `chart.axis.annualDollars` | `Annual $` | — |
+| `chart.axis.effectiveTax` | `Effective tax 
+
+
+## Phase 4 additions (2026-04-21) — systematic gap closure
+
+Phase 4 hunts down every remaining user-visible English string identified in the 2026-04-21 audit. Status banner refactored to use `t()` (previously stayed English in RR). KPI sub-labels, progress bar labels, college plan dropdowns, loan labels, mortgage verdict block (~40 keys), second-property block, lifetime withdrawal prose + glossary, healthcare section, SS rendering, scenario narrative, capital-gains notes — all now route through the TRANSLATIONS dict. Lockstep across both HTMLs.
+
+### Category A — Status banner
+Already-wired `dyn.fireInYears` now used from RR (was template-literal before). New: `dyn.statusNeedsOpt`, `dyn.statusBehindSched` (replaces `dyn.warningYears`/`dyn.behind` in both files).
+
+### Category B — KPI sub-labels (renderKpiCards)
+`kpi.netWorthSubDyn` (with `${locked}` interpolation), `kpi.progressSubAccess`, `kpi.yearsSubFireBy`, `kpi.yearsSubIncrease`, `kpi.yearsSuffix`, `kpi.yearsOver`.
+
+### Category C — Progress bar
+`dyn.progressNeeded`, `dyn.progressCurrent`.
+
+### Category D — College plan dropdowns
+Full-label keys with numeric suffix kept English:
+- `college.opt.usPrivate` → `🇺🇸 US Private (~$85K/yr)` / `🇺🇸 美國私立 (~$85K/yr)`
+- `college.opt.usPublicIS`, `college.opt.usPublicOOS`, `college.opt.taiwan`, `college.opt.uk`, `college.opt.canada`, `college.opt.australia`, `college.opt.singapore`, `college.opt.japan`, `college.opt.netherlands`, `college.opt.germany`, `college.opt.none`
+- `college.label.janet` / `college.label.ian` (RR); `college.label.child1` / `college.label.child2` (Generic)
+- `college.dyn.*Label` (12 entries) — translated `{flag} {country} (top univ)` style labels for summary prose. Pulled via `getCollegeLabelTrans(countryId)`.
+
+### Category E — College summary block
+`college.dyn.combinedCost`, `college.dyn.peakYear`, `college.dyn.overlap`, `college.dyn.kidLine`, `college.dyn.loanImpact`, `college.dyn.loanFootnote`, `college.dyn.noLoans`.
+
+### Category F — Student-loan slider labels
+RR uses fixed `loan.dyn.financedJanet`, `loan.dyn.financedIan`, `loan.dyn.parentRepaysJanet`, `loan.dyn.parentRepaysIan`. Generic uses `dyn.childFinancedLabel` / `dyn.childParentLabel` with child index (already in Phase 3 dict). `loan.rate` / `loan.term` / `loan.rateHint` / `loan.termHint` were already wired.
+
+### Category G — Mortgage dynamic verdict block
+~40 new `mtg.dyn.*` keys covering: status banner, monthly payment breakdown, rent comparison, at-FIRE projection, sell-vs-keep branches, adjusted retirement spend, opportunity-cost block, what-the-house-gives-you block, sell/inherit/live bottom-line text, verdict labels, and the summary line. Complex interpolations (e.g. `mtg.dyn.bottomSell` has 9 placeholders for numeric + color values).
+Cap-gains notes per country: `mtg.capGainsUs`, `mtg.capGainsTaiwan`, `mtg.capGainsJapan`, `mtg.capGainsThailand`, `mtg.capGainsMalaysia`, `mtg.capGainsSingapore`, `mtg.capGainsVietnam`, `mtg.capGainsPhilippines`, `mtg.capGainsMexico`, `mtg.capGainsCostarica`, `mtg.capGainsPortugal`, plus `mtg.capGainsPlaceholder`, `mtg.locationNote`.
+Ownership description: `mtg.ownershipDescAlready`, `mtg.ownershipDescNow`, `mtg.ownershipDescIn`.
+Toggle labels: `mtg.toggleOff` / `mtg.toggleOn`.
+
+### Category H — Second property block
+`mtg2.summaryDisabled`, `mtg2.summaryEnabled`, `mtg2.toggleOff`, `mtg2.toggleOn`, `mtg2.disabledNote`, `mtg2.dyn.buyingNow`, `mtg2.dyn.buyingIn`, `mtg2.dyn.sell`, `mtg2.dyn.inherit`, `mtg2.dyn.keep`, `mtg2.dyn.upfront`, `mtg2.dyn.rentalOffset`, `mtg2.dyn.buyingLabel`.
+
+### Category I — Lifetime Withdrawal section
+**Prose + glossary** (10 terms × 2 parts each = 20 keys): `tw.prose`, `tw.summary`, `tw.stratTitle`, `tw.stratP1`, `tw.rulebookTitle`, `tw.rule1/2/3`, `tw.glossaryTitle`, `tw.mfjTerm/Desc`, `tw.stdDedTerm/Desc`, `tw.top12Term/Desc`, `tw.top22Term/Desc`, `tw.ltcgTerm/Desc`, `tw.rmdTerm/Desc`, `tw.amtTerm/Desc`, `tw.rothVsTradTerm/Desc`, `tw.niitTerm/Desc`, `tw.ssTerm/Desc`, `tw.whyTitle`, `tw.whyP1/P2`.
+**Tax-bracket inputs**: `tw.filingStatus/Tip`, `tw.stdDedLabel/Tip`, `tw.top12Label/Tip`, `tw.top22Label/Tip`, `tw.mfjRR` (RR only — "MFJ (R + R)"), `tw.mfjLabel`, `tw.singleLabel`, `tw.stockGainPct/Tip`, `tw.calculating`.
+**Summary cards + strategy banner**: `tw.dyn.lifetimeTax/Sub`, `tw.dyn.avgEffRate/Sub`, `tw.dyn.bridge/Sub/Yrs`, `tw.dyn.assetsFire/Sub`, `tw.dyn.strategyBanner`, `tw.dyn.bridgeFeasible`, `tw.dyn.bridgeInfeasible`, `tw.dyn.keyYears`, `tw.dyn.ageTag`, `tw.dyn.tagLocked/Ss/Rmd`.
+**Chart legend + tooltip**: `tw.legend.ss/trad/roth/ltcg/cash/effTax`, `tw.tooltip.totalDrawn/taxOwed/ordIncome/rmd/shortfall`, `tw.howToRead`.
+
+### Category J — SS section
+Prose wired via `ss.introFull` (HTML-carrying, so `data-i18n-html`). JS rendering: `ss.notQualified`, `ss.needMoreCredits`, `ss.recordSummary`, `ss.credits`, `ss.earningsAtFire`, `ss.earningsAtFireSub`, `ss.zerosInTop35`, `ss.aime`, `ss.aimePerMo`, `ss.rogerPia` (RR) / `ss.person1Pia` (Generic), `ss.rebeccaSpousal` (RR) / `ss.person2Spousal` (Generic), `ss.combinedAtFra`, `ss.combinedValue`, `ss.vsEmployerEst`, `ss.realityFire`, `ss.tableAge/Monthly/Annual`, `ss.threePhaseSaves`.
+
+### Category K — Healthcare section
+`hc.intro`, `hc.baseline`, `hc.autoScale`, `hc.pre65Tip`, `hc.post65Tip`, `hc.placeholderDefault`, `hc.selectScenario`, `hc.pre65Label`, `hc.post65Label`, `hc.overrideSuffix`, `hc.familyOf4`, `hc.coupleMedicare`, `hc.fireImpact`, `hc.fireImpactValue`, `hc.tableCountry/Pre65/Post65`. Plus 11 per-country notes: `hc.note.us`, `hc.note.taiwan`, ..., `hc.note.portugal`.
+
+### Category L — Scenario deep-dive narratives
+Per-country translated versions of notes + visa + pros + cons + tax: 11 countries × 5 fields = 55 keys (`scenario.notes.*`, `scenario.visa.*`, `scenario.pros.*`, `scenario.cons.*`, `scenario.tax.*`). Used by the insight panel via a `t('scenario.X.' + s.id) !== fallback ? t(...) : s.X` lookup so the scenarios[] data object stays authoritative but zh-TW pulls cleanly.
+
+### Category M — Mortgage + Second-property country dropdowns
+`country.mtg.*` (11 entries) for `mtgHomeLocation` select — full "🇺🇸 United States" style label. `country.mtg2.us` for the short "🇺🇸 US" variant used by second-property select. Remaining countries in the `mtg2Location` select re-use `country.mtg.*`.
+
+### Other fixes
+- `country.us.long` for "United States" label reuse.
+- Switch-language handler re-renders: `renderChildrenUI()` (Generic, for dynamic child-college select labels) and the `mtgCapGainsNote` innerHTML (both files).
+- Strategy tag translations (`translateStrategyTag` helper) for chart tooltip lines — stored in English on the strategy rows so calc tests stay stable; translated at render time.
+
+### Key counts (Phase 4)
+
+- RR dashboard: **+ ~230 new dict entries** in each of `en:` and `zh:`.
+- Generic dashboard: **+ ~220 new dict entries** in each of `en:` and `zh:`.
+- `data-i18n` wirings: RR **177 → 277** (+100); Generic **177 → 247** (+70).
+
+### Exemption list (still English by design)
+
+Proper names (Roger, Rebecca, Janet, Ian), FIRE-specific terms (FIRE, Fat FIRE, Coast FIRE, Die With Zero, DWZ), industry acronyms (401K, IRA, Roth, LTCG, RMD, MFJ, AMT, SSA, PIA, FRA, SWR, P&I, HOA, NHI, APRC, SS, LTD, Trad), currency + dollar amounts + percentages, country ISO codes (US, TW, JP, etc.), emoji. "Section 121" (US tax code reference) kept English as an identifier.

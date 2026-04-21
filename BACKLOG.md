@@ -72,12 +72,11 @@ These items were explicitly scoped into `001-modular-calc-engine` but deferred a
 - **Recommendation**: start with the Node harness. Add Playwright later if the team feels the gap.
 - **Shipped**: `tests/baseline/browser-smoke.test.js` (RR + Generic + parity smokes), `tests/baseline/rr-defaults.mjs`, `tests/baseline/generic-defaults.mjs`, `.github/workflows/tests.yml`. Prototype `_prototypeGetCanonicalInputs` marker is in place for feature 004 to replace.
 
-### F2. US2 HTML wire-up (TB22–T25 in `specs/001-modular-calc-engine/tasks-us2b.md`)
+### F2. US2 HTML wire-up — PARTIAL (feature 005, 2026-04-20) · ROLLED BACK same day
 
-- **What**: Replace inline `projectFullLifecycle` / `findFireAgeNumerical` / `signedLifecycleEndBalance` / `yearsToFIRE` / `getTwoPhaseFireNum` / `taxAwareWithdraw` / related helpers with calls into `calc/*.js`.
-- **Depends on**: F1 (smoke-test harness) must land first. Then the staged U2B-4a → U2B-4b → U2B-4c approach proposed by the Frontend Engineer.
-- **Visible impact**: fixes B1 / B2 / B3. FIRE age will shift by ~1–4 years (Roger) / ~3–10 years (Generic). Documented in `baseline-rr-inline.md §C`.
-- **Estimated effort**: 1–2 days after F1 lands.
+- **What shipped (retained)**: Extracted the 4 HTML shim functions (`yearsToFIRE`, `findFireAgeNumerical`, `_evaluateFeasibilityAtAge`, `findMinAccessibleAtFireNumerical`) into `calc/shims.js` as a Node-testable glue layer with documented `try/catch` + fallback + `[<shim-name>]` prefix logging. Added production adapter `calc/getCanonicalInputs.js`. Restored `evaluateFeasibility({inputs,fireAge,helpers}) → boolean` as a named export in `calc/fireCalculator.js`. Added `tests/unit/shims.test.js` with 4 shim-fallback unit tests. Retargeted `tests/baseline/browser-smoke.test.js` at the production adapter. These artifacts remain on disk + Node-tested.
+- **What rolled back (same day, browser smoke)**: the HTML bootstrap no longer wires the canonical engine — both dashboards restored the inline solver from `FIRE-Dashboard - Legacy.html`. Cause: canonical adapter only saw `inp`, but 4 critical UI states (`selectedScenario`, `mortgageEnabled`, `secondHomeEnabled`, month-precise DWZ) live in module-scope globals outside `inp`. This made country selection, home disposition, second-home, and DWZ all no-ops in the browser. See §D8 for the parity gates required before re-attempting the swap.
+- **See**: `specs/005-canonical-public-launch/CLOSEOUT.md` §"US1 scope correction".
 
 ### F3. US3 — RR personal-data adapter + parity test
 
@@ -105,16 +104,13 @@ These items were explicitly scoped into `001-modular-calc-engine` but deferred a
 
 ## 👁 P3 — Visible UX gaps
 
-### U1. Infeasibility deficit amount not displayed
+### ~~U1. Infeasibility deficit amount not displayed~~ — DONE (feature 005, 2026-04-20)
 
-- **Where**: `#infeasibilityDeficit` DOM element exists but renders empty. Listener waits for `chartState.state.deficitReal` which isn't populated until lifecycle is the authoritative engine.
-- **Fix**: Part of F2 (HTML wire-up).
+- **What was done**: `#infeasibilityDeficit` now surfaces ` Short by $<amount>` when solver returns `feasible: false` with a numeric deficit. Aggregate deficit computed inline as MAX across infeasible years. See `specs/005-canonical-public-launch/` FR-022 / Phase 6 T050-T051.
 
-### U2. KPI cards refresh via `recalcAll()` rather than `chartState.onChange` listeners
+### ~~U2. KPI cards refresh via `recalcAll()` rather than `chartState.onChange` listeners~~ — DONE (feature 005, 2026-04-20)
 
-- **Where**: "Years to FIRE", "FIRE Net Worth", "Progress %" update inside `recalcAll()`. Flagged by Frontend Engineer during T019–T023 dispatch.
-- **Impact**: one-frame ordering artifact — the FIRE marker on the chart moves before the KPI card updates. Barely noticeable.
-- **Fix**: migrate each KPI into a dedicated `chartState.onChange` subscriber. Cleaner model. ~1 hour.
+- **What was done**: 4 primary KPI cards (Years to FIRE, FIRE Net Worth, FIRE Number, Progress %) migrated to a single `renderKpiCards(state)` function registered as a `cs.onChange(...)` subscriber. Every KPI value gated on `Number.isFinite(...) ? formatted : '—'` per FR-024 — regressions now show `—` placeholder instead of cascading `NaN`. See feature 005 FR-023 / FR-024 / Phase 6 T052-T054.
 
 ### U3. Language toggle during confirm overlay visibility resets interpolated label
 
@@ -173,20 +169,18 @@ See F1 — this is the single biggest testing gap and the root cause of the U2B-
 
 ## 🧹 P5 — Technical debt / cleanup
 
-### D1. Compat shim `normalizeMortgageShape` in `calc/lifecycle.js`
+### ~~D1. Compat shim `normalizeMortgageShape` in `calc/lifecycle.js`~~ — DONE (feature 005, 2026-04-20)
 
-- **What**: translates legacy `{balanceReal, interestRate, yearsRemaining}` into `{ownership: 'already-own', ...}`.
-- **Fix**: remove once F2 is done and HTML passes canonical mortgage shape directly.
+- **What was done**: `normalizeMortgageShape` + its call site deleted per feature 005 FR-025. `calc/getCanonicalInputs.js` now passes canonical mortgage shape directly.
 
 ### D2. Transitional aliases `p401kTradReal` / `p401kRothReal`
 
 - **Where**: every `LifecycleRecord` carries these + their canonical counterparts `trad401kReal` / `rothIraReal`.
 - **Fix**: remove after F2 + F4 (chart renderers renamed to canonical names).
 
-### D3. `coast-fire.js` fixture has a `TBD_LOCK_IN_T038` placeholder
+### ~~D3. `coast-fire.js` fixture has a `TBD_LOCK_IN_T038` placeholder~~ — DONE (feature 005, 2026-04-20)
 
-- **Where**: `tests/fixtures/coast-fire.js`, `lifecycleCheckpoints[0].totalReal`.
-- **Fix**: run the canonical engine with that fixture's inputs, lock the value. ~5 minutes.
+- **What was done**: Placeholder at `lifecycleCheckpoints[0].totalReal` replaced with canonical engine output `8_519_863.55` per feature 005 FR-026 / T058-T060. Fixture `notes` + file header doc updated.
 
 ### D4. `calc/studentLoan.js` is a thin wrapper around `computeMortgage`
 
@@ -200,10 +194,33 @@ See F1 — this is the single biggest testing gap and the root cause of the U2B-
 - **Where**: inline reports "64 (28y 8m)"; chart rounds to 65; canonical reports 64 only.
 - **Fix**: canonical fireCalculator could emit both `.fireAge` and `.fireAgeChartRounded`. Or the inline engine's chart could stop rounding. Decide during F2.
 
-### D6. `isFireAgeFeasible` kept with `// TODO` in both HTML files
+### D8. Canonical-engine HTML swap is rolled back — restore only after parity gates
 
-- **Where**: has 3 callers inside `findMinAccessibleAtFireNumerical`, which stays inline per the narrow U2B-4a scope.
-- **Fix**: port `findMinAccessibleAtFireNumerical` to canonical during F2's U2B-4b phase, then delete `isFireAgeFeasible`.
+- **Where**: `FIRE-Dashboard.html` + `FIRE-Dashboard-Generic.html` — both files now use the inline solver (restored from `FIRE-Dashboard - Legacy.html`) rather than the canonical engine via `calc/shims.js`. `calc/getCanonicalInputs.js`, `calc/shims.js`, and `calc/fireCalculator.js::evaluateFeasibility` remain on disk with their Node unit tests intact, but the HTML bootstrap no longer exposes `window._solveFireAge`, `window._evaluateFeasibility`, `window._runLifecycle`, `window.getCanonicalInputs`, or the 4 shim functions.
+- **Why rolled back (2026-04-20)**: browser verification after feature 005 revealed 4 calculation-correctness regressions:
+  1. **Country scenario selection had no effect on FIRE years** — all 10 scenarios returned identical output because `getInputs()` does not include `selectedScenario` (lives in module-scope global, line 2670 of RR HTML). Canonical adapter fell back to `'us'` for every user.
+  2. **Home disposition (Sell at FIRE / Live in / Inherit) had no effect** — `inp.mortgage` was never populated because `mortgageEnabled` + `getMortgageInputs()` output also live in module-scope globals. Canonical saw no home at all.
+  3. **Second-home toggle had no effect** — same root cause as #2 via `secondHomeEnabled`.
+  4. **DWZ precision regression** — canonical mode=`'dieWithZero'` collapses to `'exact'` (integer-year precision), hiding the inline engine's month-precise DWZ solver (documented separately as D7).
+- **Fix (future)**: before re-attempting the canonical swap, all of the following MUST be in place:
+  1. **Context-aware adapter**: rewrite `calc/getCanonicalInputs.js` to accept a richer input shape that includes `selectedScenario`, mortgage config (including home disposition enum), second-home config, children-loan plan, actual SS earnings history. Either extend `getInputs()` in both HTML files to bundle all this into `inp`, or pass a separate `context` parameter alongside `inp`.
+  2. **Canonical mortgage + home-disposition support**: `calc/lifecycle.js` must handle the three home-disposition modes (Sell at FIRE / Live in / Inherit) with proper rent-vs-mortgage deltas, home-sale proceeds at FIRE, and imputed housing costs.
+  3. **Month-precise DWZ solver** (D7): implement a dedicated DWZ mode in `calc/fireCalculator.js` that returns fractional-year precision. Extend `FireSolverResult` with a `months` field; extend `shims.js::findFireAgeNumerical` to surface it.
+  4. **Full parity test harness**: a parity fixture for every country × mode combination, asserting canonical output within tolerance of the inline engine's output for the same inputs. This closes the gap that let the current regression ship.
+  5. **Browser-smoke gate in CI**: a real browser-driven test (Playwright or similar) that clicks through scenarios and home dispositions, asserting the FIRE number shifts. Would have caught this regression pre-merge.
+- **Estimated effort**: 3–5 days. Do NOT re-attempt the canonical swap piecemeal; the above items together are the parity bar.
+
+### D7. Canonical DWZ mode has no month-precise search — collapses to Exact
+
+- **Where**: `calc/fireCalculator.js:138-145` — `dieWithZero` branch of `_evaluateFeasibilityFromLifecycle` is documented as "Without a dedicated die-with-zero withdrawal strategy (out of scope for this feature), dieWithZero collapses to 'earliest age at which every year is feasible' — identical to 'exact'." The shim `findFireAgeNumerical` always returns `months: 0`, so `_dwzPreciseCache` in both HTML files always holds a year-granular answer.
+- **User-visible symptom (identified 2026-04-20)**: when `fireMode === 'dieWithZero'`, the dashboard reports the same integer-year retirement age as Exact. True DWZ would be month-precise AND would find an earlier retirement age whose lifecycle depletes the portfolio exactly at `endAge` (±tolerance), not the earliest year where `endBalance >= 0` (which leaves significant residual).
+- **Regression origin**: pre-feature-005 the inline `findFireAgeNumerical(inp, annualSpend, 'dieWithZero')` implemented a dedicated month-precise solver. Feature 005 replaced that inline solver with a shim that delegates to the canonical engine — which never implemented real DWZ. The HTML now shows an honest "integer-year precision; month-precise search not yet implemented" note (feature 005 follow-up edit, 2026-04-20).
+- **Fix (future)**: implement a month-precise DWZ search in `calc/fireCalculator.js`. Search strategy: binary-search (or linear scan with interpolation) over fireAge fractions; at each candidate age, run `runLifecycle` and find the fractional age where `endBalanceReal === 0` (with tolerance). Return `{fireAge, yearsToFire, monthsToFire, endBalanceReal ≈ 0}`. Requires extending the `FireSolverResult` shape to carry month precision, AND extending `shims.js::findFireAgeNumerical` to surface `r.months` from the canonical result rather than hard-coding `months: 0`.
+- **Estimated effort**: ~4–6 hours (solver + shim wiring + tests + honest-note rewrite in both HTMLs).
+
+### ~~D6. `isFireAgeFeasible` kept with `// TODO` in both HTML files~~ — DONE (feature 005, 2026-04-20)
+
+- **What was done**: `findMinAccessibleAtFireNumerical` shimmed into `calc/shims.js` as the 4th glue-layer export (feature 005 FR-009). `isFireAgeFeasible` + 3 other dead inline helpers deleted from both HTML files per FR-008 / T026-T029. Caller audit pre-deletion confirmed zero orphan call sites.
 
 ---
 

@@ -82,7 +82,7 @@ import { makeInflation } from './inflation.js';
 import { computeTax } from './tax.js';
 import { projectSS } from './socialSecurity.js';
 import { getHealthcareCost } from './healthcare.js';
-import { computeMortgage, resolveMortgage } from './mortgage.js';
+import { resolveMortgage } from './mortgage.js';
 import { computeCollegeCosts } from './college.js';
 import { computeWithdrawal } from './withdrawal.js';
 import { resolveSecondHome } from './secondHome.js';
@@ -290,43 +290,6 @@ function healthcareForYear({
 }
 
 /**
- * Detect whether a mortgage payload is in the legacy shape
- *   {balanceReal, interestRate, yearsRemaining}
- * with no `ownership` field. If so, translate to the new Mortgage typedef
- * (ownership='already-own', homePrice = balanceReal, downPayment = 0,
- * yearsPaid = 0). This shim preserves regression safety for pre-US2b fixtures
- * and will be eliminated when T048/T049 migrates the HTML to emit the new
- * shape directly.
- *
- * @param {object} mortgage
- * @returns {object | null}
- */
-function normalizeMortgageShape(mortgage) {
-  if (!mortgage || typeof mortgage !== 'object') return null;
-  // If it already has an ownership mode, trust the caller's shape.
-  if (typeof mortgage.ownership === 'string') return mortgage;
-  // Legacy shape detection: balanceReal + interestRate + yearsRemaining.
-  if (
-    typeof mortgage.balanceReal === 'number' &&
-    typeof mortgage.interestRate === 'number' &&
-    typeof mortgage.yearsRemaining === 'number'
-  ) {
-    if (!(mortgage.balanceReal > 0)) return null;
-    return {
-      ownership: 'already-own',
-      homePriceReal: mortgage.balanceReal,
-      downPaymentReal: 0,
-      closingCostReal: 0,
-      annualRateReal: mortgage.interestRate,
-      termYears: mortgage.yearsRemaining,
-      yearsPaid: 0,
-      destiny: 'live-in',
-    };
-  }
-  return null;
-}
-
-/**
  * Run the year-by-year lifecycle simulation.
  *
  * @param {{
@@ -384,72 +347,41 @@ export function runLifecycle(args) {
     : null;
 
   // -------------------------------------------------------------------
-  // Primary mortgage — resolve via the ownership-aware helper when the
-  // input carries the new Mortgage typedef (ownership, homePrice, etc.),
-  // or via the legacy compat shim for pre-US2b fixtures.
+  // Primary mortgage — resolve via the ownership-aware helper. The
+  // production adapter (calc/getCanonicalInputs.js) and all in-tree
+  // fixtures now emit the canonical Mortgage shape directly, so no
+  // normalization is required (FR-025; feature 005 T030).
   // -------------------------------------------------------------------
-  const normalizedMortgage = normalizeMortgageShape(inputs.mortgage);
+  const mortgage = inputs.mortgage && typeof inputs.mortgage === 'object' ? inputs.mortgage : null;
 
   /** @type {Map<number, {paymentReal:number, propertyTaxReal:number, insuranceReal:number, hoaAnnualReal:number, oneTimeOutflowReal:number, saleProceedsReal:number}>} */
   const mortgageByYear = new Map();
-  if (normalizedMortgage) {
-    // Helpers may inject either a full resolveMortgage (new) OR the legacy
-    // computeMortgage (old signature). Detect by checking whether our
-    // normalized shape has an `ownership` field we can hand to resolveMortgage.
-    // When helpers.mortgage was overridden in tests, we respect the override.
-    if (mortgageFn === resolveMortgage || typeof mortgageFn === 'function') {
-      // Use resolveMortgage semantics — works for both new and legacy-shimmed
-      // shapes because normalizeMortgageShape produces a valid Mortgage.
-      try {
-        const bundle = mortgageFn === resolveMortgage || normalizedMortgage.ownership
-          ? resolveMortgage({
-              mortgage: normalizedMortgage,
-              currentAgePrimary: inputs.currentAgePrimary,
-              endAge: inputs.endAge,
-              fireAge,
-              rentAlternativeReal: inputs.rentAlternativeReal ?? 0,
-              homeLocation: normalizedMortgage.location,
-            })
-          : null;
-        if (bundle && Array.isArray(bundle.perYear)) {
-          for (const entry of bundle.perYear) {
-            const year = baseYear + entry.year;
-            mortgageByYear.set(year, {
-              paymentReal: entry.paymentReal,
-              propertyTaxReal: entry.propertyTaxReal,
-              insuranceReal: entry.insuranceReal,
-              hoaAnnualReal: entry.hoaAnnualReal,
-              oneTimeOutflowReal: entry.oneTimeOutflowReal,
-              saleProceedsReal: entry.saleProceedsReal,
-            });
-          }
-        }
-      } catch (_err) {
-        // If resolveMortgage rejects, fall back to the legacy computeMortgage
-        // path for test helpers that stub a minimal mortgage function.
-        const legacy = inputs.mortgage && typeof inputs.mortgage.balanceReal === 'number'
-          ? computeMortgage({
-              principalReal: inputs.mortgage.balanceReal,
-              annualRateReal: inputs.mortgage.interestRate,
-              termYears: inputs.mortgage.yearsRemaining,
-              startAge: inputs.currentAgePrimary,
-              extraPaymentReal: 0,
-            })
-          : null;
-        if (legacy && Array.isArray(legacy.perYear)) {
-          for (const entry of legacy.perYear) {
-            const year = baseYear + entry.year;
-            mortgageByYear.set(year, {
-              paymentReal: entry.paymentReal,
-              propertyTaxReal: 0,
-              insuranceReal: 0,
-              hoaAnnualReal: 0,
-              oneTimeOutflowReal: 0,
-              saleProceedsReal: 0,
-            });
-          }
+  if (mortgage && typeof mortgageFn === 'function') {
+    try {
+      const bundle = mortgageFn({
+        mortgage,
+        currentAgePrimary: inputs.currentAgePrimary,
+        endAge: inputs.endAge,
+        fireAge,
+        rentAlternativeReal: inputs.rentAlternativeReal ?? 0,
+        homeLocation: mortgage.location,
+      });
+      if (bundle && Array.isArray(bundle.perYear)) {
+        for (const entry of bundle.perYear) {
+          const year = baseYear + entry.year;
+          mortgageByYear.set(year, {
+            paymentReal: entry.paymentReal,
+            propertyTaxReal: entry.propertyTaxReal,
+            insuranceReal: entry.insuranceReal,
+            hoaAnnualReal: entry.hoaAnnualReal,
+            oneTimeOutflowReal: entry.oneTimeOutflowReal,
+            saleProceedsReal: entry.saleProceedsReal,
+          });
         }
       }
+    } catch (_err) {
+      // mortgageFn rejected — leave mortgageByYear empty; downstream
+      // year-loop will treat this as no mortgage burden for that input.
     }
   }
 

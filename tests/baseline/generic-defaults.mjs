@@ -16,7 +16,7 @@
  *
  * Field extraction notes:
  *   - Generic uses `agePerson1` / `agePerson2` / `person1Stocks` etc. field
- *     names instead of RR's Roger/Rebecca. Kids are dynamic (`childrenList`),
+ *     names instead of the RR variant's primary/secondary. Kids are dynamic (`childrenList`),
  *     not fixed two-kid. The hidden inputs carry initial value="36" but the
  *     live values are recomputed from BIRTHDATES (L1831) by updateAges().
  *   - As of 2026-04-20:

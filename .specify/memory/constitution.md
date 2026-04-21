@@ -157,6 +157,61 @@ commit. A chart that reads data from multiple modules MUST list all of them.
 — the two questions this codebase currently forces a human to trace through
 7 000-line files to answer.
 
+### VII. Bilingual First-Class — EN + zh-TW (NON-NEGOTIABLE)
+
+Every user-visible string added to either dashboard MUST ship with BOTH English
+AND Traditional Chinese translations in the same change set. No new
+hardcoded-English DOM text, JS template literal, chart title, tooltip, legend
+label, or status message. This is a merge gate, not a post-hoc cleanup task.
+
+**Required patterns for new strings:**
+
+1. **Static DOM text** — wire via `data-i18n="<key>"` (or `data-i18n-html` for
+   HTML-carrying strings) and add the key to the `TRANSLATIONS.en` AND
+   `TRANSLATIONS.zh` dicts in BOTH HTML files.
+2. **JS-rendered text** — use the `t(key, ...args)` helper with `{0}`, `{1}`,
+   ... placeholders. Never interpolate user-visible English directly into a
+   template literal. `switchLanguage` must trigger re-render so dynamic
+   strings flip with the toggle.
+3. **Chart.js titles / axis labels / legend / tooltip callbacks** — call `t(...)`
+   at the option-definition site.
+4. **Select `<option>` labels** — each option carries its own `data-i18n`.
+5. **Catalog sync** — add the new keys to `FIRE-Dashboard Translation
+   Catalog.md` in the same commit as the code change.
+
+**Exemptions (named identifiers that may stay English globally):**
+
+- **Proper names:** Roger, Rebecca, Janet, Ian (RR-personal content)
+- **FIRE-specific terms:** FIRE, Fat FIRE, Coast FIRE, Die With Zero, DWZ
+- **Industry-standard financial acronyms:** 401K, IRA, Roth, LTCG, RMD, MFJ,
+  AMT, SSA, PIA, FRA, SWR, P&I, HOA, NHI, APRC, SS, LTD
+- **Currency + numeric values:** `$`, dollar amounts, percentages
+- **Country ISO codes / ticker symbols:** US, TW, JP, etc. when used as
+  two-letter prefixes in flags or option IDs
+- **Emoji** (🔥 💀 🛡️ etc.) — language-neutral
+
+Prose that happens to contain acronyms is NOT exempt: "401K annual return"
+translates to "401K 年回報率", not left as English. The acronym stays; the
+surrounding words translate.
+
+**Enforcement:**
+
+- Any PR that adds user-visible English text without a paired zh-TW translation
+  is rejected unless the entire string falls under an Exemption above.
+- Manager-side quick audit: `grep -oE '[A-Za-z]{4,}' <changed html fragment>`
+  before merge — every match must be either inside `TRANSLATIONS`, behind a
+  `data-i18n` / `t()` call, or on the Exemption list.
+- Engineers dispatched on UI tasks MUST include translation work in their
+  task brief. Manager MUST reject engineer reports that claim "translation
+  deferred as tech debt" for user-visible strings unless the feature spec
+  explicitly defers i18n (rare; document the rationale).
+
+**Why:** The product serves bilingual households and a Taiwanese friend
+network. An English-only string silently breaks the 中文 toggle — users
+see half-translated UI and lose trust. Accumulated translation debt (caught
+in feature 005 cleanup) costs 3 phases of agent dispatch to undo. This
+principle prevents regression by making bilingual-at-merge the rule.
+
 ## Additional Constraints & Technology Standards
 
 **Runtime stack.** Vanilla JavaScript, Chart.js (CDN), HTML, inline CSS using
@@ -236,4 +291,8 @@ MUST be listed under `Complexity Tracking` with justification, or the plan
 MUST be revised until compliant. Two consecutive justified violations of the
 same principle trigger a constitution amendment discussion.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-19 | **Last Amended**: 2026-04-19
+**Version**: 1.1.0 | **Ratified**: 2026-04-19 | **Last Amended**: 2026-04-21
+
+**Changelog:**
+- 1.1.0 (2026-04-21, MINOR): Added Principle VII — Bilingual First-Class
+  (EN + zh-TW NON-NEGOTIABLE for all new user-visible strings).
