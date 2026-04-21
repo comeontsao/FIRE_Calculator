@@ -804,3 +804,29 @@ Per-country translated versions of notes + visa + pros + cons + tax: 11 countrie
 ### Exemption list (still English by design)
 
 Proper names (Roger, Rebecca, Janet, Ian), FIRE-specific terms (FIRE, Fat FIRE, Coast FIRE, Die With Zero, DWZ), industry acronyms (401K, IRA, Roth, LTCG, RMD, MFJ, AMT, SSA, PIA, FRA, SWR, P&I, HOA, NHI, APRC, SS, LTD, Trad), currency + dollar amounts + percentages, country ISO codes (US, TW, JP, etc.), emoji. "Section 121" (US tax code reference) kept English as an identifier.
+
+---
+
+## Category N — Feature 006 UI Noise Reset + Lifecycle Dock
+
+New keys added by feature 006. Present in BOTH RR and Generic `TRANSLATIONS.en` / `TRANSLATIONS.zh` dicts.
+
+| Key | EN | zh-TW | Usage |
+|-----|----|-------|-------|
+| `section.profile` | Profile & Plan | 檔案與計劃 | Section divider above Profile / Income / Assets cards |
+| `section.outlook` | Outlook | 前景預測 | Section divider above Lifecycle / Withdrawal / Roth Ladder / SS charts |
+| `section.compare` | Compare | 比較 | Section divider above country-scenarios grid + FIRE-by-Country + Timeline |
+| `section.track` | Track | 追蹤 | Section divider above Snapshot History |
+| `filter.label` | Filter: | 篩選： | Prefix label for the country-filter pill row (demoted from tab buttons) |
+| `header.yearsChipLabel` | Years to FIRE | 距 FIRE 年數 | Live-stat chip label in the compact sticky header |
+| `header.progressChipLabel` | Progress | 進度 | Live-stat chip label in the compact sticky header |
+| `sidebar.title` | Lifecycle | 生涯預測 | Heading of the pinnable right-side sidebar |
+| `sidebar.pinAria` | Pin lifecycle sidebar | 釘選生涯側欄 | aria-label for the pin button inside the sidebar |
+| `sidebar.closeAria` | Close lifecycle sidebar | 關閉生涯側欄 | aria-label for the close (×) button inside the sidebar |
+| `sidebar.toggleAria` | Toggle lifecycle sidebar | 切換生涯側欄 | aria-label for the header's sidebar-toggle button |
+| `sidebar.fireAgeLabel` | FIRE age | FIRE 歲數 | Caption fragment beneath the sidebar chart |
+| `sidebar.endPortfolioLabel` | End-of-life portfolio | 終老投資組合 | Caption fragment beneath the sidebar chart |
+
+**Feature 006 key count:** +13 keys each in `TRANSLATIONS.en` and `TRANSLATIONS.zh` in BOTH RR and Generic.
+
+All keys land in both files in lockstep per Constitution Principle I. No `footer.disclaimer` key was retired in this feature (that was feature 005).

@@ -16,6 +16,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Defaults snapshots — frozen legacy-shape objects mirroring each dashboard's
 // cold-load form state. When the HTML form defaults change, update these.
@@ -286,5 +289,152 @@ test('Parity smoke: RR-path and Generic-path outputs match on non-divergent fiel
         + `tests/fixtures/rr-generic-parity.js divergent[] with a comment explaining `
         + `the legitimate divergence.`,
     );
+  }
+});
+
+// ============================================================================
+// Test 4 — feature-006 DOM contract (RR + Generic)
+// ============================================================================
+//
+// Feature: specs/006-ui-noise-reset-lifecycle-dock/
+//
+// Purpose: lock the DOM + CSS contracts added by feature 006 — sticky compact
+// header (US2), pinnable lifecycle sidebar (US1), and the noise-reduction
+// visual-system pass (US3). Text-level grep on the raw HTML source; zero
+// deps, zero browser. Mirrors the existing smoke-harness style.
+//
+// Contracts enforced:
+//   - specs/006-ui-noise-reset-lifecycle-dock/contracts/sticky-header.contract.md
+//   - specs/006-ui-noise-reset-lifecycle-dock/contracts/lifecycle-sidebar.contract.md
+//   - specs/006-ui-noise-reset-lifecycle-dock/contracts/visual-system.contract.md
+
+const __dirname_006 = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT_006 = path.resolve(__dirname_006, '..', '..');
+const RR_HTML_PATH = path.join(REPO_ROOT_006, 'FIRE-Dashboard.html');
+const GENERIC_HTML_PATH = path.join(REPO_ROOT_006, 'FIRE-Dashboard-Generic.html');
+
+/**
+ * Count non-overlapping literal-substring occurrences of `needle` in `haystack`.
+ * Zero-dep; avoids regex escaping edge cases for selectors that contain `-`, `__`, etc.
+ */
+function countSubstr(haystack, needle) {
+  if (!needle) return 0;
+  let count = 0;
+  let idx = 0;
+  while (true) {
+    const next = haystack.indexOf(needle, idx);
+    if (next === -1) return count;
+    count += 1;
+    idx = next + needle.length;
+  }
+}
+
+/**
+ * Assert both dashboards contain `needle` at least `min` times.
+ */
+function assertPresentInBoth(haystacks, needle, { min = 1, label = needle } = {}) {
+  for (const [fileLabel, src] of haystacks) {
+    const occurrences = countSubstr(src, needle);
+    assert.ok(
+      occurrences >= min,
+      `feature-006 DOM contract: ${fileLabel} is missing '${label}' (expected ≥${min}, got ${occurrences}).`,
+    );
+  }
+}
+
+const NEW_I18N_KEYS_006 = Object.freeze([
+  'section.profile',
+  'section.outlook',
+  'section.compare',
+  'section.track',
+  'filter.label',
+  'header.yearsChipLabel',
+  'header.progressChipLabel',
+  'sidebar.title',
+  'sidebar.pinAria',
+  'sidebar.closeAria',
+  'sidebar.toggleAria',
+  'sidebar.fireAgeLabel',
+  'sidebar.endPortfolioLabel',
+]);
+
+test('feature-006 DOM contract: sticky header + sidebar + visual system present in RR and Generic', () => {
+  const rrSrc = fs.readFileSync(RR_HTML_PATH, 'utf8');
+  const genericSrc = fs.readFileSync(GENERIC_HTML_PATH, 'utf8');
+  const pairs = [
+    ['FIRE-Dashboard.html', rrSrc],
+    ['FIRE-Dashboard-Generic.html', genericSrc],
+  ];
+
+  // --- Sticky compact header (US2) ---
+  assertPresentInBoth(pairs, 'id="headerSentinel"', { label: '#headerSentinel' });
+  assertPresentInBoth(pairs, 'id="siteHeader"', { label: '#siteHeader' });
+  assertPresentInBoth(pairs, 'id="headerYearsValue"', { label: '#headerYearsValue' });
+  assertPresentInBoth(pairs, 'id="headerProgressValue"', { label: '#headerProgressValue' });
+  assertPresentInBoth(pairs, 'id="sidebarToggle"', { label: '#sidebarToggle' });
+  assertPresentInBoth(pairs, 'header--compact', { label: '.header--compact CSS class', min: 2 });
+
+  // --- Pinnable lifecycle sidebar (US1) ---
+  assertPresentInBoth(pairs, 'id="lifecycleSidebar"', { label: '#lifecycleSidebar' });
+  assertPresentInBoth(pairs, 'id="lifecycleSidebarCanvas"', { label: '#lifecycleSidebarCanvas' });
+  assertPresentInBoth(pairs, 'id="sidebarScrim"', { label: '#sidebarScrim' });
+  assertPresentInBoth(pairs, 'id="sidebarFireAge"', { label: '#sidebarFireAge' });
+  assertPresentInBoth(pairs, 'id="sidebarEndPortfolio"', { label: '#sidebarEndPortfolio' });
+
+  // --- Visual system (US3) ---
+  assertPresentInBoth(pairs, 'section-divider', { label: '.section-divider', min: 4 });
+  assertPresentInBoth(pairs, 'progress-rail', { label: '.progress-rail (rail refactor)', min: 1 });
+  assertPresentInBoth(pairs, 'filter-row__label', { label: '.filter-row__label (filter demotion)', min: 1 });
+
+  // FIRE Progress refactored to rail — the old span-3 FIRE-progress card must be gone.
+  // We assert the full composite string is NOT present. span-3 itself is used elsewhere
+  // in the grid, so we only guard the FIRE-progress wrapper specifically.
+  for (const [fileLabel, src] of pairs) {
+    // The old markup was: <div class="card span-3"> ... data-i18n="sec.fireProgress" ...
+    // Find every occurrence of `"sec.fireProgress"` and confirm the preceding ~200 chars
+    // do NOT contain `card span-3`. This is a heuristic but tight enough for a smoke gate.
+    let searchFrom = 0;
+    while (true) {
+      const hit = src.indexOf('sec.fireProgress', searchFrom);
+      if (hit === -1) break;
+      const window = src.slice(Math.max(0, hit - 200), hit);
+      assert.ok(
+        !window.includes('card span-3'),
+        `feature-006 DOM contract: ${fileLabel} still wraps FIRE Progress in a 'card span-3' card — expected progress-rail refactor.`,
+      );
+      searchFrom = hit + 1;
+    }
+  }
+
+  // --- i18n keys (V12) — both EN and ZH dicts, both files ---
+  // The `const TRANSLATIONS = { en: {...}, zh: {...} };` block is a single
+  // module-scope JS dict inside each HTML. We locate the `en: {` and `zh: {`
+  // openings relative to the outer `TRANSLATIONS` declaration and slice each
+  // dict body to confirm every new key appears inside it.
+  for (const [fileLabel, src] of pairs) {
+    const translationsAnchor = src.indexOf('const TRANSLATIONS');
+    assert.ok(translationsAnchor >= 0, `feature-006 DOM contract: ${fileLabel} has no 'const TRANSLATIONS' block.`);
+
+    const enStart = src.indexOf('en: {', translationsAnchor);
+    const zhStart = src.indexOf('zh: {', translationsAnchor);
+    assert.ok(enStart >= 0, `feature-006 DOM contract: ${fileLabel} has no 'en: {' dict opener inside TRANSLATIONS.`);
+    assert.ok(zhStart >= 0, `feature-006 DOM contract: ${fileLabel} has no 'zh: {' dict opener inside TRANSLATIONS.`);
+    assert.ok(zhStart > enStart, `feature-006 DOM contract: ${fileLabel} has 'zh' dict before 'en' dict — unexpected ordering.`);
+
+    // en dict: from `en: {` to `zh: {`.
+    // zh dict: from `zh: {` forward ~200k chars (safety cap past the zh body).
+    const enSlice = src.slice(enStart, zhStart);
+    const zhSlice = src.slice(zhStart, Math.min(src.length, zhStart + 200_000));
+
+    for (const key of NEW_I18N_KEYS_006) {
+      assert.ok(
+        enSlice.includes(`'${key}'`) || enSlice.includes(`"${key}"`),
+        `feature-006 DOM contract: ${fileLabel} TRANSLATIONS.en is missing key '${key}'.`,
+      );
+      assert.ok(
+        zhSlice.includes(`'${key}'`) || zhSlice.includes(`"${key}"`),
+        `feature-006 DOM contract: ${fileLabel} TRANSLATIONS.zh is missing key '${key}'.`,
+      );
+    }
   }
 });

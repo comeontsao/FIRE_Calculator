@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **005-canonical-public-launch** (branch `005-canonical-public-launch`).
+Active feature: **006-ui-noise-reset-lifecycle-dock** (branch `006-ui-noise-reset-lifecycle-dock`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/005-canonical-public-launch/plan.md](./specs/005-canonical-public-launch/plan.md)
-- Spec: [specs/005-canonical-public-launch/spec.md](./specs/005-canonical-public-launch/spec.md)
-- Research: [specs/005-canonical-public-launch/research.md](./specs/005-canonical-public-launch/research.md)
-- Data model: [specs/005-canonical-public-launch/data-model.md](./specs/005-canonical-public-launch/data-model.md)
-- Contracts: [specs/005-canonical-public-launch/contracts/](./specs/005-canonical-public-launch/contracts/)
-- Quickstart: [specs/005-canonical-public-launch/quickstart.md](./specs/005-canonical-public-launch/quickstart.md)
+- Plan: [specs/006-ui-noise-reset-lifecycle-dock/plan.md](./specs/006-ui-noise-reset-lifecycle-dock/plan.md)
+- Spec: [specs/006-ui-noise-reset-lifecycle-dock/spec.md](./specs/006-ui-noise-reset-lifecycle-dock/spec.md)
+- Research: [specs/006-ui-noise-reset-lifecycle-dock/research.md](./specs/006-ui-noise-reset-lifecycle-dock/research.md)
+- Data model: [specs/006-ui-noise-reset-lifecycle-dock/data-model.md](./specs/006-ui-noise-reset-lifecycle-dock/data-model.md)
+- Contracts: [specs/006-ui-noise-reset-lifecycle-dock/contracts/](./specs/006-ui-noise-reset-lifecycle-dock/contracts/)
+- Quickstart: [specs/006-ui-noise-reset-lifecycle-dock/quickstart.md](./specs/006-ui-noise-reset-lifecycle-dock/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
-- Backlog: [BACKLOG.md](./BACKLOG.md) — feature 005 covers F2 retry + U1/U2 + D1/D3/D6 + disclaimer + public-launch prep
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md)
+- Backlog: [BACKLOG.md](./BACKLOG.md)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator
