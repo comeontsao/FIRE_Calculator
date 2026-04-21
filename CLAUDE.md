@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **006-ui-noise-reset-lifecycle-dock** (branch `006-ui-noise-reset-lifecycle-dock`).
+Active feature: **007-bracket-fill-tax-smoothing** (branch `007-bracket-fill-tax-smoothing`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/006-ui-noise-reset-lifecycle-dock/plan.md](./specs/006-ui-noise-reset-lifecycle-dock/plan.md)
-- Spec: [specs/006-ui-noise-reset-lifecycle-dock/spec.md](./specs/006-ui-noise-reset-lifecycle-dock/spec.md)
-- Research: [specs/006-ui-noise-reset-lifecycle-dock/research.md](./specs/006-ui-noise-reset-lifecycle-dock/research.md)
-- Data model: [specs/006-ui-noise-reset-lifecycle-dock/data-model.md](./specs/006-ui-noise-reset-lifecycle-dock/data-model.md)
-- Contracts: [specs/006-ui-noise-reset-lifecycle-dock/contracts/](./specs/006-ui-noise-reset-lifecycle-dock/contracts/)
-- Quickstart: [specs/006-ui-noise-reset-lifecycle-dock/quickstart.md](./specs/006-ui-noise-reset-lifecycle-dock/quickstart.md)
+- Plan: [specs/007-bracket-fill-tax-smoothing/plan.md](./specs/007-bracket-fill-tax-smoothing/plan.md)
+- Spec: [specs/007-bracket-fill-tax-smoothing/spec.md](./specs/007-bracket-fill-tax-smoothing/spec.md)
+- Research: [specs/007-bracket-fill-tax-smoothing/research.md](./specs/007-bracket-fill-tax-smoothing/research.md)
+- Data model: [specs/007-bracket-fill-tax-smoothing/data-model.md](./specs/007-bracket-fill-tax-smoothing/data-model.md)
+- Contracts: [specs/007-bracket-fill-tax-smoothing/contracts/](./specs/007-bracket-fill-tax-smoothing/contracts/)
+- Quickstart: [specs/007-bracket-fill-tax-smoothing/quickstart.md](./specs/007-bracket-fill-tax-smoothing/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

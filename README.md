@@ -1,40 +1,121 @@
+<p align="center">
+  <img src="docs/readme-header.png" alt="FIRE Calculator — tells you WHEN you can go FIRE, not just when you planned to" width="100%">
+</p>
+
 # FIRE Calculator
 
-A zero-build, open-source Financial Independence / Retire Early dashboard. Runs entirely in your browser. No account needed. No data leaves your device.
+> **Most FIRE planners ask you when you want to retire, then check if the numbers fit.**
+> **This one does the opposite: it tells you when you can actually go.**
 
-## Live demo
+Drop in your real balances, your real income, your real spending. The dashboard solves for the earliest year you can leave your job and still have the plan survive — under three different "how aggressive do you feel" modes (Safe · Exact · Die-With-Zero), across eleven candidate retirement destinations, with a tax-optimized withdrawal strategy that flattens your lifetime tax bill. Drag the retirement age on the chart to see what happens if you leave a year earlier, or a year later. The whole thing runs in your browser. Nothing gets uploaded anywhere.
 
-[https://<username>.github.io/FIRE_Calculator/](https://<username>.github.io/FIRE_Calculator/)
+---
 
-(URL is finalized after the first GitHub Pages deploy — see `PUBLISH.md`.)
+## What makes this different
+
+Most calculators treat FIRE as a single number: *"You'll be ready at 55."* This one shows you the shape of the thing:
+
+- **Drag to ask "what if"** — Grab the FIRE marker on the Full Portfolio Lifecycle chart. Drop it on any age. Every chart, KPI, and status banner recomputes in the same frame so you can see exactly what retiring earlier or later costs you.
+- **Three retirement postures** — **Safe** (phase-transition buffers + end-balance ≥ 0), **Exact** (end with a chosen cushion), **Die-With-Zero** (spend the last dollar the day you die). Same math engine, three different feasibility constraints.
+- **Bracket-fill tax smoothing** *(coming in feature 007)* — Instead of drawing the 12% bracket in a concentrated 3-year burst then leaving headroom wasted, the tool fills the bracket every year and routes the excess into taxable brokerage. Honest about IRMAA, Rule of 55, and the 5-year Roth clock — every rule that changes your answer gets a visible indicator on the chart.
+- **Geo-arbitrage, real numbers** — Eleven countries, each with its own cost-of-living, visa cost, relocation cost, healthcare delta, and tax treatment. Switch between them without contaminating each card's FIRE number with the previous country's assumptions.
+- **Transparent, not magical** — When a rule (Social Security taxable portion, IRMAA threshold, RMD after 73, Rule of 55 unlock, home sale at FIRE) affects a given year, the chart shows you. No black box.
+
+---
+
+## Quick start
+
+Open either dashboard file directly in a browser:
+
+- **`FIRE-Dashboard-Generic.html`** — public version. Fill in your own numbers.
+- **`FIRE-Dashboard.html`** — personalized version (Roger & Rebecca's, included as the reference build).
+
+Or serve locally:
+
+```bash
+python -m http.server 8000
+# then visit http://localhost:8000/
+```
+
+The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm install`. No build step. No account. No accounts, ever.
+
+---
 
 ## Features
 
-- Per-year lifecycle projection — net worth, spend, and portfolio trajectory over the full retirement horizon
-- Tax-aware withdrawal modeling (401k / IRA / taxable / Roth buckets, bridge funding)
-- Inflation-adjusted (real) dollar metrics throughout
-- Mortgage, college, second-home, and student-loan expense overlays
-- Dual-locale UI — English and Traditional Chinese (zh-TW) toggle
-- Drag-to-adjust FIRE age directly on the chart with feasibility feedback
+- **Full Portfolio Lifecycle chart** — accumulation → FIRE → drawdown → Social Security, drawn as a single phase-colored curve. Draggable FIRE marker. Pinnable sidebar mirror so the chart follows you as you edit inputs.
+- **Lifetime Withdrawal Strategy chart** — per-year stacked bars showing Traditional 401K, Roth, taxable stocks (LTCG), and cash draws, with tax-optimal ordering. Effective tax rate overlay.
+- **KPI row** — Net Worth, FIRE Number, Progress %, Years to FIRE.
+- **Country comparison grid** — eleven destinations, each card ranked by its own FIRE number and years-to-FIRE, with visa + relocation + healthcare overlays.
+- **Milestone timeline** — when you hit $1M, when 401K unlocks at 59.5, when SS starts, when RMDs kick in.
+- **Mortgage + Second-home planning** — buy now, buy later, keep / sell / inherit at FIRE, rental income overlay.
+- **College planning** — per-kid cost estimates, loan-funding split, parent-PLUS modeling.
+- **Healthcare delta** — per-country pre-65 and post-65 estimates with user overrides.
+- **Snapshot history** — save your numbers as a CSV row, track progress over time.
+- **Bilingual** — English and Traditional Chinese (zh-TW), toggled at the top-right.
+- **Dark theme**, responsive down to mobile, no framework.
 
-## Run locally
+---
 
-Clone, then `python -m http.server 8000` (or any static server) and visit `http://localhost:8000/`. Or simply double-click `index.html`.
+## Privacy — genuinely
+
+Everything runs locally. Your figures live in your browser's `localStorage` and your CSV snapshot file (if you choose to save one). Nothing gets sent to a server. There is no server. No analytics. No third-party scripts beyond Chart.js from CDN for rendering. If you open the file from your filesystem (`file://...`) it still works.
+
+You can close the browser, copy the HTML file to an air-gapped machine, and it'll run there too.
+
+---
 
 ## Tech
 
-Vanilla JS (ES2022 modules). Chart.js via CDN. Zero build step, zero npm, zero dependencies. Tested via `bash tests/runner.sh` (Node 20+).
+- Vanilla JavaScript (ES2020+). No build step, no transpiler, no bundler.
+- Chart.js loaded from CDN. Zero other runtime dependencies.
+- Two parallel HTML files (`FIRE-Dashboard.html` + `FIRE-Dashboard-Generic.html`) maintained in lockstep.
+- Spec-driven development via [GitHub spec-kit](https://github.com/github/spec-kit). Every feature ships with a spec, a plan, a task list, contracts, and a closeout in `specs/`.
+- Tested via Node unit tests (`tests/unit/*.test.js`) + a browser smoke harness (`tests/baseline/browser-smoke.test.js`).
 
-## License
+---
 
-[MIT](LICENSE)
+## Run the tests
 
-## Contributions
+```bash
+node --test "tests/unit/*.test.js"
+node tests/baseline/browser-smoke.test.js
+```
 
-This is a read-only public mirror. For contributions or bugs, please open an issue on GitHub.
+Both should show all green.
+
+---
+
+## Project layout
+
+```
+FIRE-Dashboard.html             # personal (RR) dashboard — reference build
+FIRE-Dashboard-Generic.html     # public / customizable version
+FIRE-snapshots.csv              # append-only snapshot history
+calc/                           # extracted calc modules (gradual migration out of inline)
+specs/                          # feature specs + plans + tasks + closeouts
+tests/                          # unit tests + browser smoke harness
+docs/                           # README assets
+```
+
+---
+
+## Contributing
+
+This project is open source under MIT. It's maintained as a personal tool with a public mirror; external contributions are welcome via issues and PRs, but the scope is curated — features that don't fit the "runs in a browser, no server, tells you when you can go" philosophy may be declined with thanks.
+
+---
 
 ## Disclaimer
 
-⚠️ For research and educational purposes only — not financial advice.
+⚠️ **For research and educational purposes only — not financial advice.**
 
-Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.
+Projections are estimates based on simplified models with assumed constant rates of return, inflation, and tax brackets. Past performance does not guarantee future results. Social Security estimates are approximate. Tax brackets, IRMAA thresholds, Medicare premiums, and other figures update annually; the tool's defaults reflect the year of its last release.
+
+Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. All data you enter stays on your device — this site never saves, uploads, or transmits any of your information.
+
+---
+
+## License
+
+[MIT](LICENSE). Use it, fork it, embed it in your own tool, ship your own variant. No attribution required but appreciated.
