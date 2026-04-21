@@ -5548,10 +5548,7 @@ function renderScenarios(inp) {
   const grid = document.getElementById('scenarioGrid');
   grid.innerHTML = '';
   scenarios.forEach(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
-    const estFireAge = inp.ageRoger + yrs;
-    const fireNum = getTwoPhaseFireNum(inp, sSpend, estFireAge);
+    const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
     const card = document.createElement('div');
     card.className = 'scenario-card' + (s.id === selectedScenario ? ' selected' : '');
     card.onclick = () => { selectedScenario = s.id; recalcAll(); };
@@ -5628,6 +5625,26 @@ function getSelectedVisaCostAnnual() {
 // Get effective annual spend for a given scenario (base + visa)
 function getScenarioEffectiveSpend(s) {
   return s.annualSpend + (s.visaCostAnnual || 0);
+}
+
+// Compute FIRE numbers for a scenario using ITS OWN relocation + healthcare
+// (not the currently-selected scenario's). yearsToFIRE / getTwoPhaseFireNum
+// internally read `selectedScenario` for relocation cost and healthcare delta,
+// so we temporarily swap it while calculating, then restore. This keeps each
+// scenario card showing its own true numbers regardless of which country the
+// user has currently selected as their primary target.
+function computeScenarioFireFigures(inp, s) {
+  const prevSelected = selectedScenario;
+  selectedScenario = s.id;
+  try {
+    const sSpend = getScenarioEffectiveSpend(s);
+    const yrs = yearsToFIRE(inp, sSpend);
+    const estFireAge = inp.ageRoger + yrs;
+    const fireNum = getTwoPhaseFireNum(inp, sSpend, estFireAge);
+    return { sSpend, yrs, estFireAge, fireNum };
+  } finally {
+    selectedScenario = prevSelected;
+  }
 }
 
 // Get effective annual spend = base spend + annual visa cost (for selected scenario)
@@ -6195,15 +6212,13 @@ function renderCountryChart(inp) {
   if (charts.country) charts.country.destroy();
 
   // Sort by years to FIRE (fastest first)
+  // Each scenario is calculated with ITS OWN relocation + healthcare — see
+  // computeScenarioFireFigures. Without this, flipping between country targets
+  // would shift every bar because the selected country's costs would bleed
+  // into every other country's calc.
   const sorted = scenarios.map(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
-    const estFireAge = inp.ageRoger + yrs;
-    return {
-      ...s,
-      yrs,
-      fireNum: getTwoPhaseFireNum(inp, sSpend, estFireAge),
-    };
+    const { yrs, fireNum } = computeScenarioFireFigures(inp, s);
+    return { ...s, yrs, fireNum };
   }).sort((a, b) => a.yrs - b.yrs);
 
   // Color by language advantage
@@ -6419,14 +6434,15 @@ function renderTimeline(inp) {
   if (m1m) milestones.push({ label: 'Millionaire!', year: m1m.year, desc: `Age ${m1m.age}`, amount: 1000000, type: 'future' });
 
   // FIRE milestone for each scenario (using two-phase model)
+  // Per-scenario calc — avoids the selectedScenario leak in getSelectedRelocationCost /
+  // getHealthcareDeltaAnnual that would otherwise score every country against the
+  // currently-selected country's costs.
   scenarios.forEach(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
+    const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
     if (yrs < 40) {
       const hit = projection[yrs];
       if (hit) {
-        const needed = getTwoPhaseFireNum(inp, sSpend, hit.age);
-        milestones.push({ label: `${s.flag} FIRE (${s.name})`, year: hit.year, desc: `Age ${hit.age} — $${sSpend.toLocaleString()}/yr`, amount: Math.round(needed), type: 'future' });
+        milestones.push({ label: `${s.flag} FIRE (${s.name})`, year: hit.year, desc: `Age ${hit.age} — $${sSpend.toLocaleString()}/yr`, amount: Math.round(fireNum), type: 'future' });
       }
     }
   });
@@ -6509,9 +6525,9 @@ const STATE_KEY = 'fire_dashboard_state';
 // All input IDs that should be saved/restored
 const PERSIST_IDS = [
   'annualIncome', 'raiseRate', 'taxRate',
-  'roger401k', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
+  'roger401k', 'roger401kRoth', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
   'returnRate', 'return401k', 'inflationRate', 'swr',
-  'monthlySavings', 'contrib401k', 'empMatch',
+  'monthlySavings', 'contrib401k', 'contrib401kRoth', 'taxTrad', 'empMatch',
   'ssWorkStart', 'ssAvgEarnings', 'ssRebeccaOwn',
   'bufferUnlock', 'bufferSS', 'terminalBuffer', 'endAge',
   'whatIfIncome', 'whatIfSpend', 'whatIfReturn',
@@ -6537,6 +6553,8 @@ const SLIDER_LABELS = {
   swr:            { el: 'swrVal',          fmt: v => v + '%' },
   monthlySavings: { el: 'monthSaveVal',    fmt: v => '$' + Number(v).toLocaleString() },
   contrib401k:    { el: 'contrib401kVal',  fmt: v => '$' + Number(v).toLocaleString() },
+  contrib401kRoth:{ el: 'contrib401kRothVal', fmt: v => '$' + Number(v).toLocaleString() },
+  taxTrad:        { el: 'taxTradVal',      fmt: v => Number(v).toFixed(1) + '%' },
   empMatch:       { el: 'empMatchVal',     fmt: v => '$' + Number(v).toLocaleString() },
   bufferUnlock:   { el: 'bufferUnlockVal', fmt: v => v },
   bufferSS:       { el: 'bufferSSVal',     fmt: v => v },

@@ -509,13 +509,74 @@
 
   .coast-fire-note strong { color: var(--accent); }
 
-  .update-note {
-    text-align: center;
-    padding: 16px;
+  /* Merged footer: ops (last updated + tip) + legal disclaimer in one 2-column panel.
+     Replaces the previous .update-note mid-page block AND the bottom footer.disclaimer. */
+  .footer-panel {
+    max-width: 1180px;
+    margin: 3rem auto 1.25rem;
+    padding: 0 16px;
+  }
+  .footer-panel__grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 1.25rem;
+    padding: 22px 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .footer-panel__block { min-width: 0; text-align: left; }
+  .footer-panel__block + .footer-panel__block {
+    padding-left: 1.25rem;
+    border-left: 1px solid var(--border);
+  }
+  .footer-panel__block p { margin: 0 0 8px; }
+  .footer-panel__block p:last-child { margin-bottom: 0; }
+  .footer-panel__meta {
     font-size: 0.82em;
     color: var(--text-dim);
-    border-top: 1px solid var(--border);
-    margin-top: 30px;
+    line-height: 1.55;
+  }
+  .footer-panel__meta strong { color: var(--text); font-weight: 600; }
+  .footer-panel__dot { margin: 0 0.4rem; opacity: 0.55; }
+  .footer-panel__tip {
+    padding: 10px 12px;
+    font-size: 0.82em;
+    line-height: 1.55;
+    color: var(--text);
+    background: rgba(108,99,255,0.08);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+  }
+  .footer-panel__headline {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .footer-panel__body {
+    font-size: 0.8em;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .footer-panel__attribution {
+    max-width: 1180px;
+    margin: 10px auto 1.5rem;
+    padding: 0 24px;
+    font-size: 0.72em;
+    color: var(--text-dim);
+    opacity: 0.7;
+    text-align: center;
+  }
+  @media (max-width: 780px) {
+    .footer-panel__grid { grid-template-columns: 1fr; padding: 18px 20px; }
+    .footer-panel__block + .footer-panel__block {
+      border-left: none;
+      border-top: 1px solid var(--border);
+      margin-top: 1rem;
+      padding-top: 1rem;
+      padding-left: 0;
+    }
   }
 
   /* Snapshot tracking */
@@ -892,21 +953,6 @@
   .infeasibility-banner__icon { font-size: 1.15em; }
   .infeasibility-banner__deficit { margin-left: auto; color: var(--text-dim); font-size: 0.88em; font-weight: 400; }
 
-  /* Feature 005 — Legal/CYA disclaimer footer (FR-011, FR-013). Reuses existing tokens only. */
-  footer.disclaimer {
-    max-width: 960px;
-    margin: 2rem auto 1rem;
-    padding: 1.25rem 1.5rem;
-    background: var(--card);
-    border-top: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-dim);
-    font-size: 0.85rem;
-    line-height: 1.5;
-    text-align: center;
-  }
-  footer.disclaimer p { margin: 0.5rem 0; }
-  footer.disclaimer .disclaimer-intro { font-weight: 600; color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -1808,11 +1854,6 @@
     </div>
   </div>
 
-</div>
-
-<div class="update-note">
-  <p><span data-i18n="footer.lastUpdated">Last updated:</span> <span id="lastUpdate">—</span> | <span data-i18n="footer.disclaimer">All projections use real (inflation-adjusted) returns | This is a planning tool, not financial advice</span></p>
-  <p style="margin-top:6px" data-i18n="footer.tip">💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!</p>
 </div>
 
 <!-- ==================== SNAPSHOT HISTORY ==================== -->
@@ -2879,7 +2920,7 @@ const TRANSLATIONS = {
     'snap.importCSV': '📥 Import CSV',
     'snap.clearAll': '🗑️ Clear All',
     'footer.lastUpdated': 'Last updated:',
-    'footer.disclaimer': 'All projections use real (inflation-adjusted) returns | This is a planning tool, not financial advice',
+    'footer.method': 'Uses real (inflation-adjusted) returns',
     'footer.tip': '💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!',
     'chart.lifecycle': 'Full Portfolio Lifecycle',
     'chart.portfolioBalance': 'Portfolio Balance Over Time',
@@ -3550,7 +3591,7 @@ const TRANSLATIONS = {
     'snap.importCSV': '📥 匯入 CSV',
     'snap.clearAll': '🗑️ 清除全部',
     'footer.lastUpdated': '最後更新：',
-    'footer.disclaimer': '所有預測使用實質（扣除通膨）回報率 | 這是規劃工具，非財務建議',
+    'footer.method': '使用實質（扣除通膨）回報率',
     'footer.tip': '💡 提示：調整任何滑桿或輸入欄位，所有計算即時更新。將此頁加入書籤，每月更新你的數據！',
     'chart.lifecycle': '完整投資組合生命週期',
     'chart.portfolioBalance': '投資組合餘額走勢',
@@ -6859,10 +6900,7 @@ function renderScenarios(inp) {
   const grid = document.getElementById('scenarioGrid');
   grid.innerHTML = '';
   scenarios.forEach(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
-    const estFireAge = inp.ageRoger + yrs;
-    const fireNum = getTwoPhaseFireNum(inp, sSpend, estFireAge);
+    const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
     const card = document.createElement('div');
     card.className = 'scenario-card' + (s.id === selectedScenario ? ' selected' : '');
     card.onclick = () => { selectedScenario = s.id; recalcAll(); };
@@ -6944,6 +6982,26 @@ function getSelectedVisaCostAnnual() {
 // Get effective annual spend for a given scenario (base + visa)
 function getScenarioEffectiveSpend(s) {
   return s.annualSpend + (s.visaCostAnnual || 0);
+}
+
+// Compute FIRE numbers for a scenario using ITS OWN relocation + healthcare
+// (not the currently-selected scenario's). yearsToFIRE / getTwoPhaseFireNum
+// internally read `selectedScenario` for relocation cost and healthcare delta,
+// so we temporarily swap it while calculating, then restore. This keeps every
+// country card / bar / timeline marker showing its own true numbers regardless
+// of which country the user has currently selected as their primary target.
+function computeScenarioFireFigures(inp, s) {
+  const prevSelected = selectedScenario;
+  selectedScenario = s.id;
+  try {
+    const sSpend = getScenarioEffectiveSpend(s);
+    const yrs = yearsToFIRE(inp, sSpend);
+    const estFireAge = inp.ageRoger + yrs;
+    const fireNum = getTwoPhaseFireNum(inp, sSpend, estFireAge);
+    return { sSpend, yrs, estFireAge, fireNum };
+  } finally {
+    selectedScenario = prevSelected;
+  }
 }
 
 // Get effective annual spend = base spend + annual visa cost (for selected scenario)
@@ -7708,15 +7766,13 @@ function renderCountryChart(inp) {
   if (charts.country) charts.country.destroy();
 
   // Sort by years to FIRE (fastest first)
+  // Each scenario is calculated with ITS OWN relocation + healthcare — see
+  // computeScenarioFireFigures. Without this, flipping between country targets
+  // would shift every bar because the selected country's costs would bleed
+  // into every other country's calc.
   const sorted = scenarios.map(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
-    const estFireAge = inp.ageRoger + yrs;
-    return {
-      ...s,
-      yrs,
-      fireNum: getTwoPhaseFireNum(inp, sSpend, estFireAge),
-    };
+    const { yrs, fireNum } = computeScenarioFireFigures(inp, s);
+    return { ...s, yrs, fireNum };
   }).sort((a, b) => a.yrs - b.yrs);
 
   // Color by language advantage
@@ -7932,14 +7988,15 @@ function renderTimeline(inp) {
   if (m1m) milestones.push({ label: 'Millionaire!', year: m1m.year, desc: `Age ${m1m.age}`, amount: 1000000, type: 'future' });
 
   // FIRE milestone for each scenario (using two-phase model)
+  // Per-scenario calc — avoids the selectedScenario leak in getSelectedRelocationCost /
+  // getHealthcareDeltaAnnual that would otherwise score every country against the
+  // currently-selected country's costs.
   scenarios.forEach(s => {
-    const sSpend = getScenarioEffectiveSpend(s);
-    const yrs = yearsToFIRE(inp, sSpend);
+    const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
     if (yrs < 40) {
       const hit = projection[yrs];
       if (hit) {
-        const needed = getTwoPhaseFireNum(inp, sSpend, hit.age);
-        milestones.push({ label: `${s.flag} FIRE (${s.name})`, year: hit.year, desc: `Age ${hit.age} — $${sSpend.toLocaleString()}/yr`, amount: Math.round(needed), type: 'future' });
+        milestones.push({ label: `${s.flag} FIRE (${s.name})`, year: hit.year, desc: `Age ${hit.age} — $${sSpend.toLocaleString()}/yr`, amount: Math.round(fireNum), type: 'future' });
       }
     }
   });
@@ -8022,9 +8079,9 @@ const STATE_KEY = 'fire_dashboard_state';
 // All input IDs that should be saved/restored
 const PERSIST_IDS = [
   'annualIncome', 'raiseRate', 'taxRate',
-  'roger401k', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
+  'roger401k', 'roger401kRoth', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
   'returnRate', 'return401k', 'inflationRate', 'swr',
-  'monthlySavings', 'contrib401k', 'empMatch',
+  'monthlySavings', 'contrib401k', 'contrib401kRoth', 'taxTrad', 'empMatch',
   'ssWorkStart', 'ssAvgEarnings', 'ssRebeccaOwn',
   'bufferUnlock', 'bufferSS', 'terminalBuffer', 'endAge',
   'whatIfIncome', 'whatIfSpend', 'whatIfReturn',
@@ -8050,6 +8107,8 @@ const SLIDER_LABELS = {
   swr:            { el: 'swrVal',          fmt: v => v + '%' },
   monthlySavings: { el: 'monthSaveVal',    fmt: v => '$' + Number(v).toLocaleString() },
   contrib401k:    { el: 'contrib401kVal',  fmt: v => '$' + Number(v).toLocaleString() },
+  contrib401kRoth:{ el: 'contrib401kRothVal', fmt: v => '$' + Number(v).toLocaleString() },
+  taxTrad:        { el: 'taxTradVal',      fmt: v => Number(v).toFixed(1) + '%' },
   empMatch:       { el: 'empMatchVal',     fmt: v => '$' + Number(v).toLocaleString() },
   bufferUnlock:   { el: 'bufferUnlockVal', fmt: v => v },
   bufferSS:       { el: 'bufferSSVal',     fmt: v => v },
@@ -8903,14 +8962,32 @@ if (window.__calcBootstrapReady) {
 }
 </script>
 
-<!-- Feature 005 — Legal/CYA disclaimer footer (FR-011). i18n keys: disclaimer.intro, disclaimer.body. -->
-<footer class="disclaimer" role="contentinfo">
-  <p class="disclaimer-intro" data-i18n="disclaimer.intro">
-    ⚠️ For research and educational purposes only — not financial advice.
-  </p>
-  <p class="disclaimer-body" data-i18n="disclaimer.body">
-    Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.
-  </p>
+<!-- Merged footer (Feature 005 FR-011/FR-013 + former .update-note). Two columns:
+     LEFT = stay-current/ops (last updated, methodology note, usage tip).
+     RIGHT = legal disclaimer (research-only intro + DYOR body). Left-aligned, not
+     centered — collapses to one column under 780px. -->
+<footer class="footer-panel" role="contentinfo">
+  <div class="footer-panel__grid">
+    <section class="footer-panel__block">
+      <p class="footer-panel__meta">
+        <strong data-i18n="footer.lastUpdated">Last updated:</strong>
+        <span id="lastUpdate">—</span>
+        <span class="footer-panel__dot" aria-hidden="true">·</span>
+        <span data-i18n="footer.method">Uses real (inflation-adjusted) returns</span>
+      </p>
+      <p class="footer-panel__tip" data-i18n="footer.tip">
+        💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!
+      </p>
+    </section>
+    <section class="footer-panel__block">
+      <p class="footer-panel__headline" data-i18n="disclaimer.intro">
+        ⚠️ For research and educational purposes only — not financial advice.
+      </p>
+      <p class="footer-panel__body" data-i18n="disclaimer.body">
+        Projections are estimates. Do your own research (DYOR) and consult a qualified financial advisor before making financial decisions. The authors assume no responsibility for decisions made from this tool. Source code: MIT-licensed, open-source.
+      </p>
+    </section>
+  </div>
 </footer>
 </body>
 </html>
