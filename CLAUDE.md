@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **007-bracket-fill-tax-smoothing** (branch `007-bracket-fill-tax-smoothing`).
+Active feature: **008-multi-strategy-withdrawal-optimizer** (branch `008-multi-strategy-withdrawal-optimizer`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/007-bracket-fill-tax-smoothing/plan.md](./specs/007-bracket-fill-tax-smoothing/plan.md)
-- Spec: [specs/007-bracket-fill-tax-smoothing/spec.md](./specs/007-bracket-fill-tax-smoothing/spec.md)
-- Research: [specs/007-bracket-fill-tax-smoothing/research.md](./specs/007-bracket-fill-tax-smoothing/research.md)
-- Data model: [specs/007-bracket-fill-tax-smoothing/data-model.md](./specs/007-bracket-fill-tax-smoothing/data-model.md)
-- Contracts: [specs/007-bracket-fill-tax-smoothing/contracts/](./specs/007-bracket-fill-tax-smoothing/contracts/)
-- Quickstart: [specs/007-bracket-fill-tax-smoothing/quickstart.md](./specs/007-bracket-fill-tax-smoothing/quickstart.md)
+- Plan: [specs/008-multi-strategy-withdrawal-optimizer/plan.md](./specs/008-multi-strategy-withdrawal-optimizer/plan.md)
+- Spec: [specs/008-multi-strategy-withdrawal-optimizer/spec.md](./specs/008-multi-strategy-withdrawal-optimizer/spec.md)
+- Research: [specs/008-multi-strategy-withdrawal-optimizer/research.md](./specs/008-multi-strategy-withdrawal-optimizer/research.md)
+- Data model: [specs/008-multi-strategy-withdrawal-optimizer/data-model.md](./specs/008-multi-strategy-withdrawal-optimizer/data-model.md)
+- Contracts: [specs/008-multi-strategy-withdrawal-optimizer/contracts/](./specs/008-multi-strategy-withdrawal-optimizer/contracts/)
+- Quickstart: [specs/008-multi-strategy-withdrawal-optimizer/quickstart.md](./specs/008-multi-strategy-withdrawal-optimizer/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

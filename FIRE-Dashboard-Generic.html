@@ -1535,7 +1535,7 @@
         <div id="mtgAlreadyOwnControls" style="display:none;margin-bottom:12px">
           <div class="control-group">
             <label><span data-i18n="mtg.yearsPaid">Years of mortgage already paid</span> <span class="val" id="mtgYearsPaidVal">5</span></label>
-            <input type="range" id="mtgYearsPaid" min="0" max="30" step="1" value="5" oninput="document.getElementById('mtgYearsPaidVal').textContent=this.value;recalcAll()">
+            <input type="range" id="mtgYearsPaid" min="0" max="40" step="1" value="5" oninput="document.getElementById('mtgYearsPaidVal').textContent=this.value;recalcAll()">
           </div>
         </div>
         <div id="mtgBuyingInControls" style="display:none;margin-bottom:12px">
@@ -1576,7 +1576,7 @@
           </div>
           <div class="control-group">
             <label><span data-i18n="mtg.term">Loan Term</span> <span class="val" id="mtgTermVal">30 yrs</span></label>
-            <input type="range" id="mtgTerm" min="15" max="30" step="5" value="30" oninput="document.getElementById('mtgTermVal').textContent=this.value+' yrs';(function(){var yp=document.getElementById('mtgYearsPaid');if(yp){yp.max=this.value;if(+yp.value>+yp.max){yp.value=yp.max;document.getElementById('mtgYearsPaidVal').textContent=yp.value;}}}).call(this);recalcAll()">
+            <input type="range" id="mtgTerm" min="15" max="40" step="5" value="30" oninput="document.getElementById('mtgTermVal').textContent=this.value+' yrs';(function(){var yp=document.getElementById('mtgYearsPaid');if(yp){yp.max=this.value;if(+yp.value>+yp.max){yp.value=yp.max;document.getElementById('mtgYearsPaidVal').textContent=yp.value;}}}).call(this);recalcAll()">
           </div>
           <div class="input-group">
             <label data-i18n="mtg.propertyTax">Property Tax (annual $)</label>
@@ -1723,6 +1723,30 @@
     </div>
     <p style="font-size:0.82em;color:var(--text-dim);margin-top:0;margin-bottom:12px" data-i18n="tw.prose" data-i18n-html></p>
 
+    <!-- ==================== Feature 008 — Objective Selector + Winner Banner ==================== -->
+    <!-- User picks objective; winner banner shows the auto-selected strategy under that objective. -->
+    <div class="withdrawal-objective-selector" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+      <span data-i18n="withdrawal.objective.label" style="font-size:0.82em;color:var(--text-dim)">Optimization goal:</span>
+      <div role="radiogroup" style="display:inline-flex;gap:6px">
+        <button id="btnObjectiveEstate" role="radio" aria-checked="true"
+                onclick="setWithdrawalObjective('leave-more-behind')"
+                style="padding:6px 12px;font-size:0.82em;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-weight:600">
+          <span data-i18n="withdrawal.objective.estate">🧳 Leave more behind</span>
+        </button>
+        <button id="btnObjectiveTax" role="radio" aria-checked="false"
+                onclick="setWithdrawalObjective('retire-sooner-pay-less-tax')"
+                style="padding:6px 12px;font-size:0.82em;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer;font-weight:600">
+          <span data-i18n="withdrawal.objective.tax">⚡ Pay less lifetime tax</span>
+        </button>
+      </div>
+    </div>
+    <div id="withdrawalWinnerBanner" class="chart-caveat" style="margin-bottom:12px;padding:10px 12px;background:rgba(94,227,138,0.08);border:1px solid rgba(94,227,138,0.35);border-radius:8px;font-size:0.88em;line-height:1.55;color:var(--text)">
+      <span data-i18n="withdrawal.winner.prefix">🏆 Winner under current goal:</span>
+      <strong id="winnerStrategyName">—</strong>
+      <span id="winnerStrategyDelta" style="color:var(--text-dim)"></span>
+      <br><span id="winnerStrategyDesc" style="color:var(--text-dim);font-size:0.9em"></span>
+    </div>
+
     <!-- ==================== Feature 007 — Bracket-Fill Info Panel ==================== -->
     <!-- id + class let smoke tests disambiguate this from other <details> blocks (e.g. tw.summary below). -->
     <details id="bracketFillInfo" class="bracketFill-info" style="margin-bottom:14px;background:rgba(108,99,255,0.06);border:1px solid rgba(108,99,255,0.25);border-radius:10px;overflow:hidden">
@@ -1844,6 +1868,35 @@
            Populated by renderRothLadder when strategy[i].ssReducedFill is true for any year. -->
       <p id="ssReductionCaption" class="chart-caveat" style="display:none;margin:10px 0 0 0;padding:8px 12px;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.25);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5"></p>
       <div style="margin-top:10px;padding:10px 12px;background:rgba(180,220,255,0.05);border:1px solid rgba(180,220,255,0.18);border-radius:8px;font-size:0.78em;color:var(--text-dim);line-height:1.5" data-i18n="tw.howToRead" data-i18n-html></div>
+
+      <!-- ==================== Feature 008 US2 — Preview banner + Compare panel ==================== -->
+      <div id="withdrawalPreviewBanner" class="chart-caveat chart-caveat--warning" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(255,217,61,0.08);border:1px solid rgba(255,217,61,0.35);border-radius:8px;font-size:0.85em;line-height:1.5;color:var(--warning)">
+        <span data-i18n="withdrawal.preview.prefix">👁 Previewing alternative:</span>
+        <strong id="previewStrategyName" style="color:var(--text)">—</strong>
+        <button id="btnRestoreWinner" onclick="setPreviewStrategy(null); if (typeof renderRothLadder === 'function' && typeof getInputs === 'function') try { renderRothLadder(getInputs()); } catch (_e) {} if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') try { renderGrowthChart(getInputs()); } catch (_e) {} if (typeof renderLifecycleSidebarChart === 'function') try { renderLifecycleSidebarChart(null); } catch (_e) {} if (typeof renderWithdrawalPreviewBanner === 'function') renderWithdrawalPreviewBanner(); if (typeof renderStrategyComparePanel === 'function') renderStrategyComparePanel(_lastStrategyResults);"
+                style="margin-left:12px;padding:4px 10px;font-size:0.82em;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer"
+                data-i18n="withdrawal.preview.restore">Restore auto-selected winner</button>
+      </div>
+      <details id="strategyComparePanel" class="strategy-compare" style="margin-top:12px;background:rgba(100,220,255,0.04);border:1px solid rgba(100,220,255,0.2);border-radius:8px;overflow:hidden">
+        <summary class="strategy-compare__toggle" style="padding:10px 14px;cursor:pointer;font-weight:600;color:var(--accent2);font-size:0.88em;user-select:none;list-style:none">
+          <span data-i18n="withdrawal.compare.toggleLabel">Compare other strategies</span>
+          <span style="color:var(--text-dim);font-weight:400">(<span id="strategyCompareCount">6</span>)</span>
+        </summary>
+        <div class="strategy-compare__body" style="padding:10px 14px 14px;font-size:0.85em">
+          <table id="strategyCompareTable" style="width:100%;border-collapse:collapse;margin-top:4px">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--text-dim);font-size:0.78em;text-transform:uppercase;letter-spacing:0.5px">
+                <th style="padding:6px 8px" data-i18n="withdrawal.compare.col.strategy">Strategy</th>
+                <th style="padding:6px 8px;text-align:right" data-i18n="withdrawal.compare.col.endBalance">End @ plan age</th>
+                <th style="padding:6px 8px;text-align:right" data-i18n="withdrawal.compare.col.lifetimeTax">Lifetime tax</th>
+                <th style="padding:6px 8px;text-align:right" data-i18n="withdrawal.compare.col.fireAge">Earliest FIRE</th>
+                <th style="padding:6px 8px" data-i18n="withdrawal.compare.col.action">Action</th>
+              </tr>
+            </thead>
+            <tbody id="strategyCompareTableBody"><!-- populated by renderStrategyComparePanel --></tbody>
+          </table>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -3834,6 +3887,43 @@ const TRANSLATIONS = {
     'chart.strategyNarrativeBracketFill': 'Strategy: bracket-fill at (stdDed + top12) × (1 − {0}%) safety margin. Fills the cheap 12% bracket with Traditional each year, routes excess ${1}/yr into taxable stocks. Avg tax {2}% — {3}% lower than no-smoothing.',
     'chart.roth5YearWarning': '5-year Roth clock warning',
     'chart.roth5YearWarningBanner': '⚠️ A Roth conversion this year starts a 5-year clock — converted principal is penalty-free after that period.',
+    // ==================== Feature 008 — Multi-Strategy Withdrawal Optimizer ====================
+    'withdrawal.objective.label': 'Optimization goal:',
+    'withdrawal.objective.estate': '🧳 Leave more behind',
+    'withdrawal.objective.tax': '⚡ Pay less lifetime tax',
+    'withdrawal.winner.prefix': '🏆 Winner under current goal:',
+    'withdrawal.preview.prefix': '👁 Previewing alternative:',
+    'withdrawal.preview.restore': 'Restore auto-selected winner',
+    'withdrawal.compare.toggleLabel': 'Compare other strategies',
+    'withdrawal.compare.col.strategy': 'Strategy',
+    'withdrawal.compare.col.endBalance': 'End @ plan age',
+    'withdrawal.compare.col.lifetimeTax': 'Lifetime tax',
+    'withdrawal.compare.col.fireAge': 'Earliest FIRE',
+    'withdrawal.compare.col.action': 'Action',
+    'withdrawal.compare.tieRank': '= {0}',
+    'withdrawal.compare.infeasibleTooltip': 'Infeasible at this FIRE age under current mode',
+    'withdrawal.compare.previewAction': 'Preview',
+    'strategy.bracketFillSmoothed.name': 'Bracket-Fill (Smoothed)',
+    'strategy.bracketFillSmoothed.desc': 'Fills the 12% bracket each year, capped by Trad balance ÷ remaining years.',
+    'strategy.bracketFillSmoothed.narrative': 'Strategy: bracket-fill at (stdDed + top12) × (1 − safetyMargin), smoothed by pTrad ÷ yearsRemaining so Trad drains evenly across retirement.',
+    'strategy.conventional.name': 'Conventional (Taxable → Trad → Roth)',
+    'strategy.conventional.desc': 'Textbook order: drain taxable stocks first, then Traditional, Roth last.',
+    'strategy.conventional.narrative': 'Strategy: drain taxable stocks (LTCG) first, then Traditional at ordinary rates, preserve Roth for last — classic Fidelity / Vanguard default.',
+    'strategy.proportional.name': 'Proportional',
+    'strategy.proportional.desc': 'Withdraws from every pool weighted by its current balance.',
+    'strategy.proportional.narrative': 'Strategy: each year pull from Trad, Roth, Taxable, Cash in proportion to their current balances — maintains tax diversification.',
+    'strategy.rothLadder.name': 'Roth Ladder',
+    'strategy.rothLadder.desc': 'Roth first (tax-free), then Taxable, Cash, Traditional last.',
+    'strategy.rothLadder.narrative': 'Strategy: pull Roth first (tax-free), then Taxable stocks (LTCG), Cash, Traditional only under RMD floor — preserves Trad compounding.',
+    'strategy.taxOptimizedSearch.name': 'Tax-Optimized Search',
+    'strategy.taxOptimizedSearch.desc': 'Numerically finds the Trad-aggressiveness that minimizes lifetime federal tax.',
+    'strategy.taxOptimizedSearch.narrative': 'Strategy: 11-point sweep over Trad aggressiveness θ ∈ [0, 1] — picks the θ that minimizes total lifetime federal tax at the current FIRE age.',
+    'strategy.tradFirst.name': 'Trad-First',
+    'strategy.tradFirst.desc': 'Drain Traditional 401(k) at ordinary rates before any other pool.',
+    'strategy.tradFirst.narrative': 'Strategy: drain Traditional first at ordinary rates (pre-RMD window), then Taxable stocks, Cash, Roth last — Kitces / Reichenstein tax-deferred-first argument.',
+    'strategy.tradLastPreserve.name': 'Trad-Last (Preserve)',
+    'strategy.tradLastPreserve.desc': 'Stocks + Cash first, then Roth, Trad last — preserves Trad for estate.',
+    'strategy.tradLastPreserve.narrative': 'Strategy: drain Taxable stocks and Cash first, then Roth, Traditional only under RMD floor — maximizes Trad balance left to heirs.',
   },
   zh: {
     'header.title': 'FIRE 指揮中心 — 通用模板',
@@ -4504,6 +4594,43 @@ const TRANSLATIONS = {
     'chart.strategyNarrativeBracketFill': '策略：以 (stdDed + top12) × (1 − {0}%) 安全緩衝進行級距填平。每年用 Traditional 填滿便宜的 12% 級距，並將超額 ${1}/年 轉入應稅股票帳戶。平均稅率 {2}% — 比未平滑低 {3}%。',
     'chart.roth5YearWarning': '五年 Roth 時鐘警示',
     'chart.roth5YearWarningBanner': '⚠️ 今年的 Roth 轉換會起算一個 5 年時鐘，期滿後轉換本金方可免罰提領。',
+    // ==================== Feature 008 — Multi-Strategy Withdrawal Optimizer ====================
+    'withdrawal.objective.label': '最佳化目標：',
+    'withdrawal.objective.estate': '🧳 留多一些給下一代',
+    'withdrawal.objective.tax': '⚡ 繳最少終身稅',
+    'withdrawal.winner.prefix': '🏆 目前目標下的最佳策略：',
+    'withdrawal.preview.prefix': '👁 預覽替代策略：',
+    'withdrawal.preview.restore': '恢復自動選出的最佳策略',
+    'withdrawal.compare.toggleLabel': '比較其他策略',
+    'withdrawal.compare.col.strategy': '策略',
+    'withdrawal.compare.col.endBalance': '計畫年齡結算',
+    'withdrawal.compare.col.lifetimeTax': '一生稅額',
+    'withdrawal.compare.col.fireAge': '最早 FIRE',
+    'withdrawal.compare.col.action': '動作',
+    'withdrawal.compare.tieRank': '= {0}',
+    'withdrawal.compare.infeasibleTooltip': '此 FIRE 年齡下此策略不可行',
+    'withdrawal.compare.previewAction': '預覽',
+    'strategy.bracketFillSmoothed.name': '級距填平（平滑版）',
+    'strategy.bracketFillSmoothed.desc': '每年填平 12% 級距，並以 Trad 餘額 ÷ 剩餘年數為上限。',
+    'strategy.bracketFillSmoothed.narrative': '策略：以 (stdDed + top12) × (1 − 安全邊際) 填平 12% 級距，以 pTrad ÷ 剩餘年數平滑，使 Trad 於退休期間平均提領。',
+    'strategy.conventional.name': '傳統順序（應稅 → Trad → Roth）',
+    'strategy.conventional.desc': '教科書式順序：先提領應稅股票，再 Traditional，最後 Roth。',
+    'strategy.conventional.narrative': '策略：先提領應稅股票（LTCG），再以一般稅率提領 Traditional，Roth 留到最後 — 經典 Fidelity／Vanguard 預設順序。',
+    'strategy.proportional.name': '等比例提領',
+    'strategy.proportional.desc': '依各帳戶目前餘額比例提領。',
+    'strategy.proportional.narrative': '策略：每年依 Trad、Roth、應稅、現金當前餘額比例提領 — 維持稅務多元化。',
+    'strategy.rothLadder.name': 'Roth 階梯',
+    'strategy.rothLadder.desc': 'Roth 優先（免稅），再應稅、現金，Trad 最後。',
+    'strategy.rothLadder.narrative': '策略：先提領 Roth（免稅），再應稅股票（LTCG）、現金，Traditional 僅在 RMD 下限內提領 — 保留 Trad 複利。',
+    'strategy.taxOptimizedSearch.name': '最低稅搜尋',
+    'strategy.taxOptimizedSearch.desc': '以數值方式找出能最小化一生聯邦稅的 Trad 提領激進度。',
+    'strategy.taxOptimizedSearch.narrative': '策略：針對 Trad 激進度 θ ∈ [0, 1] 進行 11 點掃描 — 選出目前 FIRE 年齡下一生聯邦稅最低的 θ。',
+    'strategy.tradFirst.name': 'Trad 優先',
+    'strategy.tradFirst.desc': '先以一般稅率提領 Traditional 401(k)，再動用其他帳戶。',
+    'strategy.tradFirst.narrative': '策略：在 RMD 前先以一般稅率提領 Traditional，再應稅股票、現金，Roth 最後 — Kitces／Reichenstein「先稅延後」論點。',
+    'strategy.tradLastPreserve.name': 'Trad 最後（留給後代）',
+    'strategy.tradLastPreserve.desc': '先股票與現金，再 Roth，Trad 最後 — 保留 Trad 給後代。',
+    'strategy.tradLastPreserve.narrative': '策略：先提領應稅股票與現金，再 Roth，Traditional 僅在 RMD 下限內提領 — 留給後代的 Trad 餘額最大化。',
   }
 };
 
@@ -4988,6 +5115,164 @@ function _computeDeficitReal(inp, annualSpend, fireAge, mode) {
   } catch (_e) {
     return 0;
   }
+}
+
+// ==================== Feature 008 — Objective selector + Winner banner ====================
+// Feature 008 (US1): user picks an optimization objective; system scores all 7
+// strategies via scoreAndRank, displays the winner under the current objective.
+// `_currentObjective` is the UI state; persisted in localStorage.fire_withdrawalObjective.
+
+let _currentObjective = 'leave-more-behind';
+try {
+  const saved = localStorage.getItem('fire_withdrawalObjective');
+  if (saved === 'leave-more-behind' || saved === 'retire-sooner-pay-less-tax') {
+    _currentObjective = saved;
+  }
+} catch (_e) { /* localStorage unavailable — fall through to default */ }
+
+function setWithdrawalObjective(id) {
+  if (id !== 'leave-more-behind' && id !== 'retire-sooner-pay-less-tax') return;
+  _currentObjective = id;
+  try { localStorage.setItem('fire_withdrawalObjective', id); } catch (_e) {}
+  // Flip button states (aria-checked + visual).
+  const btnEstate = document.getElementById('btnObjectiveEstate');
+  const btnTax = document.getElementById('btnObjectiveTax');
+  if (btnEstate && btnTax) {
+    const isEstate = id === 'leave-more-behind';
+    btnEstate.setAttribute('aria-checked', isEstate ? 'true' : 'false');
+    btnTax.setAttribute('aria-checked', isEstate ? 'false' : 'true');
+    btnEstate.style.background = isEstate ? 'var(--accent)' : 'var(--card)';
+    btnEstate.style.color = isEstate ? '#fff' : 'var(--text-dim)';
+    btnEstate.style.borderColor = isEstate ? 'var(--accent)' : 'var(--border)';
+    btnTax.style.background = isEstate ? 'var(--card)' : 'var(--accent)';
+    btnTax.style.color = isEstate ? 'var(--text-dim)' : '#fff';
+    btnTax.style.borderColor = isEstate ? 'var(--border)' : 'var(--accent)';
+  }
+  // Re-sort cached results against the new objective (no re-simulation).
+  if (_lastStrategyResults && _lastStrategyResults.rows) {
+    _lastStrategyResults = rankByObjective(_lastStrategyResults.rows, id);
+  }
+  renderWithdrawalWinnerBanner();
+  // Feature 008 — re-render the Lifetime Withdrawal chart AND the full-portfolio
+  // growth chart so both reflect the new winner (chart reads displayed strategy
+  // from _lastStrategyResults / _previewStrategyId).
+  if (typeof renderRothLadder === 'function' && typeof getInputs === 'function') {
+    try { renderRothLadder(getInputs()); } catch (_e) {}
+  }
+  if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') {
+    try { renderGrowthChart(getInputs()); } catch (_e) {}
+  }
+  if (typeof renderLifecycleSidebarChart === 'function') {
+    try { renderLifecycleSidebarChart(null); } catch (_e) {}
+  }
+  // Also re-render the compare panel (if it exists) to update the ranking order.
+  if (typeof renderStrategyComparePanel === 'function') {
+    try { renderStrategyComparePanel(_lastStrategyResults); } catch (_e) {}
+  }
+}
+
+function renderWithdrawalWinnerBanner() {
+  const banner = document.getElementById('withdrawalWinnerBanner');
+  const nameEl = document.getElementById('winnerStrategyName');
+  const deltaEl = document.getElementById('winnerStrategyDelta');
+  const descEl = document.getElementById('winnerStrategyDesc');
+  if (!banner || !nameEl || !deltaEl || !descEl) return;
+  const ranking = _lastStrategyResults;
+  if (!ranking || !ranking.rows || ranking.rows.length === 0) {
+    nameEl.textContent = '—';
+    deltaEl.textContent = '';
+    descEl.textContent = '';
+    return;
+  }
+  const winner = ranking.rows[0];
+  const runnerUp = ranking.rows[1];
+  const winnerPolicy = getStrategies().find(s => s.id === winner.strategyId);
+  if (!winnerPolicy) return;
+  nameEl.textContent = t(winnerPolicy.nameKey);
+  descEl.textContent = t(winnerPolicy.descKey);
+  // Delta vs runner-up on the primary metric.
+  if (runnerUp) {
+    let deltaStr = '';
+    if (ranking.objective === 'leave-more-behind') {
+      const d = Math.round(winner.endOfPlanNetWorthReal - runnerUp.endOfPlanNetWorthReal);
+      deltaStr = ` (+$${d.toLocaleString()} end-balance vs runner-up)`;
+    } else {
+      const d = Math.round(runnerUp.lifetimeFederalTaxReal - winner.lifetimeFederalTaxReal);
+      deltaStr = ` (saves $${d.toLocaleString()} lifetime tax vs runner-up)`;
+    }
+    deltaEl.textContent = deltaStr;
+  } else {
+    deltaEl.textContent = '';
+  }
+}
+
+// ==================== Feature 008 US2 — Compare panel renderer ====================
+// Populates #strategyCompareTableBody with the 6 non-winner rows from the current
+// Ranking. Each row shows strategy name, end-balance, lifetime tax, earliest FIRE,
+// and a Preview button. Tie rows get a "= N" badge. Infeasible rows are grayed out.
+function renderStrategyComparePanel(ranking) {
+  const tbody = document.getElementById('strategyCompareTableBody');
+  const countEl = document.getElementById('strategyCompareCount');
+  if (!tbody) return;
+  if (!ranking || !Array.isArray(ranking.rows) || ranking.rows.length < 2) {
+    tbody.innerHTML = '';
+    if (countEl) countEl.textContent = '0';
+    return;
+  }
+  const nonWinners = ranking.rows.slice(1);
+  if (countEl) countEl.textContent = nonWinners.length.toString();
+  const policies = {};
+  getStrategies().forEach(s => { policies[s.id] = s; });
+  // Build a rank → index map for tie badges.
+  const tiesByStrategyId = {};
+  (ranking.ties || []).forEach(tie => {
+    tie.strategyIds.forEach(id => { tiesByStrategyId[id] = tie.rank; });
+  });
+  const previewId = (typeof _previewStrategyId !== 'undefined') ? _previewStrategyId : null;
+  const rowsHtml = nonWinners.map((r, idx) => {
+    const policy = policies[r.strategyId];
+    const name = policy ? t(policy.nameKey) : r.strategyId;
+    const isPreview = previewId === r.strategyId;
+    const isInfeasible = !r.feasibleUnderCurrentMode;
+    const tieRank = tiesByStrategyId[r.strategyId];
+    const rankLabel = tieRank ? '= ' + tieRank : (idx + 2).toString();
+    const rowStyle = [
+      'border-bottom:1px solid var(--border)',
+      isPreview ? 'background:rgba(108,99,255,0.08)' : '',
+      isInfeasible ? 'opacity:0.55' : '',
+    ].filter(Boolean).join(';');
+    const tooltipAttr = isInfeasible ? ` title="${t('withdrawal.compare.infeasibleTooltip').replace(/"/g, '&quot;')}"` : '';
+    const previewStyle = isInfeasible
+      ? 'padding:3px 10px;font-size:0.78em;border-radius:4px;border:1px solid var(--warning);background:transparent;color:var(--warning);cursor:pointer'
+      : 'padding:3px 10px;font-size:0.78em;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer';
+    const previewLabel = isInfeasible
+      ? `⚠ ${t('withdrawal.compare.previewAction')}`
+      : t('withdrawal.compare.previewAction');
+    const previewBtn = `<button onclick="setPreviewStrategy('${r.strategyId}'); if (typeof renderRothLadder === 'function' && typeof getInputs === 'function') try { renderRothLadder(getInputs()); } catch (_e) {} if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') try { renderGrowthChart(getInputs()); } catch (_e) {} if (typeof renderLifecycleSidebarChart === 'function') try { renderLifecycleSidebarChart(null); } catch (_e) {} if (typeof renderWithdrawalPreviewBanner === 'function') renderWithdrawalPreviewBanner(); if (typeof renderStrategyComparePanel === 'function') renderStrategyComparePanel(_lastStrategyResults);" style="${previewStyle}">${previewLabel}</button>`;
+    return `<tr style="${rowStyle}"${tooltipAttr}>
+      <td style="padding:6px 8px"><span style="color:var(--text-dim);font-size:0.82em">${rankLabel}.</span> <strong>${name}</strong></td>
+      <td style="padding:6px 8px;text-align:right">$${Math.round(r.endOfPlanNetWorthReal).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right">$${Math.round(r.lifetimeFederalTaxReal).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right">${r.earliestFeasibleFireAge}</td>
+      <td style="padding:6px 8px">${previewBtn}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rowsHtml;
+}
+
+// Preview banner renderer — shown when _previewStrategyId is non-null.
+function renderWithdrawalPreviewBanner() {
+  const banner = document.getElementById('withdrawalPreviewBanner');
+  const nameEl = document.getElementById('previewStrategyName');
+  if (!banner || !nameEl) return;
+  if (typeof _previewStrategyId === 'undefined' || !_previewStrategyId) {
+    banner.style.display = 'none';
+    return;
+  }
+  const policy = getStrategies().find(s => s.id === _previewStrategyId);
+  if (!policy) { banner.style.display = 'none'; return; }
+  nameEl.textContent = t(policy.nameKey);
+  banner.style.display = '';
 }
 
 /**
@@ -6007,8 +6292,17 @@ function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, f
 
 // ==================== UNIFIED LIFECYCLE PROJECTION ====================
 // Full picture: accumulation → FIRE → drawdown → SS → end of life
-function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS) {
+// Feature 008: optional `options.strategyOverride` replaces the canonical
+// bracket-fill-smoothed withdrawal (via `taxOptimizedWithdrawal`) with the
+// picked strategy's `computePerYearMix`, so the chart can reflect the winner
+// while preserving mortgage / college / second-home accumulation adjustments.
+// `options.thetaOverride` feeds `_theta` for tax-optimized-search (chosen
+// during scoreAndRank's θ-sweep).
+function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options) {
   if (withSS === undefined) withSS = true;
+  const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
+    ? options.strategyOverride : null;
+  const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
   const realReturnStocks = inp.returnRate - inp.inflationRate;
   const realReturn401k = inp.return401k - inp.inflationRate;
   const tradContrib = inp.contrib401kTrad + inp.empMatch; // employer match → Trad
@@ -6218,11 +6512,38 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS) {
         irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
         endAge: inp.endAge || 100,
       };
-      const mix = taxOptimizedWithdrawal(
-        grossSpendLC, ssThisYear,
-        portfolio401kTrad, portfolio401kRoth, portfolioStocks, portfolioCash,
-        age, bracketsLC, inp.stockGainPct, bfOpts
-      );
+      let mix;
+      if (_strategyOverride && typeof getStrategies === 'function') {
+        const _policies = getStrategies();
+        const _picked = _policies && _policies.find(s => s.id === _strategyOverride);
+        if (_picked && typeof _picked.computePerYearMix === 'function') {
+          const _bfOptsForPicked = _thetaOverride != null ? Object.assign({}, bfOpts, { _theta: _thetaOverride }) : bfOpts;
+          const _taxableSS = ssThisYear * 0.85;
+          const _rmd = (age >= 73 && portfolio401kTrad > 0)
+            ? Math.min(portfolio401kTrad, portfolio401kTrad / getRMDDivisor(age)) : 0;
+          const _targetBracketCap = (bracketsLC.stdDed + bracketsLC.top12) * (1 - (bfOpts.safetyMargin || 0));
+          const _headroom = Math.max(0, _targetBracketCap - _taxableSS - _rmd);
+          const _ctx = {
+            age,
+            grossSpend: grossSpendLC,
+            ssIncome: ssThisYear,
+            pools: { pTrad: portfolio401kTrad, pRoth: portfolio401kRoth, pStocks: portfolioStocks, pCash: portfolioCash },
+            brackets: bracketsLC,
+            stockGainPct: inp.stockGainPct,
+            rmdThisYear: _rmd,
+            bracketHeadroom: _headroom,
+            bfOpts: _bfOptsForPicked,
+          };
+          mix = _picked.computePerYearMix(_ctx);
+        }
+      }
+      if (!mix) {
+        mix = taxOptimizedWithdrawal(
+          grossSpendLC, ssThisYear,
+          portfolio401kTrad, portfolio401kRoth, portfolioStocks, portfolioCash,
+          age, bracketsLC, inp.stockGainPct, bfOpts
+        );
+      }
       // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
       // pool-operation ordering (NON-NEGOTIABLE). Identical to the other two
       // consumers so signed intermediate state matches before the clamp below.
@@ -6408,6 +6729,55 @@ function calcLTCGTax(gain, ordinaryTaxableIncome, brackets) {
   const inTwenty = Math.max(0, top - Math.max(base, f));
   return inZero * 0 + inFifteen * 0.15 + inTwenty * 0.20;
 }
+
+// ==================== MODULE: strategies ====================
+// Feature 008 — Multi-Strategy Withdrawal Optimizer.
+// Inputs:
+//   - YearContext (per year; built by scoreAndRank)
+//   - CanonicalInputs (for scoreAndRank entry point)
+//   - Tax brackets (from getTaxBrackets)
+// Outputs:
+//   - STRATEGIES: readonly array of 7 StrategyPolicy
+//   - scoreAndRank(inp, fireAge, mode, objective): Ranking
+//   - rankByObjective(results, objective): Ranking (sort-only, no re-simulation)
+// Consumers:
+//   - renderRothLadder (Lifetime Withdrawal Strategy chart)
+//   - renderGrowthChart (Full Portfolio Lifecycle chart — preview only)
+//   - renderLifecycleSidebarChart (sidebar mirror — preview only)
+//   - renderKpiCards (KPI ribbon — preview listener registered)
+//   - renderCompactHeaderStats (status pill)
+//   - renderStrategyComparePanel (NEW — collapsed compare sub-panel)
+//   - renderWithdrawalWinnerBanner (NEW)
+//   - renderWithdrawalPreviewBanner (NEW)
+//   - recalcAll (entry point)
+// Contract: specs/008-multi-strategy-withdrawal-optimizer/contracts/strategy-module.contract.md
+// =============================================================
+const STRATEGIES = Object.freeze([
+  // Populated in Phase 3 US1 (T018–T025). The 7 policies are:
+  //   BRACKET_FILL_SMOOTHED, CONVENTIONAL, PROPORTIONAL, ROTH_LADDER,
+  //   TAX_OPTIMIZED_SEARCH, TRAD_FIRST, TRAD_LAST_PRESERVE
+]);
+
+// Module-scope cache of the last full Ranking; populated by scoreAndRank,
+// read by chart/KPI renderers + the compare-panel. Mirrors the
+// `_lastKpiSnapshot` pattern established in feature 006.
+let _lastStrategyResults = null;
+
+// Preview state — non-null means the user clicked Preview on a non-winner row
+// in the compare panel (Phase 4 US2). Session-scoped per FR-006; auto-cleared
+// by recalcAll. Chart/KPI renderers read `_previewStrategyId ?? winner.id`.
+// TODO (Phase 4): migrate into chartState.js proper to satisfy Principle III
+// single-source-of-truth. For US1 MVP the preview feature is dormant, so a
+// local module-scope var is sufficient scaffolding.
+let _previewStrategyId = null;
+const _previewListeners = [];
+function setPreviewStrategy(id) {
+  _previewStrategyId = id;
+  _previewListeners.forEach(fn => { try { fn(id); } catch (_e) {} });
+}
+function onPreviewChange(fn) { _previewListeners.push(fn); return () => {
+  const i = _previewListeners.indexOf(fn); if (i >= 0) _previewListeners.splice(i, 1);
+}; }
 
 // ==================== FEATURE 007 — BRACKET-FILL TAX SMOOTHING ====================
 // Inputs  : grossSpend, ssIncome, pTrad, pRoth, pStocks, pCash, age, brackets,
@@ -6631,6 +7001,653 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     roth5YearWarning,
     magi,
     bracketHeadroom,
+  };
+}
+
+// ==================== Feature 008 — Strategy Policies ====================
+// Seven StrategyPolicy objects + shared helpers + scoreAndRank + rankByObjective.
+// Each policy is a pure pool-ordering function that produces a PerYearMix for
+// one retirement year. The harness wraps these into a full-lifecycle Ranking.
+// Contract: specs/008-multi-strategy-withdrawal-optimizer/contracts/strategy-module.contract.md
+// =========================================================================
+
+// Resolve effective 401k unlock age given Rule-of-55 options. Shared by every
+// policy so they all agree on eligibility semantics.
+function _effectiveUnlockAge(bfOpts) {
+  const r55 = bfOpts && bfOpts.rule55;
+  return (r55 && r55.enabled && (r55.separationAge || 0) >= 55) ? 55 : 59.5;
+}
+
+// Forced RMD floor. Applies at age 73+. Returns the minimum Trad draw required
+// regardless of strategy choice (IRS uniform lifetime table).
+function _computeRmd(ctx) {
+  const { age, pools } = ctx;
+  if (age < 73 || pools.pTrad <= 0) return 0;
+  return Math.min(pools.pTrad, pools.pTrad / getRMDDivisor(age));
+}
+
+// Build the caveats sub-object for a per-year mix given the computed values.
+// Strategies call this instead of hand-writing the caveats block every time.
+function _buildCaveats(ctx, wTrad, wStocks, magi, bracketFillActive) {
+  const effectiveIrmaa = (ctx.bfOpts.irmaaThreshold || 0) * (1 - (ctx.bfOpts.safetyMargin || 0));
+  const r55 = ctx.bfOpts.rule55 || {};
+  const rule55Active = !!(r55.enabled && (r55.separationAge || 0) >= 55 && ctx.age >= 55 && ctx.age < 59.5);
+  const irmaaBreached = effectiveIrmaa > 0 && ctx.age >= 63 && magi > effectiveIrmaa;
+  return {
+    ssReducedFill: bracketFillActive && (ctx.ssIncome * 0.85) > (ctx.bracketHeadroom * 0.2 + ctx.rmdThisYear),
+    irmaaCapped: false,
+    irmaaBreached,
+    rule55Active,
+    roth5YearWarning: false,
+    bracketFillActive: !!bracketFillActive,
+  };
+}
+
+// Shared pool-order-driven withdrawal solver. Given a priority list of pool
+// keys, iteratively pulls from them to cover (grossSpend + taxes). Uses a
+// bounded fixed-point loop because LTCG tax depends on stock sales which
+// depends on how much we need after tax. Each policy wraps this with its
+// own pool order + bracket-fill behavior.
+//
+// Returns a PerYearMix with caveats populated.
+function _drawByPoolOrder(ctx, poolOrder, opts) {
+  opts = opts || {};
+  const canAccess401k = ctx.age >= _effectiveUnlockAge(ctx.bfOpts);
+  const rmd = _computeRmd(ctx);
+  const { brackets, stockGainPct, grossSpend, ssIncome, pools } = ctx;
+  const taxableSS = ssIncome * 0.85;
+  const stdDed = brackets.stdDed;
+
+  // Start with RMD floor on Trad. Everything else starts at zero and grows
+  // through the fixed-point iteration below.
+  let wTrad = rmd;
+  let wRoth = 0, wStocks = 0, wCash = 0;
+  const avail = {
+    pTrad: Math.max(0, pools.pTrad - rmd),
+    pRoth: Math.max(0, pools.pRoth),
+    pStocks: Math.max(0, pools.pStocks),
+    pCash: Math.max(0, pools.pCash),
+  };
+
+  function computeTotals() {
+    const ordIncome = taxableSS + wTrad;
+    const taxable = Math.max(0, ordIncome - stdDed);
+    const ordTax = calcOrdinaryTax(taxable, brackets);
+    const gain = wStocks * stockGainPct;
+    const ltcg = calcLTCGTax(gain, taxable, brackets);
+    const totalTax = ordTax + ltcg;
+    const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
+    return { ordIncome, taxable, ordTax, ltcg, totalTax, grossReceived, netReceived: grossReceived - totalTax };
+  }
+
+  // Fixed-point: draw → recompute tax → if still short, draw more. Cap iterations.
+  for (let iter = 0; iter < 12; iter++) {
+    const t = computeTotals();
+    const gap = grossSpend - t.netReceived;
+    if (gap <= 10) break;
+    // Pull from highest-priority pool with remaining balance.
+    let drew = false;
+    for (const p of poolOrder) {
+      if (p === 'trad' && canAccess401k && avail.pTrad > 0) {
+        const add = Math.min(gap, avail.pTrad);
+        wTrad += add; avail.pTrad -= add; drew = true; break;
+      }
+      if (p === 'roth' && canAccess401k && avail.pRoth > 0) {
+        const add = Math.min(gap, avail.pRoth);
+        wRoth += add; avail.pRoth -= add; drew = true; break;
+      }
+      if (p === 'stocks' && avail.pStocks > 0) {
+        // LTCG means we need to over-draw by the tax on the gain. Bump estimate.
+        const gain = avail.pStocks * stockGainPct;
+        const bump = Math.min(gap * 1.2, avail.pStocks);
+        wStocks += bump; avail.pStocks -= bump; drew = true; break;
+      }
+      if (p === 'cash' && avail.pCash > 0) {
+        const add = Math.min(gap, avail.pCash);
+        wCash += add; avail.pCash -= add; drew = true; break;
+      }
+    }
+    if (!drew) break; // exhausted all accessible pools
+  }
+
+  const t = computeTotals();
+  const shortfall = Math.max(0, grossSpend - t.netReceived);
+  const magi = wTrad + taxableSS + wStocks * stockGainPct;
+  const effRate = t.grossReceived > 0 ? t.totalTax / t.grossReceived : 0;
+  return {
+    wTrad, wRoth, wStocks, wCash,
+    syntheticConversion: 0,
+    rmd,
+    taxOwed: t.totalTax,
+    ordIncome: t.ordIncome,
+    ltcgTax: t.ltcg,
+    effRate,
+    magi,
+    shortfall,
+    caveats: _buildCaveats(ctx, wTrad, wStocks, magi, !!opts.bracketFillActive),
+  };
+}
+
+// ----- The 7 StrategyPolicy objects -----
+
+const BRACKET_FILL_SMOOTHED = Object.freeze({
+  id: 'bracket-fill-smoothed',
+  nameKey: 'strategy.bracketFillSmoothed.name',
+  descKey: 'strategy.bracketFillSmoothed.desc',
+  narrativeKey: 'strategy.bracketFillSmoothed.narrative',
+  color: '#6c63ff',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    // Byte-identical to the current taxOptimizedWithdrawal (FR-001 parity).
+    const mix = taxOptimizedWithdrawal(
+      ctx.grossSpend, ctx.ssIncome,
+      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pStocks, ctx.pools.pCash,
+      ctx.age, ctx.brackets, ctx.stockGainPct, ctx.bfOpts
+    );
+    // Normalize the return shape to match PerYearMix with caveats.
+    return {
+      wTrad: mix.wTrad, wRoth: mix.wRoth, wStocks: mix.wStocks, wCash: mix.wCash,
+      syntheticConversion: mix.syntheticConversion || 0,
+      rmd: mix.rmd,
+      taxOwed: mix.taxOwed,
+      ordIncome: mix.ordIncome,
+      ltcgTax: mix.ltcgTax,
+      effRate: mix.effRate,
+      magi: mix.magi,
+      shortfall: mix.shortfall,
+      caveats: {
+        ssReducedFill: !!mix.ssReducedFill,
+        irmaaCapped: !!mix.irmaaCapped,
+        irmaaBreached: !!mix.irmaaBreached,
+        rule55Active: !!mix.rule55Active,
+        roth5YearWarning: !!mix.roth5YearWarning,
+        bracketFillActive: true,
+      },
+    };
+  }
+});
+
+const TRAD_FIRST = Object.freeze({
+  id: 'trad-first',
+  nameKey: 'strategy.tradFirst.name',
+  descKey: 'strategy.tradFirst.desc',
+  narrativeKey: 'strategy.tradFirst.narrative',
+  color: '#ff6b6b',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    return _drawByPoolOrder(ctx, ['trad', 'stocks', 'cash', 'roth']);
+  }
+});
+
+const ROTH_LADDER = Object.freeze({
+  id: 'roth-ladder',
+  nameKey: 'strategy.rothLadder.name',
+  descKey: 'strategy.rothLadder.desc',
+  narrativeKey: 'strategy.rothLadder.narrative',
+  color: '#5ee38a',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    return _drawByPoolOrder(ctx, ['roth', 'stocks', 'cash', 'trad']);
+  }
+});
+
+const TRAD_LAST_PRESERVE = Object.freeze({
+  id: 'trad-last-preserve',
+  nameKey: 'strategy.tradLastPreserve.name',
+  descKey: 'strategy.tradLastPreserve.desc',
+  narrativeKey: 'strategy.tradLastPreserve.narrative',
+  color: '#ffb45a',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'roth', 'trad']);
+  }
+});
+
+const CONVENTIONAL = Object.freeze({
+  id: 'conventional',
+  nameKey: 'strategy.conventional.name',
+  descKey: 'strategy.conventional.desc',
+  narrativeKey: 'strategy.conventional.narrative',
+  color: '#64dcff',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    // Textbook Fidelity/Vanguard order: Taxable → Trad → Roth; cash alongside taxable.
+    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'trad', 'roth']);
+  }
+});
+
+const PROPORTIONAL = Object.freeze({
+  id: 'proportional',
+  nameKey: 'strategy.proportional.name',
+  descKey: 'strategy.proportional.desc',
+  narrativeKey: 'strategy.proportional.narrative',
+  color: '#c09060',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    // Pull from every accessible pool weighted by its current balance share.
+    // Implementation: pre-compute the target share per pool, then delegate to
+    // _drawByPoolOrder with a dynamic order that picks the pool with the
+    // greatest remaining share-vs-target gap each iteration. Simpler approach
+    // for v1: approximate proportionality by cycling pools in the order of
+    // largest-balance-first each iteration.
+    const canAccess401k = ctx.age >= _effectiveUnlockAge(ctx.bfOpts);
+    const balances = {
+      trad: canAccess401k ? Math.max(0, ctx.pools.pTrad) : 0,
+      roth: canAccess401k ? Math.max(0, ctx.pools.pRoth) : 0,
+      stocks: Math.max(0, ctx.pools.pStocks),
+      cash: Math.max(0, ctx.pools.pCash),
+    };
+    const total = balances.trad + balances.roth + balances.stocks + balances.cash;
+    const order = Object.entries(balances)
+      .filter(([_, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k);
+    // Fill remaining slots with fallback order to avoid gaps when one pool depletes.
+    for (const p of ['stocks', 'trad', 'cash', 'roth']) {
+      if (!order.includes(p)) order.push(p);
+    }
+    return _drawByPoolOrder(ctx, order);
+  }
+});
+
+const TAX_OPTIMIZED_SEARCH = Object.freeze({
+  id: 'tax-optimized-search',
+  nameKey: 'strategy.taxOptimizedSearch.name',
+  descKey: 'strategy.taxOptimizedSearch.desc',
+  narrativeKey: 'strategy.taxOptimizedSearch.narrative',
+  color: '#ff9ec7',
+  eligibility: {},
+  // Per-year behavior: Trad-aggressiveness knob θ ∈ [0, 1] sets how much of the
+  // 12% bracket headroom to fill with Trad. θ=0 → no fresh Trad (RMD only);
+  // θ=1 → full bracket-fill. Remaining spend comes from Stocks (LTCG), Cash,
+  // then Roth — never adds MORE Trad beyond the θ cap, so the ordinary-income
+  // tax stays bounded by the 12% bracket by construction.
+  // scoreAndRank lifts this to a lifetime sweep (scoreAndRank detects this
+  // strategy ID and tries 11 θ values, picking the one with lowest lifetime tax).
+  computePerYearMix(ctx) {
+    const theta = (ctx.bfOpts && typeof ctx.bfOpts._theta === 'number') ? ctx.bfOpts._theta : 0.5;
+    const canAccess401k = ctx.age >= _effectiveUnlockAge(ctx.bfOpts);
+    const rmd = _computeRmd(ctx);
+    const { brackets, ssIncome, grossSpend, pools, stockGainPct } = ctx;
+    const taxableSS = ssIncome * 0.85;
+    const targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - (ctx.bfOpts.safetyMargin || 0));
+    const bracketHeadroom = Math.max(0, targetBracketCap - taxableSS - rmd);
+
+    // Direct wTrad compute: RMD floor + θ × bracket headroom (clipped to available Trad).
+    let wTrad = rmd;
+    if (canAccess401k) {
+      const additionalTrad = Math.min(Math.max(0, pools.pTrad - rmd), bracketHeadroom * theta);
+      wTrad += additionalTrad;
+    }
+    let wRoth = 0, wStocks = 0, wCash = 0;
+    const avail = {
+      pRoth: canAccess401k ? Math.max(0, pools.pRoth) : 0,
+      pStocks: Math.max(0, pools.pStocks),
+      pCash: Math.max(0, pools.pCash),
+    };
+    function computeNet() {
+      const ordIncomeLocal = taxableSS + wTrad;
+      const taxableLocal = Math.max(0, ordIncomeLocal - brackets.stdDed);
+      const ordTaxLocal = calcOrdinaryTax(taxableLocal, brackets);
+      const gainLocal = wStocks * stockGainPct;
+      const ltcgLocal = calcLTCGTax(gainLocal, taxableLocal, brackets);
+      const totalTaxLocal = ordTaxLocal + ltcgLocal;
+      const grossReceivedLocal = ssIncome + wTrad + wRoth + wStocks + wCash;
+      return { ordIncomeLocal, taxableLocal, ordTaxLocal, ltcgLocal, totalTaxLocal, grossReceivedLocal };
+    }
+    for (let iter = 0; iter < 12; iter++) {
+      const r = computeNet();
+      const netReceived = r.grossReceivedLocal - r.totalTaxLocal;
+      const gap = grossSpend - netReceived;
+      if (gap <= 10) break;
+      // Priority: stocks (LTCG) → cash → roth → stop. NEVER more Trad (respects θ cap).
+      if (avail.pStocks > 0) {
+        const add = Math.min(gap * 1.2, avail.pStocks);
+        wStocks += add; avail.pStocks -= add;
+      } else if (avail.pCash > 0) {
+        const add = Math.min(gap, avail.pCash);
+        wCash += add; avail.pCash -= add;
+      } else if (avail.pRoth > 0) {
+        const add = Math.min(gap, avail.pRoth);
+        wRoth += add; avail.pRoth -= add;
+      } else {
+        break; // exhausted non-Trad pools — report shortfall
+      }
+    }
+    const final = computeNet();
+    const shortfall = Math.max(0, grossSpend - (final.grossReceivedLocal - final.totalTaxLocal));
+    const magi = wTrad + taxableSS + wStocks * stockGainPct;
+    return {
+      wTrad, wRoth, wStocks, wCash,
+      syntheticConversion: 0,
+      rmd,
+      taxOwed: final.totalTaxLocal,
+      ordIncome: final.ordIncomeLocal,
+      ltcgTax: final.ltcgLocal,
+      effRate: final.grossReceivedLocal > 0 ? final.totalTaxLocal / final.grossReceivedLocal : 0,
+      magi,
+      shortfall,
+      caveats: _buildCaveats(ctx, wTrad, wStocks, magi, false),
+    };
+  }
+});
+
+// Populate the frozen STRATEGIES array with all 7 policies (alphabetical by id
+// for stable display order; winner/tie logic sorts by objective at runtime).
+// eslint-disable-next-line no-global-assign
+// NOTE: The earlier `const STRATEGIES = Object.freeze([])` placeholder above is
+// superseded — we re-bind here because the declaration was a forward-reference.
+// In the final migrated form this file exposes a single STRATEGIES declaration
+// at this location; the forward-reference stub exists only to let the module
+// header list it for Principle VI graph-walkers.
+Object.defineProperty(window, '__STRATEGIES_V008__', {
+  value: Object.freeze([
+    BRACKET_FILL_SMOOTHED,
+    CONVENTIONAL,
+    PROPORTIONAL,
+    ROTH_LADDER,
+    TAX_OPTIMIZED_SEARCH,
+    TRAD_FIRST,
+    TRAD_LAST_PRESERVE,
+  ]),
+  writable: false,
+  configurable: false,
+});
+function getStrategies() { return window.__STRATEGIES_V008__; }
+
+// ----- scoreAndRank harness -----
+//
+// Runs one full lifecycle simulation per strategy at the given fireAge and
+// returns an unsorted Ranking. Shared YearContext stream built once per year
+// to amortize RMD / taxableSS / bracketHeadroom compute across strategies.
+function scoreAndRank(inp, fireAge, mode, objective) {
+  const strategies = getStrategies();
+  const endAge = inp.endAge || 95;
+  const realReturnStocks = inp.returnRate - inp.inflationRate;
+  const realReturn401k = inp.return401k - inp.inflationRate;
+  const ssAnnual = getSSAnnual(inp, inp.ssClaimAge, fireAge);
+  const brackets = getTaxBrackets(detectMFJ(inp));
+  const bfOpts = {
+    safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
+    rule55: inp.rule55 || { enabled: false, separationAge: 54 },
+    irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+    endAge: inp.endAge || 100,
+  };
+  const stockGainPct = inp.stockGainPct || 0.6;
+  const yrsToFire = fireAge - (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger);
+  const mtgAdj = getMortgageAdjustedRetirement(inp.annualSpend || 0, yrsToFire);
+  const retireSpend = mtgAdj.annualSpend || inp.annualSpend || 0;
+  const taxTrad = inp.taxTrad || 0.15;
+
+  // Extract per-strategy lifetime simulation into a helper so TAX_OPTIMIZED_SEARCH
+  // can invoke it multiple times (once per θ) to find the tax-minimizing θ.
+  function _simulateStrategyLifetime(strategy, bfOptsForStrategy) {
+    // Per-strategy full lifecycle simulation (retirement years only — accumulation
+    // doesn't vary by withdrawal strategy).
+    let pTrad = inp.roger401kTrad !== undefined ? inp.roger401kTrad : inp.person1_401kTrad;
+    let pRoth = inp.roger401kRoth !== undefined ? inp.roger401kRoth : inp.person1_401kRoth;
+    let pStocks = (inp.rogerStocks !== undefined ? inp.rogerStocks : inp.person1Stocks) +
+                   (inp.rebeccaStocks !== undefined ? inp.rebeccaStocks : inp.person2Stocks);
+    let pCash = inp.cashSavings + (inp.otherAssets || 0);
+
+    // Grow to FIRE age via accumulation (matches projectGrowth shape — simple).
+    const yrsAccum = Math.max(0, fireAge - (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger));
+    const tradContrib = (inp.contrib401kTrad || inp.contrib401k || 0) + (inp.empMatch || 0);
+    const rothContrib = inp.contrib401kRoth || 0;
+    const effAnnualSavings = (inp.monthlySavings || 0) * 12;
+    for (let y = 0; y < yrsAccum; y++) {
+      pTrad = pTrad * (1 + realReturn401k) + tradContrib;
+      pRoth = pRoth * (1 + realReturn401k) + rothContrib;
+      pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
+      pCash *= 1.005;
+    }
+
+    const perYearRows = [];
+    let lifetimeTax = 0;
+    const caveatsAgg = { ssReducedFill: false, irmaaCapped: false, irmaaBreached: false, rule55Active: false, roth5YearWarning: false, bracketFillActive: false };
+    let feasible = true;
+
+    // Feature 008 — mode-aware feasibility gate. Matches isFireAgeFeasible's
+    // definition so Safe/Exact modes reject strategies that drain to zero
+    // even when late-life spend is covered by SS (no per-year shortfall).
+    const _unlockAgeGate = _effectiveUnlockAge(bfOpts);
+    const _bufUnlockFloor = (inp.bufferUnlock || 0) * retireSpend;
+    const _bufSSFloor = (inp.bufferSS || 0) * retireSpend;
+    let _minTotalPreUnlock = Infinity;
+    let _minTotalPostUnlock = Infinity;
+
+    for (let age = fireAge; age <= endAge; age++) {
+      const unlockAge = _effectiveUnlockAge(bfOpts);
+      const canAccess401k = age >= unlockAge;
+      const ssActive = age >= inp.ssClaimAge;
+      const ssThisYear = ssActive ? ssAnnual : 0;
+      const taxableSS = ssThisYear * 0.85;
+      const rmdThisYear = (age >= 73 && pTrad > 0) ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
+      const targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - bfOpts.safetyMargin);
+      const bracketHeadroom = Math.max(0, targetBracketCap - taxableSS - rmdThisYear);
+
+      // Start-of-year total (pre-withdrawal) — matches projectFullLifecycle's
+      // `row.total` semantics used by isFireAgeFeasible's chart-consistent gate.
+      const _totalStart = pTrad + pRoth + pStocks + pCash;
+      if (age < _unlockAgeGate) {
+        if (_totalStart < _minTotalPreUnlock) _minTotalPreUnlock = _totalStart;
+      } else {
+        if (_totalStart < _minTotalPostUnlock) _minTotalPostUnlock = _totalStart;
+      }
+
+      const ctx = {
+        age,
+        grossSpend: retireSpend,
+        ssIncome: ssThisYear,
+        pools: { pTrad, pRoth, pStocks, pCash },
+        brackets,
+        stockGainPct,
+        rmdThisYear,
+        bracketHeadroom,
+        bfOpts: bfOptsForStrategy,
+      };
+
+      const ctxThisYear = Object.assign({}, ctx, { bfOpts: bfOptsForStrategy });
+      const mix = strategy.computePerYearMix(ctxThisYear);
+      const rowBase = { age, phase: !canAccess401k ? 'phase1-taxable-only' : (!ssActive ? 'phase2-401k-unlocked' : 'phase3-with-ss') };
+      const rowToPush = Object.assign(rowBase, mix);
+      rowToPush.totalStart = _totalStart;
+      perYearRows.push(rowToPush);
+      lifetimeTax += mix.taxOwed;
+      // Aggregate caveats
+      for (const k of Object.keys(caveatsAgg)) {
+        if (mix.caveats && mix.caveats[k]) caveatsAgg[k] = true;
+      }
+      if (mix.shortfall > 100) feasible = false;
+
+      // Update pools for next year (clamp ≥ 0; signed sim not needed here)
+      pTrad = Math.max(0, pTrad - mix.wTrad - (mix.syntheticConversion || 0));
+      pRoth = Math.max(0, pRoth - mix.wRoth);
+      pStocks = Math.max(0, pStocks - mix.wStocks + (mix.syntheticConversion || 0));
+      pCash = Math.max(0, pCash - mix.wCash);
+      // Compound
+      pTrad *= (1 + realReturn401k);
+      pRoth *= (1 + realReturn401k);
+      pStocks *= (1 + realReturnStocks);
+      pCash *= 1.005;
+      // End-of-year pool snapshot — consumed by renderGrowthChart to show the
+      // winning strategy's portfolio trajectory during retirement years.
+      rowToPush.pTradEnd = pTrad;
+      rowToPush.pRothEnd = pRoth;
+      rowToPush.pStocksEnd = pStocks;
+      rowToPush.pCashEnd = pCash;
+      rowToPush.totalEnd = pTrad + pRoth + pStocks + pCash;
+    }
+
+    // End-of-plan net worth (net of Trad tax per data-model.md §4)
+    const endOfPlanNetWorthReal = Math.max(0, pTrad) * (1 - taxTrad)
+      + Math.max(0, pRoth) + Math.max(0, pStocks) + Math.max(0, pCash);
+    const avgEffRate = perYearRows.length > 0
+      ? perYearRows.reduce((s, r) => s + (r.effRate || 0), 0) / perYearRows.length
+      : 0;
+
+    // Feature 008 — mode-aware feasibility gate, mirrors isFireAgeFeasible.
+    // Safe: every retirement year's start-of-year total ≥ buffer × spend.
+    // Exact: endOfPlanNetWorthReal ≥ terminalBufferYears × spend.
+    // DWZ: endOfPlanNetWorthReal ≥ 0 (already covered by feasible flag).
+    if (mode === 'safe') {
+      if (_bufUnlockFloor > 0 && _minTotalPreUnlock < _bufUnlockFloor) feasible = false;
+      if (_bufSSFloor > 0 && _minTotalPostUnlock < _bufSSFloor) feasible = false;
+    } else if (mode === 'exact') {
+      let _tYrs = 0;
+      try {
+        const _tEl = (typeof document !== 'undefined' && document) ? document.getElementById('terminalBuffer') : null;
+        _tYrs = _tEl ? (parseInt(_tEl.value, 10) || 0) : 0;
+      } catch (_e) { _tYrs = 0; }
+      if (endOfPlanNetWorthReal < _tYrs * retireSpend) feasible = false;
+    } else if (mode === 'dieWithZero') {
+      if (endOfPlanNetWorthReal < 0) feasible = false;
+    }
+
+    return {
+      strategyId: strategy.id,
+      perYearRows,
+      endOfPlanNetWorthReal,
+      lifetimeFederalTaxReal: lifetimeTax,
+      averageEffectiveTaxRate: avgEffRate,
+      earliestFeasibleFireAge: fireAge, // Architecture B: fixed FIRE age across strategies
+      feasibleUnderCurrentMode: feasible,
+      caveatFlagsObservedInRun: caveatsAgg,
+      eligibility: { eligible: true },
+      minTotalPreUnlock: _minTotalPreUnlock,
+      minTotalPostUnlock: _minTotalPostUnlock,
+    };
+  }
+
+  // Feature 008 — chart-consistent feasibility gate. Uses projectFullLifecycle
+  // (the same sim that draws the growth chart) to evaluate Safe/Exact/DWZ
+  // against the REAL trajectory, which accounts for mortgage/college/home2
+  // overlays that _simulateStrategyLifetime doesn't model. Without this, a
+  // strategy can be reported "feasible" while its chart drops to $0.
+  function _chartFeasibility(strategyId, thetaOverride) {
+    if (typeof projectFullLifecycle !== 'function') return { feasible: true, endBalance: null };
+    try {
+      const traj = projectFullLifecycle(
+        inp,
+        inp.annualSpend || retireSpend,
+        fireAge,
+        true,
+        strategyId && strategyId !== 'bracket-fill-smoothed'
+          ? { strategyOverride: strategyId, thetaOverride: (typeof thetaOverride === 'number' ? thetaOverride : null) }
+          : undefined
+      );
+      const last = traj[traj.length - 1];
+      const endBal = last ? last.total : 0;
+      if (mode === 'dieWithZero') return { feasible: endBal >= 0, endBalance: endBal };
+      if (mode === 'exact') {
+        let tYrs = 0;
+        try {
+          const tEl = (typeof document !== 'undefined' && document) ? document.getElementById('terminalBuffer') : null;
+          tYrs = tEl ? (parseInt(tEl.value, 10) || 0) : 0;
+        } catch (_e) {}
+        return { feasible: endBal >= tYrs * retireSpend, endBalance: endBal };
+      }
+      // safe
+      const bufUnlock = (inp.bufferUnlock || 0) * retireSpend;
+      const bufSS = (inp.bufferSS || 0) * retireSpend;
+      for (const row of traj) {
+        if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
+        const floor = row.age < 59.5 ? bufUnlock : bufSS;
+        if (row.total < floor) return { feasible: false, endBalance: endBal };
+      }
+      return { feasible: true, endBalance: endBal };
+    } catch (_e) {
+      return { feasible: true, endBalance: null };
+    }
+  }
+
+  const results = strategies.map(strategy => {
+    if (strategy.id !== 'tax-optimized-search') {
+      const r = _simulateStrategyLifetime(strategy, bfOpts);
+      const gate = _chartFeasibility(strategy.id, null);
+      if (!gate.feasible) r.feasibleUnderCurrentMode = false;
+      return r;
+    }
+    // 11-point θ-sweep: try θ ∈ {0, 0.1, ..., 1.0}, pick the one that minimizes
+    // lifetime federal tax (research.md §Decision 2). Tie-break by higher
+    // end-of-plan net worth so we don't pick a θ that minimizes tax by going
+    // infeasible.
+    //
+    // Feature 008 — chart-consistent feasibility per θ: for each θ, also check
+    // the REAL chart trajectory so we reject θ values that drain to $0 in the
+    // growth chart even though _simulateStrategyLifetime (which ignores
+    // mortgage/college/healthcare overlays) considers them feasible.
+    let best = null;
+    let bestTheta = 0.5;
+    for (let i = 0; i <= 10; i++) {
+      const theta = i / 10;
+      const bfOptsTheta = Object.assign({}, bfOpts, { _theta: theta });
+      const r = _simulateStrategyLifetime(strategy, bfOptsTheta);
+      const gate = _chartFeasibility('tax-optimized-search', theta);
+      if (!gate.feasible) r.feasibleUnderCurrentMode = false;
+      // Prefer feasible; then minimize tax; break ties by higher end balance.
+      if (!best) { best = r; bestTheta = theta; continue; }
+      if (r.feasibleUnderCurrentMode && !best.feasibleUnderCurrentMode) { best = r; bestTheta = theta; continue; }
+      if (!r.feasibleUnderCurrentMode && best.feasibleUnderCurrentMode) continue;
+      if (r.lifetimeFederalTaxReal < best.lifetimeFederalTaxReal - 100) { best = r; bestTheta = theta; continue; }
+      if (Math.abs(r.lifetimeFederalTaxReal - best.lifetimeFederalTaxReal) <= 100 &&
+          r.endOfPlanNetWorthReal > best.endOfPlanNetWorthReal + 1000) { best = r; bestTheta = theta; }
+    }
+    if (best) best.chosenTheta = bestTheta;
+    return best;
+  });
+  return rankByObjective(results, objective || 'leave-more-behind');
+}
+
+// Sort-only operation. Called on objective toggle (no re-simulation).
+function rankByObjective(results, objective) {
+  const obj = objective === 'retire-sooner-pay-less-tax' ? 'tax' : 'estate';
+  const END_TOL = 1000; // FR-009
+  const TAX_TOL = 100;
+  const alpha = (a, b) => a.strategyId.localeCompare(b.strategyId);
+  const rows = results.slice().sort((a, b) => {
+    // Infeasible strategies sorted to the bottom regardless of score.
+    if (a.feasibleUnderCurrentMode !== b.feasibleUnderCurrentMode) {
+      return a.feasibleUnderCurrentMode ? -1 : 1;
+    }
+    const endGap = b.endOfPlanNetWorthReal - a.endOfPlanNetWorthReal;
+    const taxGap = a.lifetimeFederalTaxReal - b.lifetimeFederalTaxReal;
+    if (obj === 'estate') {
+      if (Math.abs(endGap) > END_TOL) return endGap > 0 ? 1 : -1;
+      if (Math.abs(taxGap) > TAX_TOL) return taxGap > 0 ? 1 : -1;
+      return alpha(a, b);
+    } else {
+      if (Math.abs(taxGap) > TAX_TOL) return taxGap > 0 ? 1 : -1;
+      if (Math.abs(endGap) > END_TOL) return endGap > 0 ? 1 : -1;
+      return alpha(a, b);
+    }
+  });
+
+  // Tie detection — adjacent rows within tolerance on PRIMARY metric.
+  const ties = [];
+  let i = 0;
+  while (i < rows.length - 1) {
+    const group = [rows[i].strategyId];
+    let j = i + 1;
+    while (j < rows.length) {
+      const a = rows[i], b = rows[j];
+      const primaryTol = obj === 'estate'
+        ? (Math.abs(a.endOfPlanNetWorthReal - b.endOfPlanNetWorthReal) <= END_TOL)
+        : (Math.abs(a.lifetimeFederalTaxReal - b.lifetimeFederalTaxReal) <= TAX_TOL);
+      if (!primaryTol) break;
+      group.push(rows[j].strategyId);
+      j++;
+    }
+    if (group.length > 1) ties.push({ rank: i + 1, strategyIds: group });
+    i = j;
+  }
+
+  return {
+    objective: objective || 'leave-more-behind',
+    rows,
+    winnerId: rows[0] ? rows[0].strategyId : null,
+    ties,
+    allFeasible: rows.every(r => r.feasibleUnderCurrentMode),
   };
 }
 
@@ -7084,6 +8101,31 @@ function recalcAll() {
   if (overrideBanner) overrideBanner.classList.remove('active');
   const dragHint = document.getElementById('fireDragHint');
   if (dragHint) dragHint.classList.remove('hidden');
+
+  // ==================== Feature 008 — Score all 7 strategies ====================
+  // Architecture B (fixed FIRE age): the solver above picks `fireAge` using the
+  // incumbent bracket-fill strategy; the seven candidates then vary per-year
+  // withdrawals at that fixed age. Result cached in `_lastStrategyResults` for
+  // the winner banner + compare panel (Phase 4) + objective-toggle re-sort.
+  try {
+    const inpForScoring = Object.assign({}, inp, { annualSpend: effectiveSpend });
+    _lastStrategyResults = scoreAndRank(inpForScoring, fireAge, fireMode, _currentObjective);
+  } catch (_e) {
+    _lastStrategyResults = null;
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[strategies] scoreAndRank threw:', _e);
+    }
+  }
+  // Auto-clear preview on recalc per data-model.md §7.
+  _previewStrategyId = null;
+  renderWithdrawalWinnerBanner();
+  if (typeof renderStrategyComparePanel === 'function') {
+    try { renderStrategyComparePanel(_lastStrategyResults); } catch (_e) {}
+  }
+  if (typeof renderWithdrawalPreviewBanner === 'function') {
+    try { renderWithdrawalPreviewBanner(); } catch (_e) {}
+  }
+
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
   const accessibleFireNum = getTwoPhaseFireNum(inp, effectiveSpend, fireAge);
@@ -7739,6 +8781,38 @@ function renderRothLadder(inp) {
   const result = computeWithdrawalStrategy(inp, scenarioSpend, effectiveFireAge, brackets);
   const bridge = computeRothLadder(inp, retireSpend, effectiveFireAge);
 
+  // ==================== Feature 008 — Swap to winner's per-year rows ====================
+  // When _lastStrategyResults carries a winner OR preview strategy different
+  // from bracket-fill-smoothed, replace `result.strategy` + summary metrics so
+  // the chart reflects the DISPLAYED strategy. Bracket-fill-smoothed is
+  // byte-identical to computeWithdrawalStrategy, so we only swap when the
+  // displayed strategy differs.
+  try {
+    if (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.rows && _lastStrategyResults.rows.length > 0) {
+      const displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId) || _lastStrategyResults.winnerId;
+      if (displayedId && displayedId !== 'bracket-fill-smoothed') {
+        const displayed = _lastStrategyResults.rows.find(r => r.strategyId === displayedId);
+        if (displayed && Array.isArray(displayed.perYearRows) && displayed.perYearRows.length > 0) {
+          // Align the perYearRows to match computeWithdrawalStrategy's shape by
+          // attaching the ssIncome field from the original result (strategy-invariant
+          // under Architecture B — SS claim age + FIRE age both fixed).
+          const ssByAge = {};
+          (result.strategy || []).forEach(r => { if (r && typeof r.age === 'number') ssByAge[r.age] = r.ssIncome || 0; });
+          const augmented = displayed.perYearRows.map(r => Object.assign({}, r, {
+            ssIncome: ssByAge[r.age] !== undefined ? ssByAge[r.age] : (r.ssIncome || 0),
+            tag: null, // strategy-flip markers only apply to bracket-fill's legacy labeling
+          }));
+          result.strategy = augmented;
+          result.totalLifetimeTax = displayed.lifetimeFederalTaxReal;
+          result.avgEffRate = displayed.averageEffectiveTaxRate;
+          result.endAge = augmented.length > 0 ? augmented[augmented.length - 1].age : result.endAge;
+        }
+      }
+    }
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) console.error('[strategies] chart swap threw:', _e);
+  }
+
   const yearsInRetirement = result.strategy.length;
   const flips = result.strategy.filter(r => r.tag);
 
@@ -7766,11 +8840,27 @@ function renderRothLadder(inp) {
       savingsPct = Math.max(0, Math.round(100 * (1 - result.totalLifetimeTax / legacyRes.legacy)));
     }
   } catch (_e) { /* leave at 0 */ }
-  let narrative = t('chart.strategyNarrativeBracketFill',
-    safetyMarginPct,
-    avgConv.toLocaleString(),
-    avgTaxPct,
-    savingsPct);
+  // Feature 008 US3 — per-strategy narrative. Use the DISPLAYED strategy's
+  // narrativeKey instead of the bracket-fill-only template whenever a non-
+  // bracket-fill strategy is active. Keeps chart captions truthful.
+  let narrative;
+  try {
+    const displayedStrategyId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId);
+    if (displayedStrategyId && displayedStrategyId !== 'bracket-fill-smoothed' && typeof getStrategies === 'function') {
+      const displayedPolicy = getStrategies().find(s => s.id === displayedStrategyId);
+      if (displayedPolicy && displayedPolicy.narrativeKey) {
+        narrative = t(displayedPolicy.narrativeKey);
+      }
+    }
+  } catch (_e) { /* fall through to bracket-fill narrative */ }
+  if (!narrative) {
+    narrative = t('chart.strategyNarrativeBracketFill',
+      safetyMarginPct,
+      avgConv.toLocaleString(),
+      avgTaxPct,
+      savingsPct);
+  }
   if (inp.rule55 && inp.rule55.enabled && (inp.rule55.separationAge || 0) >= 55) {
     const rule55Suffix = (typeof currentLang !== 'undefined' && currentLang === 'zh')
       ? '55 歲規則在 55 歲（而非 59.5 歲）解鎖 Trad — 你多出 4.5 年的級距填平空間。'
@@ -8530,7 +9620,24 @@ function renderGrowthChart(inp) {
   const effectiveFireAge = (typeof _previewFireAge === 'number' && _previewFireAge != null)
     ? _previewFireAge
     : realEffectiveFireAge;
-  const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge);
+  // Feature 008 — if a non-bracket-fill strategy is winning or being previewed,
+  // thread that through projectFullLifecycle so the chart trajectory reflects
+  // the displayed strategy (not always bracket-fill-smoothed).
+  let _chartStrategyId = null;
+  let _chartThetaOverride = null;
+  try {
+    const _displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId);
+    if (_displayedId && _displayedId !== 'bracket-fill-smoothed') {
+      _chartStrategyId = _displayedId;
+      if (_displayedId === 'tax-optimized-search' && _lastStrategyResults && _lastStrategyResults.rows) {
+        const _row = _lastStrategyResults.rows.find(r => r.strategyId === _displayedId);
+        if (_row && typeof _row.chosenTheta === 'number') _chartThetaOverride = _row.chosenTheta;
+      }
+    }
+  } catch (_e) { /* fall through to bracket-fill default */ }
+  const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true,
+    _chartStrategyId ? { strategyOverride: _chartStrategyId, thetaOverride: _chartThetaOverride } : undefined);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.agePerson1;
   // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
@@ -9130,9 +10237,16 @@ function renderTimeline(inp) {
     { label: 'Now', year: 2026, desc: 'Starting point', amount: nw, type: 'completed' },
   ];
 
-  // Find $500K milestone
-  const m500k = projection.find(d => d.total >= 500000);
-  if (m500k && m500k.year > 2026) milestones.push({ label: '$500K Net Worth', year: m500k.year, desc: `Age ${m500k.age}`, amount: 500000, type: 'future' });
+  // $500K milestone — achieved if current net worth already crosses target OR
+  // the projection finds a future year when it does. The nw-first check makes
+  // the milestone independent of projection quirks (e.g. mortgage down payment
+  // pushing year-0 below target even though actual nw is already past it).
+  if (nw >= 500000) {
+    milestones.push({ label: '$500K Net Worth ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
+  } else {
+    const m500k = projection.find(d => d.total >= 500000);
+    if (m500k && m500k.year > 2026) milestones.push({ label: '$500K Net Worth', year: m500k.year, desc: `Age ${m500k.age}`, amount: 500000, type: 'future' });
+  }
 
   // Coast FIRE
   const coast = coastFIRECheck(inp);
@@ -9155,9 +10269,13 @@ function renderTimeline(inp) {
     milestones.push({ label: 'Coast FIRE ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
   }
 
-  // $1M milestone
-  const m1m = projection.find(d => d.total >= 1000000);
-  if (m1m) milestones.push({ label: 'Millionaire!', year: m1m.year, desc: `Age ${m1m.age}`, amount: 1000000, type: 'future' });
+  // $1M milestone — same nw-first pattern as the $500K milestone.
+  if (nw >= 1000000) {
+    milestones.push({ label: 'Millionaire! ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
+  } else {
+    const m1m = projection.find(d => d.total >= 1000000);
+    if (m1m) milestones.push({ label: 'Millionaire!', year: m1m.year, desc: `Age ${m1m.age}`, amount: 1000000, type: 'future' });
+  }
 
   // FIRE milestone for each scenario (using two-phase model)
   // Per-scenario calc — avoids the selectedScenario leak in getSelectedRelocationCost /
@@ -10497,6 +11615,11 @@ function _registerChartStateListeners() {
 // wait for the calc-bootstrap-ready event.
 function _bootstrapInitialRecalc() {
   _registerChartStateListeners();
+  // Apply persisted objective selector state to the UI buttons before the first
+  // recalc so scoreAndRank uses the right ranking objective on cold load.
+  if (typeof setWithdrawalObjective === 'function') {
+    try { setWithdrawalObjective(_currentObjective); } catch (_e) { /* noop */ }
+  }
   recalcAll();            // Recalculate everything (also triggers saveState)
   renderSnapshotHistory();
   autoLoadCSV();        // Try to read linked CSV file and merge with localStorage
