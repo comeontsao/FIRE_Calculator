@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:/Users/roger/.claude/image-cache/cbe262b8-82c7-46ff-bdc9-be6920ef13a0/12.png\" \"C:/Users/roger/Documents/GitHub/FIRE_Calculator/docs/readme-countries.png\")",
+      "Bash(cp \"C:/Users/roger/.claude/image-cache/cbe262b8-82c7-46ff-bdc9-be6920ef13a0/13.png\" \"C:/Users/roger/Documents/GitHub/FIRE_Calculator/docs/readme-lifecycle.png\")"
+    ]
+  }
+}

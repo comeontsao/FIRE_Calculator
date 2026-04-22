@@ -17,7 +17,7 @@ Most calculators treat FIRE as a single number: *"You'll be ready at 55."* This 
 
 - **Drag to ask "what if"** — Grab the FIRE marker on the Full Portfolio Lifecycle chart. Drop it on any age. Every chart, KPI, and status banner recomputes in the same frame so you can see exactly what retiring earlier or later costs you.
 - **Three retirement postures** — **Safe** (phase-transition buffers + end-balance ≥ 0), **Exact** (end with a chosen cushion), **Die-With-Zero** (spend the last dollar the day you die). Same math engine, three different feasibility constraints.
-- **Bracket-fill tax smoothing** *(coming in feature 007)* — Instead of drawing the 12% bracket in a concentrated 3-year burst then leaving headroom wasted, the tool fills the bracket every year and routes the excess into taxable brokerage. Honest about IRMAA, Rule of 55, and the 5-year Roth clock — every rule that changes your answer gets a visible indicator on the chart.
+- **Bracket-fill tax smoothing** — Instead of drawing the 12% bracket in a concentrated 3-year burst then leaving headroom wasted, the tool fills the bracket every year and routes the excess into taxable brokerage. Honest about IRMAA, Rule of 55, and the 5-year Roth clock — every rule that changes your answer gets a visible indicator on the chart.
 - **Geo-arbitrage, real numbers** — Eleven countries, each with its own cost-of-living, visa cost, relocation cost, healthcare delta, and tax treatment. Switch between them without contaminating each card's FIRE number with the previous country's assumptions.
 - **Transparent, not magical** — When a rule (Social Security taxable portion, IRMAA threshold, RMD after 73, Rule of 55 unlock, home sale at FIRE) affects a given year, the chart shows you. No black box.
 
@@ -25,19 +25,34 @@ Most calculators treat FIRE as a single number: *"You'll be ready at 55."* This 
 
 ## Quick start
 
-Open either dashboard file directly in a browser:
-
-- **`FIRE-Dashboard-Generic.html`** — public version. Fill in your own numbers.
-- **`FIRE-Dashboard.html`** — personalized version (Roger & Rebecca's, included as the reference build).
-
-Or serve locally:
+Open **`FIRE-Dashboard-Generic.html`** directly in a browser, or serve locally:
 
 ```bash
-python -m http.server 8000
-# then visit http://localhost:8000/
+# Windows — double-click the launcher (uses port 8766)
+start-local-generic.cmd
+
+# macOS / Linux
+python -m http.server 8766
+# then visit http://localhost:8766/FIRE-Dashboard-Generic.html
 ```
 
 The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm install`. No build step. No account. No accounts, ever.
+
+---
+
+## See it in action
+
+**Full Portfolio Lifecycle** — accumulation, FIRE, drawdown, Social Security, all in one phase-colored curve. Drag the 🔥 marker to any retirement age and every chart, KPI, and banner updates in-frame.
+
+<p align="center">
+  <img src="docs/readme-lifecycle.png" alt="Full Portfolio Lifecycle chart — accumulation through Social Security with draggable FIRE age marker" width="100%">
+</p>
+
+**Geo-Arbitrage Scenarios** — eleven candidate retirement destinations, each with its own cost of living, visa requirements, healthcare delta, and tax treatment. Filter by language, region, tax treatment, or spend tier to find where your money stretches furthest.
+
+<p align="center">
+  <img src="docs/readme-countries.png" alt="Country comparison grid — FIRE number and years-to-FIRE for each candidate retirement destination" width="100%">
+</p>
 
 ---
 
@@ -69,7 +84,7 @@ You can close the browser, copy the HTML file to an air-gapped machine, and it'l
 
 - Vanilla JavaScript (ES2020+). No build step, no transpiler, no bundler.
 - Chart.js loaded from CDN. Zero other runtime dependencies.
-- Two parallel HTML files (`FIRE-Dashboard.html` + `FIRE-Dashboard-Generic.html`) maintained in lockstep.
+- Single HTML file (`FIRE-Dashboard-Generic.html`) — drop it on any web host, or run it from your filesystem.
 - Spec-driven development via [GitHub spec-kit](https://github.com/github/spec-kit). Every feature ships with a spec, a plan, a task list, contracts, and a closeout in `specs/`.
 - Tested via Node unit tests (`tests/unit/*.test.js`) + a browser smoke harness (`tests/baseline/browser-smoke.test.js`).
 
@@ -89,8 +104,7 @@ Both should show all green.
 ## Project layout
 
 ```
-FIRE-Dashboard.html             # personal (RR) dashboard — reference build
-FIRE-Dashboard-Generic.html     # public / customizable version
+FIRE-Dashboard-Generic.html     # the dashboard — single-file HTML app
 FIRE-snapshots.csv              # append-only snapshot history
 calc/                           # extracted calc modules (gradual migration out of inline)
 specs/                          # feature specs + plans + tasks + closeouts

@@ -348,8 +348,8 @@ const NEW_I18N_KEYS_006 = Object.freeze([
   'section.compare',
   'section.track',
   'filter.label',
-  'header.yearsChipLabel',
-  'header.progressChipLabel',
+  // header.yearsChipLabel + header.progressChipLabel removed — compact-header
+  // chips were folded into the #fireStatus pill (see feature-007 bug-fix).
   'sidebar.title',
   'sidebar.pinAria',
   'sidebar.closeAria',
@@ -367,10 +367,11 @@ test('feature-006 DOM contract: sticky header + sidebar + visual system present 
   ];
 
   // --- Sticky compact header (US2) ---
+  // Note: #headerYearsValue and #headerProgressValue were removed —
+  // years-to-FIRE + progress % now live in the single #fireStatus pill.
   assertPresentInBoth(pairs, 'id="headerSentinel"', { label: '#headerSentinel' });
   assertPresentInBoth(pairs, 'id="siteHeader"', { label: '#siteHeader' });
-  assertPresentInBoth(pairs, 'id="headerYearsValue"', { label: '#headerYearsValue' });
-  assertPresentInBoth(pairs, 'id="headerProgressValue"', { label: '#headerProgressValue' });
+  assertPresentInBoth(pairs, 'id="fireStatus"', { label: '#fireStatus (status pill)' });
   assertPresentInBoth(pairs, 'id="sidebarToggle"', { label: '#sidebarToggle' });
   assertPresentInBoth(pairs, 'header--compact', { label: '.header--compact CSS class', min: 2 });
 

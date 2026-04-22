@@ -151,21 +151,6 @@
   }
   #sidebarToggle:hover { border-color: var(--accent); }
 
-  /* Live chips hidden in expanded, revealed in compact */
-  .header__live-chips { display: none; }
-  .header--compact .header__live-chips { display: flex; gap: 12px; }
-  .header__live-chips .chip {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    font-size: 0.85em;
-    color: var(--text-dim);
-  }
-  .header__live-chips .chip strong {
-    color: var(--text);
-    font-weight: 600;
-  }
-
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
     .header, .header *, .header--compact, .header--compact * {
@@ -1295,13 +1280,7 @@
     <p class="subtitle" data-i18n="header.subtitle">Financial Independence, Retire Early — Fat FIRE with Geo-Arbitrage Strategy</p>
   </div>
   <div class="header__status">
-    <div id="fireStatus" class="fire-status warning">Calculating...</div>
-    <div class="header__live-chips" aria-live="polite">
-      <span class="chip"><span data-i18n="header.yearsChipLabel">Years to FIRE</span>
-        <strong id="headerYearsValue">—</strong></span>
-      <span class="chip"><span data-i18n="header.progressChipLabel">Progress</span>
-        <strong id="headerProgressValue">—</strong></span>
-    </div>
+    <div id="fireStatus" class="fire-status warning" aria-live="polite">Calculating...</div>
   </div>
   <div class="header__controls">
     <div class="header__lang-toggle">
@@ -3380,8 +3359,6 @@ const TRANSLATIONS = {
     'section.compare': 'Compare',
     'section.track': 'Track',
     'filter.label': 'Filter:',
-    'header.yearsChipLabel': 'Years to FIRE',
-    'header.progressChipLabel': 'Progress',
     'sidebar.title': 'Lifecycle',
     'sidebar.pinAria': 'Pin lifecycle sidebar',
     'sidebar.closeAria': 'Close lifecycle sidebar',
@@ -3437,7 +3414,7 @@ const TRANSLATIONS = {
     'mode.safe': '🛡️ Safe',
     'mode.exact': '⚡ Exact',
     'mode.dieWithZero': '💀 Die-With-Zero',
-    'dyn.fireInYears': '🔥 On Track — FIRE in {0} years (age {1})',
+    'dyn.fireInYears': '🔥 On Track — FIRE in {0} years (age {1}) · {2}% there',
     'dyn.warningYears': '⚠️ Warning — {0} years to FIRE at current pace',
     'dyn.behind': '🚨 Behind — Increase savings or reduce target',
     // Feature 001-modular-calc-engine (T030) — drag/confirm/reset/infeasibility strings
@@ -3486,8 +3463,8 @@ const TRANSLATIONS = {
     'kpi.yearsSubIncrease': 'Need to increase savings',
     'kpi.yearsSuffix': 'yrs',
     'kpi.yearsOver': '40+',
-    'dyn.statusNeedsOpt': '⚡ Needs Optimization — {0} years at current pace',
-    'dyn.statusBehindSched': '⚠️ Behind Schedule — {0}+ years. Increase savings or reduce target.',
+    'dyn.statusNeedsOpt': '⚡ Needs Optimization — {0} years at current pace · {1}% there',
+    'dyn.statusBehindSched': '⚠️ Behind Schedule — {0}+ years · {1}% there. Increase savings or reduce target.',
     'dyn.progressNeeded': '${0} accessible needed',
     'dyn.progressCurrent': '${0} accessible now',
     'college.label.child1': "Child 1's College",
@@ -4052,8 +4029,6 @@ const TRANSLATIONS = {
     'section.compare': '比較',
     'section.track': '追蹤',
     'filter.label': '篩選：',
-    'header.yearsChipLabel': '距 FIRE 年數',
-    'header.progressChipLabel': '進度',
     'sidebar.title': '生涯預測',
     'sidebar.pinAria': '釘選生涯側欄',
     'sidebar.closeAria': '關閉生涯側欄',
@@ -4109,7 +4084,7 @@ const TRANSLATIONS = {
     'mode.safe': '🛡️ 安全',
     'mode.exact': '⚡ 精確',
     'mode.dieWithZero': '💀 歸零',
-    'dyn.fireInYears': '🔥 正軌 — {0} 年後 FIRE（{1} 歲）',
+    'dyn.fireInYears': '🔥 正軌 — {0} 年後 FIRE（{1} 歲）· {2}% 已達標',
     'dyn.warningYears': '⚠️ 注意 — 以目前速度還需 {0} 年',
     'dyn.behind': '🚨 落後 — 請增加儲蓄或降低目標',
     // Feature 001-modular-calc-engine (T030) — drag/confirm/reset/infeasibility strings
@@ -4158,8 +4133,8 @@ const TRANSLATIONS = {
     'kpi.yearsSubIncrease': '需要增加儲蓄',
     'kpi.yearsSuffix': '年',
     'kpi.yearsOver': '40+',
-    'dyn.statusNeedsOpt': '⚡ 需要優化 — 以目前速度還要 {0} 年',
-    'dyn.statusBehindSched': '⚠️ 進度落後 — 還要 {0}+ 年。請增加儲蓄或降低目標。',
+    'dyn.statusNeedsOpt': '⚡ 需要優化 — 以目前速度還要 {0} 年 · {1}% 已達標',
+    'dyn.statusBehindSched': '⚠️ 進度落後 — 還要 {0}+ 年 · {1}% 已達標。請增加儲蓄或降低目標。',
     'dyn.progressNeeded': '所需可用資金 ${0}',
     'dyn.progressCurrent': '目前可用資金 ${0}',
     'college.label.child1': '小孩 1 的大學',
@@ -4639,7 +4614,7 @@ function setFireMode(mode) {
   [safeBtn, exactBtn, dwzBtn].forEach(b => { b.style.background = 'var(--card)'; b.style.color = 'var(--text-dim)'; });
   if (mode === 'safe') {
     safeBtn.style.background = 'var(--accent)'; safeBtn.style.color = '#fff';
-    desc.textContent = 'Phase-transition cushions: at 59.5 and at SS start, keep ≥ N years of spend on hand. End balance ≥ 0 at plan age. Numerically simulated — matches the lifecycle chart exactly.';
+    desc.textContent = 'Trajectory cushions: keep ≥ N years of spend on hand throughout retirement (Phase 1, 2, and 3). End balance ≥ 0 at plan age. Numerically simulated — matches the lifecycle chart exactly.';
     bufferControls.style.display = '';
     terminalControls.style.display = 'none';
   } else if (mode === 'exact') {
@@ -5084,23 +5059,11 @@ function renderKpiCards(state) {
   }
 }
 
-// Feature 006 — Compact-header live stats.
-// Reads the cached _lastKpiSnapshot populated by recalcAll; writes the two
-// compact-header chip values. Never triggers a recalc. Per Constitution
-// Principle III (Single Source of Truth) — subscribes to the same event
-// pipeline as the KPI cards so both stay in sync by construction.
-// See contracts/sticky-header.contract.md §Live Data Contract.
-function renderCompactHeaderStats(_state) {
-  const snap = _lastKpiSnapshot;
-  const yearsEl = document.getElementById('headerYearsValue');
-  const progressEl = document.getElementById('headerProgressValue');
-  if (!yearsEl || !progressEl) return;
-  if (!snap) { yearsEl.textContent = '—'; progressEl.textContent = '—'; return; }
-  const years = Number.isFinite(snap.yrsToFire) ? Math.round(snap.yrsToFire).toString() : '—';
-  const pct = Number.isFinite(snap.progress) ? Math.round(snap.progress) + '%' : '—';
-  yearsEl.textContent = years;
-  progressEl.textContent = pct;
-}
+// Feature 006 Compact-header chips removed — data now lives in the green
+// status pill (`#fireStatus`) as a single source of truth for years-to-FIRE
+// and progress %. Leaving a no-op stub so any stray chartState listener
+// reference doesn't throw ReferenceError during the deprecation window.
+function renderCompactHeaderStats(_state) { /* no-op */ }
 
 // =============================================================================
 // Feature 006 (US1 — T015) — Mirror lifecycle chart in the pinnable sidebar.
@@ -5587,6 +5550,15 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
 
   let balanceAtUnlock = null;
   let balanceAtSS = null;
+  // Trajectory minimums per phase (Safe-mode trajectory enforcement).
+  // Phase 1 (FIRE → 59.5): min balance during taxable-only drawdown.
+  // Phase 2 (59.5 → SS claim): min balance after 401K unlocks, before SS starts.
+  // Phase 3 (SS → endAge): min balance after SS starts — essential for
+  // catching "portfolio depletes before plan age" scenarios that the
+  // endBalance ≥ 0 endpoint check would otherwise allow.
+  let minBalancePhase1 = Infinity;
+  let minBalancePhase2 = Infinity;
+  let minBalancePhase3 = Infinity;
   const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
 
   for (let age = inp.agePerson1; age < endAge; age++) {
@@ -5606,7 +5578,20 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
     const ssActive = age >= inp.ssClaimAge;
     const ssThisYear = ssActive ? ssAnnual : 0;
 
+    // Snapshot balances at phase transitions + trajectory sampling for
+    // Safe-mode "every year" enforcement across all 3 phases.
     if (isRetired) {
+      const eb = effBal();
+      if (!is401kUnlocked) {
+        // Phase 1 year — sample min before unlock
+        minBalancePhase1 = Math.min(minBalancePhase1, eb);
+      } else if (!ssActive) {
+        // Phase 2 year — sample min between unlock and SS
+        minBalancePhase2 = Math.min(minBalancePhase2, eb);
+      } else {
+        // Phase 3 year — sample min after SS (catches late-retirement depletion)
+        minBalancePhase3 = Math.min(minBalancePhase3, eb);
+      }
       if (balanceAtUnlock === null && is401kUnlocked) balanceAtUnlock = effBal();
       if (balanceAtSS === null && ssActive) balanceAtSS = effBal();
     }
@@ -5659,6 +5644,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
         safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
         rule55: inp.rule55 || { enabled: false, separationAge: 54 },
         irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+        endAge: inp.endAge || 100,
       };
       const mix = taxOptimizedWithdrawal(
         grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
@@ -5695,16 +5681,20 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
   const endBalance = pTrad + pRoth + pStocks + pCash;
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
   if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
-  return { endBalance, balanceAtUnlock, balanceAtSS };
+  return { endBalance, balanceAtUnlock, balanceAtSS, minBalancePhase1, minBalancePhase2, minBalancePhase3 };
 }
 
 // ==================== UNIFIED MODE-AWARE FEASIBILITY ====================
-//  Safe:        balanceAtUnlock ≥ bufferUnlock × spend,
-//               balanceAtSS     ≥ bufferSS     × spend,
-//               endBalance      ≥ 0
+//  Safe:        EVERY Phase-1 year balance ≥ bufferUnlock × spend,
+//               EVERY Phase-2 year balance ≥ bufferSS     × spend,
+//               EVERY Phase-3 year balance ≥ bufferSS     × spend,
+//               endBalance ≥ 0 at plan age.
+//               (Trajectory enforcement across ALL three retirement phases —
+//                prevents the chart from visibly depleting before plan age
+//                while the signed endBalance barely clears zero.)
 //  Exact:       endBalance      ≥ terminalBuffer × spend
 //  DieWithZero: endBalance      ≥ 0
-function isFireAgeFeasible(sim, inp, annualSpend, mode) {
+function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
   if (mode === 'dieWithZero') {
     return sim.endBalance >= 0;
   }
@@ -5713,17 +5703,49 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode) {
     const tYears = tEl ? parseInt(tEl.value) || 0 : 0;
     return sim.endBalance >= tYears * annualSpend;
   }
+  // safe — CHART-CONSISTENT trajectory enforcement: call the same simulator
+  // that draws the lifecycle chart (projectFullLifecycle) and require that
+  // every retirement year's clamped chart total stays ≥ buffer × spend.
+  //
+  // This makes "Safe says feasible" ≡ "chart doesn't deplete below floor",
+  // by construction. Previous versions compared the signed sim's per-phase
+  // minimums, which could drift from the chart because the chart clamps pools
+  // to ≥0 before compounding while the signed sim lets pools go negative —
+  // a negative stocks balance can be offset by a positive Trad balance in
+  // the signed sum yet still show as $0 (clamped) in the chart's total.
+  //
+  // When fireAge is not supplied (pre-DOM test callers, legacy shims), we
+  // fall back to the signed-sim phase-minimum check.
   const bufUnlock = (inp.bufferUnlock || 0) * annualSpend;
   const bufSS = (inp.bufferSS || 0) * annualSpend;
-  return sim.balanceAtUnlock >= bufUnlock
-      && sim.balanceAtSS >= bufSS
+  if (typeof fireAge === 'number' && typeof projectFullLifecycle === 'function') {
+    try {
+      const chart = projectFullLifecycle(inp, annualSpend, fireAge, true);
+      const unlockAge = 59.5;
+      for (let i = 0; i < chart.length; i++) {
+        const row = chart[i];
+        if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
+        const floor = (row.age < unlockAge) ? bufUnlock : bufSS;
+        if (row.total < floor) return false;
+      }
+      return true;
+    } catch (_e) {
+      // Fall through to signed-sim check if chart sim is unavailable.
+    }
+  }
+  const minP1 = (typeof sim.minBalancePhase1 === 'number') ? sim.minBalancePhase1 : Infinity;
+  const minP2 = (typeof sim.minBalancePhase2 === 'number') ? sim.minBalancePhase2 : Infinity;
+  const minP3 = (typeof sim.minBalancePhase3 === 'number') ? sim.minBalancePhase3 : Infinity;
+  return minP1 >= bufUnlock
+      && minP2 >= bufSS
+      && minP3 >= bufSS
       && sim.endBalance >= 0;
 }
 
 // Thin helper for callers that want a single boolean at a given age.
 function _evaluateFeasibilityAtAge(inp, annualSpend, age, mode) {
   const sim = signedLifecycleEndBalance(inp, annualSpend, age);
-  return isFireAgeFeasible(sim, inp, annualSpend, mode);
+  return isFireAgeFeasible(sim, inp, annualSpend, mode, age);
 }
 
 // Cache for last DWZ precise-months result so UI can display it
@@ -5737,8 +5759,9 @@ function findFireAgeNumerical(inp, annualSpend, mode) {
   const maxYrs = Math.min(45, Math.max(0, endAge - agePerson1 - 1));
   let prevSim = null;
   for (let y = 0; y <= maxYrs; y++) {
-    const sim = signedLifecycleEndBalance(inp, annualSpend, agePerson1 + y);
-    if (isFireAgeFeasible(sim, inp, annualSpend, mode)) {
+    const candidateFireAge = agePerson1 + y;
+    const sim = signedLifecycleEndBalance(inp, annualSpend, candidateFireAge);
+    if (isFireAgeFeasible(sim, inp, annualSpend, mode, candidateFireAge)) {
       if (mode === 'dieWithZero' && y > 0 && prevSim !== null) {
         const span = sim.endBalance - prevSim.endBalance;
         const f = span > 0 ? Math.max(0, Math.min(1, -prevSim.endBalance / span)) : 0;
@@ -6193,6 +6216,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS) {
         safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
         rule55: inp.rule55 || { enabled: false, separationAge: 54 },
         irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+        endAge: inp.endAge || 100,
       };
       const mix = taxOptimizedWithdrawal(
         grossSpendLC, ssThisYear,
@@ -6406,6 +6430,10 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
   const rule55 = opts.rule55 || { enabled: false, separationAge: 54 };
   const irmaaThreshold = (typeof opts.irmaaThreshold === 'number' && opts.irmaaThreshold >= 0)
     ? opts.irmaaThreshold : 212000;
+  // endAge drives Trad bracket-fill smoothing (below). Fallback 100 — a
+  // conservative ceiling so if the caller omits it the smoothing still kicks
+  // in rather than defaulting to "drain as fast as the bracket allows".
+  const endAgeOpt = (typeof opts.endAge === 'number' && opts.endAge > age) ? opts.endAge : 100;
 
   const gainPct = (typeof stockGainPct === 'number' && stockGainPct >= 0 && stockGainPct <= 1) ? stockGainPct : 0.60;
   const taxableSS = ssIncome * 0.85; // approximation; actual ranges 0-85% by provisional income
@@ -6422,15 +6450,30 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     rmd = Math.min(pTrad, pTrad / getRMDDivisor(age));
   }
 
-  // === Step 2: Bracket-fill headroom — fill the 12% bracket (minus safety margin) every year ===
+  // === Step 2: Bracket-fill headroom + trajectory smoothing ===
   // targetBracketCap = (stdDed + top12) * (1 - safetyMargin)
   // headroom for fresh Trad = targetBracketCap - taxableSS - rmd
+  //
+  // Trajectory smoothing (FIX): previously we pulled MIN(pTrad - rmd, bracketHeadroom)
+  // every accessible year, which drains Trad in 3–5 years for modest balances and
+  // leaves ages 63–72 with no Trad to draw (producing the visible tax-rate spike
+  // early in retirement followed by 0% tax through IRMAA land). Instead, cap the
+  // per-year fresh-Trad draw by `pTrad / yearsRemaining` so the balance drains
+  // EVENLY across the remaining plan horizon. Big-Trad households still fill the
+  // bracket (smoothed cap exceeds bracketHeadroom); modest-Trad households get
+  // a flatter effective-tax curve across ages 60–100.
   const targetBracketCap = (stdDed + top12) * (1 - safetyMargin);
   const bracketHeadroom = Math.max(0, targetBracketCap - taxableSS - rmd);
 
   let wTrad = rmd;
   if (canAccess401k) {
-    const additionalTrad = Math.min(Math.max(0, pTrad - rmd), bracketHeadroom);
+    const yearsRemaining = Math.max(1, endAgeOpt - age);
+    const smoothedTarget = Math.max(0, pTrad - rmd) / yearsRemaining;
+    const additionalTrad = Math.min(
+      Math.max(0, pTrad - rmd),
+      bracketHeadroom,
+      smoothedTarget
+    );
     wTrad += additionalTrad;
   }
 
@@ -6615,6 +6658,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
     rule55: inp.rule55 || { enabled: false, separationAge: 54 },
     irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+        endAge: inp.endAge || 100,
   };
 
   let pTrad = inp.person1_401kTrad;
@@ -7095,17 +7139,20 @@ function recalcAll() {
       : '$' + Math.round(mid / 1000) + 'K';
   }
 
-  // Fire status — Phase 4: use the same dyn.statusNeedsOpt/dyn.statusBehindSched keys as RR
+  // Fire status — single source of truth for years-to-FIRE + progress %.
+  // The header chips were removed (feature-007 bug-fix) because they duplicated
+  // what this pill already conveys and could drift out of sync mid-render.
   const statusEl = document.getElementById('fireStatus');
+  const progressPctRounded = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)).toFixed(1) : '0';
   if (yrsToFire <= 12) {
     statusEl.className = 'fire-status on-track';
-    statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge);
+    statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
   } else if (yrsToFire <= 18) {
     statusEl.className = 'fire-status warning';
-    statusEl.textContent = t('dyn.statusNeedsOpt', yrsToFire);
+    statusEl.textContent = t('dyn.statusNeedsOpt', yrsToFire, progressPctRounded);
   } else {
     statusEl.className = 'fire-status behind';
-    statusEl.textContent = t('dyn.statusBehindSched', yrsToFire);
+    statusEl.textContent = t('dyn.statusBehindSched', yrsToFire, progressPctRounded);
   }
 
   // Net worth display — split accessible vs locked
@@ -7152,7 +7199,25 @@ function recalcAll() {
       mtgImpact = calcMortgageImpact(mtg, yrsToFire);
     }
 
-    const mortDelta = getMortgageMonthlyDelta();
+    let mortDelta = getMortgageMonthlyDelta();
+    // getMortgageMonthlyDelta() returns a zero stub for buying-in mode — the
+    // stub is correct for accumulation-phase savings calcs (time-gated before
+    // the purchase year) but wrong for the mortgage-impact display panel,
+    // which should always show the rent-vs-planned-payment comparison.
+    // Re-derive the display values here from mtgNow.totalMonthly (the
+    // PLANNED payment) so "vs Current Rent" never falsely reads $0.
+    if (mtg.ownership === 'buying-in' && mortDelta.rentRemoved === 0) {
+      const rentElForMtg = document.getElementById('exp_0');
+      const currentRentForDisplay = rentElForMtg ? parseFloat(rentElForMtg.value) || 0 : 2690;
+      const plannedMonthlyTotal = mtgNow.totalMonthly;
+      const retireHousing = mtg.sellAtFire ? 0 : Math.round(mtg.propertyTax / 12 + mtg.insurance / 12 + mtg.hoa);
+      mortDelta = {
+        delta: plannedMonthlyTotal - currentRentForDisplay,
+        rentRemoved: currentRentForDisplay,
+        mortgageAdded: plannedMonthlyTotal,
+        retirementHousingCost: retireHousing,
+      };
+    }
     const loanAmt = mtg.homePrice - mtg.downPayment;
     document.getElementById('mtgLoanAmount').textContent = '$' + loanAmt.toLocaleString();
     document.getElementById('mtgDownPct').textContent = ((mtg.downPayment / mtg.homePrice) * 100).toFixed(1) + '%';
@@ -7445,8 +7510,13 @@ function recalcAll() {
   }
   runWhatIf();
 
-  // Update timestamp
-  document.getElementById('lastUpdate').textContent = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  // Update timestamp (defensive — restoreState fires recalcAll via input
+  // 'change' events before the late-in-body #lastUpdate span is parsed,
+  // which otherwise throws a TypeError into the console).
+  const _lastUpdateEl = document.getElementById('lastUpdate');
+  if (_lastUpdateEl) {
+    _lastUpdateEl.textContent = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
 }
 
 // ==================== HEALTHCARE CARD ====================
@@ -9991,8 +10061,14 @@ if (typeof updateInheritanceNote === 'function') {
   try { updateInheritanceNote(); } catch (_e) {}
 }
 // Restore language (if not 'en', switchLanguage will be called)
-const savedLang = localStorage.getItem('fire_lang');
-if (savedLang && savedLang !== 'en') switchLanguage(savedLang);
+// Always run switchLanguage on load, even for default English. Several panels
+// (bracket-fill explainer, "How to read this chart" block, tw.prose intro)
+// use <tag data-i18n="…" data-i18n-html> with EMPTY initial innerHTML —
+// they're intentionally populated by switchLanguage() so HTML stays lean.
+// Previously this only fired when a non-English lang was stored, so first-time
+// English visitors saw blank expandables. Calling unconditionally fixes that.
+const savedLang = localStorage.getItem('fire_lang') || 'en';
+switchLanguage(savedLang);
 
 // Feature 006 (US2 — T029) — Sticky compact header state toggle.
 // IntersectionObserver on a 1px sentinel before the header is cheaper + more

@@ -6,8 +6,8 @@ REM (See Principle V / feature 005 CLOSEOUT for context.)
 
 cd /d "%~dp0"
 
-REM Pick a free port (8000 by default).
-set PORT=8000
+REM Pick a free port. Changed from 8000 (common conflict) to 8765.
+set PORT=8765
 
 echo.
 echo ========================================
