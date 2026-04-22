@@ -7,7 +7,7 @@
 > **Most FIRE planners ask you when you want to retire, then check if the numbers fit.**
 > **This one does the opposite: it tells you when you can actually go.**
 
-Drop in your real balances, your real income, your real spending. The dashboard solves for the earliest year you can leave your job and still have the plan survive — under three different "how aggressive do you feel" modes (Safe · Exact · Die-With-Zero), across eleven candidate retirement destinations, with a tax-optimized withdrawal strategy that flattens your lifetime tax bill. Drag the retirement age on the chart to see what happens if you leave a year earlier, or a year later. The whole thing runs in your browser. Nothing gets uploaded anywhere.
+Drop in your real balances, your real income, your real spending. The dashboard solves for the earliest year you can leave your job and still have the plan survive — under three different "how aggressive do you feel" modes (Safe · Exact · Die-With-Zero), across eleven candidate retirement destinations, with a seven-strategy withdrawal optimizer that ranks each policy under your chosen objective ("leave more behind" or "pay less lifetime tax"). Drag the retirement age on the chart to see what happens if you leave a year earlier, or a year later. The whole thing runs in your browser. Nothing gets uploaded anywhere.
 
 ---
 
@@ -18,6 +18,7 @@ Most calculators treat FIRE as a single number: *"You'll be ready at 55."* This 
 - **Drag to ask "what if"** — Grab the FIRE marker on the Full Portfolio Lifecycle chart. Drop it on any age. Every chart, KPI, and status banner recomputes in the same frame so you can see exactly what retiring earlier or later costs you.
 - **Three retirement postures** — **Safe** (phase-transition buffers + end-balance ≥ 0), **Exact** (end with a chosen cushion), **Die-With-Zero** (spend the last dollar the day you die). Same math engine, three different feasibility constraints.
 - **Bracket-fill tax smoothing** — Instead of drawing the 12% bracket in a concentrated 3-year burst then leaving headroom wasted, the tool fills the bracket every year and routes the excess into taxable brokerage. Honest about IRMAA, Rule of 55, and the 5-year Roth clock — every rule that changes your answer gets a visible indicator on the chart.
+- **Multi-strategy withdrawal optimizer** — Seven withdrawal policies (Bracket-Fill Smoothed, Conventional, Proportional, Roth Ladder, Tax-Optimized Search, Trad-First, Trad-Last Preserve) scored against your active objective. Flip between "leave more behind" and "pay less lifetime tax" and the winner banner, compare panel, Lifetime Withdrawal chart, and full portfolio trajectory all re-render together. Infeasible strategies still previewable with a warning badge so you can see *why* they fail under your mode. Chart-consistent Safe/Exact/DWZ gate means "Safe" actually rejects strategies that drain to $0 and live on Social Security.
 - **Geo-arbitrage, real numbers** — Eleven countries, each with its own cost-of-living, visa cost, relocation cost, healthcare delta, and tax treatment. Switch between them without contaminating each card's FIRE number with the previous country's assumptions.
 - **Transparent, not magical** — When a rule (Social Security taxable portion, IRMAA threshold, RMD after 73, Rule of 55 unlock, home sale at FIRE) affects a given year, the chart shows you. No black box.
 
@@ -58,12 +59,13 @@ The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm ins
 
 ## Features
 
-- **Full Portfolio Lifecycle chart** — accumulation → FIRE → drawdown → Social Security, drawn as a single phase-colored curve. Draggable FIRE marker. Pinnable sidebar mirror so the chart follows you as you edit inputs.
-- **Lifetime Withdrawal Strategy chart** — per-year stacked bars showing Traditional 401K, Roth, taxable stocks (LTCG), and cash draws, with tax-optimal ordering. Effective tax rate overlay.
+- **Full Portfolio Lifecycle chart** — accumulation → FIRE → drawdown → Social Security, drawn as a single phase-colored curve. Draggable FIRE marker. Pinnable sidebar mirror so the chart follows you as you edit inputs. Reflects the currently-displayed withdrawal strategy (winner or previewed) with mortgage / college / second-home overlays preserved.
+- **Lifetime Withdrawal Strategy chart** — per-year stacked bars showing Traditional 401K, Roth, taxable stocks (LTCG), and cash draws. Effective tax rate overlay. Rebuilds when you switch objective or preview a different strategy.
+- **Strategy comparison panel** — table of the six non-winner strategies with end-of-plan balance, lifetime tax, earliest feasible FIRE age, and a Preview button (warning-styled for infeasible rows) that swaps every chart + banner to that strategy so you can see the trade-off visually.
 - **KPI row** — Net Worth, FIRE Number, Progress %, Years to FIRE.
 - **Country comparison grid** — eleven destinations, each card ranked by its own FIRE number and years-to-FIRE, with visa + relocation + healthcare overlays.
-- **Milestone timeline** — when you hit $1M, when 401K unlocks at 59.5, when SS starts, when RMDs kick in.
-- **Mortgage + Second-home planning** — buy now, buy later, keep / sell / inherit at FIRE, rental income overlay.
+- **Milestone timeline** — $500K, $1M, Coast FIRE, 401K unlock at 59.5, Social Security start, RMDs, per-scenario FIRE. Dollar-target milestones flip to "Already achieved!" the moment current net worth crosses the threshold, independent of projection quirks.
+- **Mortgage + Second-home planning** — buy now, buy later, keep / sell / inherit at FIRE, rental income overlay. Loan term slider supports 15–40 years.
 - **College planning** — per-kid cost estimates, loan-funding split, parent-PLUS modeling.
 - **Healthcare delta** — per-country pre-65 and post-65 estimates with user overrides.
 - **Snapshot history** — save your numbers as a CSV row, track progress over time.
