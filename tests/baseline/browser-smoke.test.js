@@ -438,3 +438,150 @@ test('feature-006 DOM contract: sticky header + sidebar + visual system present 
     }
   }
 });
+
+// ============================================================================
+// Test 5 — feature-007 DOM contract (RR + Generic)
+// ============================================================================
+//
+// Feature: specs/007-bracket-fill-tax-smoothing/
+//
+// Purpose: lock the DOM + i18n contracts added by feature 007 — bracket-fill
+// controls (US1), transparency indicators (US2), and info panel. Text-level
+// grep on the raw HTML source; zero deps, zero browser. Mirrors feature-006
+// style above.
+//
+// Contracts enforced:
+//   - specs/007-bracket-fill-tax-smoothing/contracts/ui-controls.contract.md
+//   - specs/007-bracket-fill-tax-smoothing/contracts/chart-transparency.contract.md
+//   - specs/007-bracket-fill-tax-smoothing/contracts/bracket-fill-algorithm.contract.md
+
+/**
+ * Feature-007 DOM ids expected exactly once in each HTML file. Each id has a
+ * specific purpose documented in the contracts; a duplicate implies a broken
+ * refactor and a zero count implies the feature regressed.
+ */
+const FEATURE_007_IDS = Object.freeze([
+  'safetyMargin',              // US1 — safety margin slider
+  'rule55Enabled',             // US1 — Rule of 55 checkbox
+  'rule55SeparationAge',       // US1 — Rule of 55 separation-age input
+  'irmaaThreshold',            // US1 — IRMAA threshold input
+  'ssReductionCaption',        // US2 — SS integration transparency caption
+  'lifetimeTaxComparison',     // US1 — bracket-fill vs no-smoothing caption
+  'dwzCaveat',                 // US1 — DWZ-mode caveat caption
+  'rule55InvalidSeparation',   // US2 — Rule of 55 invalid separation warning
+  'irmaaDisabledHint',         // US2 — IRMAA-disabled hint
+  'roth5YearBanner',           // US2 — 5-year Roth warning banner (placeholder)
+]);
+
+/**
+ * Feature-007 i18n keys added by task T004/T005. All must resolve in both
+ * TRANSLATIONS.en and TRANSLATIONS.zh dicts in both HTML files, and appear
+ * at least once in FIRE-Dashboard Translation Catalog.md.
+ */
+const FEATURE_007_I18N_KEYS = Object.freeze([
+  'bracketFill.safetyMarginLabel',
+  'bracketFill.safetyMarginTip',
+  'bracketFill.rule55Label',
+  'bracketFill.rule55Tip',
+  'bracketFill.rule55SeparationAgeLabel',
+  'bracketFill.rule55SeparationAgeTip',
+  'bracketFill.rule55InvalidSeparation',
+  'bracketFill.irmaaThresholdLabel',
+  'bracketFill.irmaaThresholdTip',
+  'bracketFill.irmaaDisabled',
+  'bracketFill.infoSummary',
+  'bracketFill.infoBody1',
+  'bracketFill.infoBody2',
+  'bracketFill.infoBody3',
+  'bracketFill.infoBody4',
+  'chart.bracketFillExcess',
+  'chart.irmaaThresholdLine',
+  'chart.rule55Unlock',
+  'chart.ssReductionCaption',
+  'chart.lifetimeTaxComparison',
+  'chart.dwzCaveat',
+  'chart.strategyNarrativeBracketFill',
+  'chart.roth5YearWarning',
+  'chart.roth5YearWarningBanner',
+]);
+
+const CATALOG_PATH_007 = path.join(REPO_ROOT_006, 'FIRE-Dashboard Translation Catalog.md');
+
+test('feature-007 DOM contract: bracket-fill controls + transparency indicators + info panel present in RR and Generic', () => {
+  const rrSrc = fs.readFileSync(RR_HTML_PATH, 'utf8');
+  const genericSrc = fs.readFileSync(GENERIC_HTML_PATH, 'utf8');
+  const catalogSrc = fs.readFileSync(CATALOG_PATH_007, 'utf8');
+  const pairs = [
+    ['FIRE-Dashboard.html', rrSrc],
+    ['FIRE-Dashboard-Generic.html', genericSrc],
+  ];
+
+  // --- Each feature-007 id appears EXACTLY ONCE in each HTML file ---
+  // Duplicates imply the Frontend refactor accidentally duplicated the node
+  // (e.g., a copy-paste between RR and Generic sections). Zero means the
+  // feature regressed.
+  for (const [fileLabel, src] of pairs) {
+    for (const idName of FEATURE_007_IDS) {
+      const needle = `id="${idName}"`;
+      const occurrences = countSubstr(src, needle);
+      assert.strictEqual(
+        occurrences,
+        1,
+        `feature-007 DOM contract: ${fileLabel} must contain '${needle}' exactly once (got ${occurrences}).`,
+      );
+    }
+  }
+
+  // --- Info panel must match id AND class simultaneously ---
+  // Matching only the id risks false-positiving on feature-005's existing
+  // "<details>" tax-strategy panel (which is a different element). The
+  // contract (T046 and T041/T042) requires BOTH id="bracketFillInfo" AND
+  // class="bracketFill-info" on the same <details> tag.
+  for (const [fileLabel, src] of pairs) {
+    const infoPanelRegex = /<details\s+id="bracketFillInfo"\s+class="bracketFill-info"/;
+    assert.ok(
+      infoPanelRegex.test(src),
+      `feature-007 DOM contract: ${fileLabel} must contain '<details id="bracketFillInfo" class="bracketFill-info" ...>' — `
+        + `id or class alone is insufficient (would false-positive on feature-005's "📖 New to this?" panel).`,
+    );
+  }
+
+  // --- All feature-007 i18n keys resolve in en + zh dicts in both HTML files ---
+  // Reuses the same translation-dict slicing strategy as the feature-006
+  // smoke above.
+  for (const [fileLabel, src] of pairs) {
+    const translationsAnchor = src.indexOf('const TRANSLATIONS');
+    assert.ok(
+      translationsAnchor >= 0,
+      `feature-007 DOM contract: ${fileLabel} has no 'const TRANSLATIONS' block.`,
+    );
+    const enStart = src.indexOf('en: {', translationsAnchor);
+    const zhStart = src.indexOf('zh: {', translationsAnchor);
+    assert.ok(enStart >= 0, `feature-007 DOM contract: ${fileLabel} has no 'en: {' dict opener inside TRANSLATIONS.`);
+    assert.ok(zhStart >= 0, `feature-007 DOM contract: ${fileLabel} has no 'zh: {' dict opener inside TRANSLATIONS.`);
+    assert.ok(zhStart > enStart, `feature-007 DOM contract: ${fileLabel} has 'zh' dict before 'en' dict — unexpected ordering.`);
+
+    const enSlice = src.slice(enStart, zhStart);
+    const zhSlice = src.slice(zhStart, Math.min(src.length, zhStart + 400_000));
+
+    for (const key of FEATURE_007_I18N_KEYS) {
+      assert.ok(
+        enSlice.includes(`'${key}'`) || enSlice.includes(`"${key}"`),
+        `feature-007 DOM contract: ${fileLabel} TRANSLATIONS.en is missing key '${key}'.`,
+      );
+      assert.ok(
+        zhSlice.includes(`'${key}'`) || zhSlice.includes(`"${key}"`),
+        `feature-007 DOM contract: ${fileLabel} TRANSLATIONS.zh is missing key '${key}'.`,
+      );
+    }
+  }
+
+  // --- Every feature-007 key documented in the translation catalog ---
+  for (const key of FEATURE_007_I18N_KEYS) {
+    assert.ok(
+      catalogSrc.includes(key),
+      `feature-007 DOM contract: 'FIRE-Dashboard Translation Catalog.md' is missing key '${key}' — `
+        + `every new key introduced by feature 007 must be documented there per T006.`,
+    );
+  }
+});
