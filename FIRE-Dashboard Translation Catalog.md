@@ -830,3 +830,49 @@ New keys added by feature 006. Present in BOTH RR and Generic `TRANSLATIONS.en` 
 **Feature 006 key count:** +13 keys each in `TRANSLATIONS.en` and `TRANSLATIONS.zh` in BOTH RR and Generic.
 
 All keys land in both files in lockstep per Constitution Principle I. No `footer.disclaimer` key was retired in this feature (that was feature 005).
+
+---
+
+## Category N+1 — Feature 007 Bracket-Fill Tax Smoothing
+
+New keys added by feature 007. Present in BOTH RR and Generic `TRANSLATIONS.en` / `TRANSLATIONS.zh` dicts. These strings cover the four new user controls (safety-margin slider, Rule-of-55 checkbox + separation-age input, IRMAA threshold input), chart annotations for caveat transparency (SS reduction caption, IRMAA threshold line, Rule-of-55 marker, DWZ caveat, lifetime-tax comparison, bracket-fill excess segment, strategy narrative), and the "What is bracket-fill smoothing?" expandable info panel.
+
+| Key | EN | zh-TW | Usage |
+|-----|----|-------|-------|
+| `bracketFill.safetyMarginLabel` | Tax Smoothing Safety Margin | 稅務平滑安全緩衝 | Label of `#safetyMargin` slider in FIRE Strategy panel |
+| `bracketFill.safetyMarginTip` | Leaves room for IRS bracket drift (brackets & standard deduction rise each year with inflation). 5% is safe; 0% assumes brackets never change year-to-year; 10% is conservative. | 預留空間應付 IRS 級距漂移（級距與標準扣除額每年隨通膨調整）。5% 為穩健值；0% 假設級距完全不變；10% 則偏保守。 | `data-tip` tooltip on safety-margin slider |
+| `bracketFill.rule55Label` | Plan to use Rule of 55 | 啟用「55 歲規則」 | Label of `#rule55Enabled` checkbox |
+| `bracketFill.rule55Tip` | If you separate from your employer at age 55+, that employer's 401(k) unlocks penalty-free 4.5 years earlier than 59.5. Only covers the one plan you separated from. | 若你於 55 歲（含）之後離職，該雇主的 401(k) 可提前於 59.5 歲之前的 4.5 年免罰提領。僅適用於你離職時的那一個計劃。 | `data-tip` tooltip on Rule-of-55 checkbox |
+| `bracketFill.rule55SeparationAgeLabel` | Separation age (year you leave employer) | 離職年齡（離開雇主的當年） | Label of `#rule55SeparationAge` number input |
+| `bracketFill.rule55SeparationAgeTip` | The calendar-year age at which you separate from your current employer. Must be 55 or higher for the rule to apply; if you leave earlier, you can't use Rule of 55. | 離開現任雇主時的曆年年齡。必須滿 55 歲才能適用本規則；若更早離職，就不能套用 55 歲規則。 | `data-tip` tooltip on separation-age input |
+| `bracketFill.rule55InvalidSeparation` | ⚠️ Rule of 55 requires separation at age 55 or older — defaulting to 59.5 unlock. | ⚠️ 「55 歲規則」要求離職時滿 55 歲 — 已自動回復為 59.5 歲解鎖。 | Validation warning shown below separation-age input when checkbox is on but age < 55 |
+| `bracketFill.irmaaThresholdLabel` | IRMAA Tier 1 threshold (MFJ) | IRMAA 第一階門檻（MFJ） | Label of `#irmaaThreshold` input near existing `#twStdDed`/`#twTop12` |
+| `bracketFill.irmaaThresholdTip` | MAGI above this level triggers Medicare Part B & D premium surcharges two years later. Default 2026 MFJ: $212K. Single: $106K. Enter 0 to disable IRMAA protection. | MAGI 超過此門檻，會在兩年後觸發 Medicare Part B 與 D 的附加保費。2026 年 MFJ 預設 $212K，單身為 $106K。填 0 表示停用 IRMAA 保護。 | `data-tip` tooltip on IRMAA input |
+| `bracketFill.irmaaDisabled` | ⚠️ IRMAA protection disabled | ⚠️ IRMAA 保護已停用 | Hint below IRMAA input when value is 0 or blank |
+| `bracketFill.infoSummary` | 📖 What is bracket-fill smoothing? (click to expand) | 📖 什麼是「級距填平」平滑化？（點擊展開） | `<summary>` of the expandable info panel |
+| `bracketFill.infoBody1` | Plain-English bracket-fill explanation (HTML, `<strong>`/`<em>`) | 白話版說明（含 HTML 標記） | First paragraph of info panel body. Rendered via `data-i18n-html`. |
+| `bracketFill.infoBody2` | Safety margin + IRMAA explanation (HTML) | 安全緩衝 + IRMAA 說明（含 HTML） | Second paragraph of info panel body |
+| `bracketFill.infoBody3` | Rule of 55 + 5-year Roth clock definitions (HTML) | 55 歲規則 + 五年 Roth 時鐘定義（含 HTML） | Third paragraph of info panel body |
+| `bracketFill.infoBody4` | When bracket-fill saves vs. when it doesn't (HTML) | 何時能省、何時幫不大（含 HTML） | Fourth paragraph of info panel body |
+| `chart.bracketFillExcess` | Trad: Bracket-fill excess | Trad：級距填平超額 | Legend entry + stacked-bar segment on Lifetime Withdrawal Strategy chart |
+| `chart.irmaaThresholdLine` | IRMAA threshold (Tier 1) | IRMAA 門檻（第一階） | Legend entry for the dashed horizontal IRMAA line |
+| `chart.rule55Unlock` | 🔓 Rule of 55 Trad unlock (age 55) | 🔓 55 歲規則 Trad 解鎖（55 歲） | Legend entry for the diamond marker on Full Portfolio Lifecycle chart |
+| `chart.ssReductionCaption` | 📌 Social Security taxable (85%) fills ${0} of the 12% bracket this year — Traditional fill reduced accordingly. | 📌 社會安全金應稅部分（85%）今年填滿了 12% 級距的 ${0} — Traditional 填平量因此減少。 | Caption below Lifetime Withdrawal Strategy chart when any year has `ssReducedFill === true`. `{0}` = reduction amount. |
+| `chart.lifetimeTaxComparison` | Lifetime federal tax (bracket-fill): ${0} · vs. no-smoothing: ${1} · savings ${2} ({3}%) | 一生聯邦稅（級距填平）：${0} · 對照未平滑：${1} · 節省 ${2}（{3}%） | Caption below Full Portfolio Lifecycle chart. `{0}` = new tax, `{1}` = old tax, `{2}` = savings $, `{3}` = savings %. |
+| `chart.dwzCaveat` | Die-With-Zero with bracket smoothing retires you earlier than the simple-tax version — synthetic Trad→taxable conversions compound through retirement, so you need a smaller starting portfolio to end at $0. See the ⓘ below for the math. | 搭配級距平滑的「歸零」策略，比單純稅務版本更早退休 — 合成 Trad→應稅轉換在整個退休期間持續複利，因此起始投資組合可以更小就能在終老時歸零。詳情見下方 ⓘ。 | Caption below FIRE-strategy buttons, visible only in DWZ mode |
+| `chart.strategyNarrativeBracketFill` | Strategy: bracket-fill at (stdDed + top12) × (1 − {0}%) safety margin. Fills the cheap 12% bracket with Traditional each year, routes excess ${1}/yr into taxable stocks. Avg tax {2}% — {3}% lower than no-smoothing. | 策略：以 (stdDed + top12) × (1 − {0}%) 安全緩衝進行級距填平。每年用 Traditional 填滿便宜的 12% 級距，並將超額 ${1}/年 轉入應稅股票帳戶。平均稅率 {2}% — 比未平滑低 {3}%。 | Strategy summary narrative above Lifetime Withdrawal Strategy chart. `{0}` = safety margin %, `{1}` = avg annual synthetic conversion, `{2}` = avg effective tax %, `{3}` = savings %. |
+| `chart.roth5YearWarning` | 5-year Roth clock warning | 五年 Roth 時鐘警示 | Aria / title for the placeholder warning element (hidden in feature 007) |
+| `chart.roth5YearWarningBanner` | ⚠️ A Roth conversion this year starts a 5-year clock — converted principal is penalty-free after that period. | ⚠️ 今年的 Roth 轉換會起算一個 5 年時鐘，期滿後轉換本金方可免罰提領。 | Yellow-banner text for the placeholder warning. Always hidden in feature 007; reserved for a future true-Roth-conversion feature. |
+
+**Feature 007 key count:** +26 keys each in `TRANSLATIONS.en` and `TRANSLATIONS.zh` in BOTH RR and Generic.
+
+**Translation conventions used above:**
+
+- "Bracket-fill" rendered as "級距填平" (fills the tax brackets).
+- "Safety margin" rendered as "安全緩衝" (not literal "邊界" — conveys the buffer intent).
+- "Rule of 55" rendered as "55 歲規則" with the literal IRS section kept for recognisability.
+- "IRMAA", "MAGI", "401(k)", "RMD", "MFJ", "Roth", "Traditional", "QCD" kept English (industry acronyms, following prior-feature convention).
+- Dollar amounts kept as `${0}`-style placeholders in both languages (no currency translation). Emoji retained unchanged.
+- Info-panel paragraphs use `data-i18n-html` and may contain `<strong>` / `<em>` inline markup — the HTML itself is identical between languages.
+
+All keys land in both files in lockstep per Constitution Principle I. No prior-feature keys were retired in feature 007.

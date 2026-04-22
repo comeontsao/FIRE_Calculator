@@ -1795,6 +1795,18 @@
     </div>
     <p style="font-size:0.82em;color:var(--text-dim);margin-top:0;margin-bottom:12px" data-i18n="tw.prose" data-i18n-html></p>
 
+    <!-- ==================== Feature 007 — Bracket-Fill Info Panel ==================== -->
+    <!-- id + class let smoke tests disambiguate this from other <details> blocks (e.g. tw.summary below). -->
+    <details id="bracketFillInfo" class="bracketFill-info" style="margin-bottom:14px;background:rgba(108,99,255,0.06);border:1px solid rgba(108,99,255,0.25);border-radius:10px;overflow:hidden">
+      <summary data-i18n="bracketFill.infoSummary" style="padding:10px 14px;cursor:pointer;font-weight:600;color:#6c63ff;font-size:0.9em;user-select:none;list-style:none">📖 What is bracket-fill smoothing? (click to expand)</summary>
+      <div class="bracketFill-info__body" style="padding:4px 16px 16px 16px;color:var(--text);font-size:0.85em;line-height:1.65">
+        <p data-i18n="bracketFill.infoBody1" data-i18n-html style="margin:0 0 10px 0"></p>
+        <p data-i18n="bracketFill.infoBody2" data-i18n-html style="margin:0 0 10px 0"></p>
+        <p data-i18n="bracketFill.infoBody3" data-i18n-html style="margin:0 0 10px 0"></p>
+        <p data-i18n="bracketFill.infoBody4" data-i18n-html style="margin:0"></p>
+      </div>
+    </details>
+
     <!-- Strategy explainer + glossary (collapsible) -->
     <details style="margin-bottom:14px;background:rgba(100,220,255,0.05);border:1px solid rgba(100,220,255,0.2);border-radius:10px;overflow:hidden">
       <summary style="padding:10px 14px;cursor:pointer;font-weight:600;color:#64dcff;font-size:0.9em;user-select:none;list-style:none" data-i18n="tw.summary">📖 New to this? Click to expand — explains the strategy + tax terms (MFJ, 12% bracket, RMD, LTCG, AMT) in plain English</summary>
@@ -1849,8 +1861,8 @@
       </div>
     </details>
 
-    <!-- User-editable tax bracket inputs -->
-    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;padding:10px 12px;background:rgba(180,220,255,0.04);border:1px solid rgba(180,220,255,0.15);border-radius:8px;margin-bottom:14px">
+    <!-- User-editable tax bracket inputs (5th column = Feature 007 IRMAA threshold) -->
+    <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:10px;padding:10px 12px;background:rgba(180,220,255,0.04);border:1px solid rgba(180,220,255,0.15);border-radius:8px;margin-bottom:14px">
       <div>
         <label style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="tw.filingStatus">Filing status</span> <span class="info-tip" data-i18n-tip="tw.filingTip" data-tip="Auto-detected from household: MFJ if partner present, Single otherwise. Brackets and deductions differ.">?</span></label>
         <div id="twStatusDisplay" style="font-weight:600;font-size:0.95em">—</div>
@@ -1866,6 +1878,12 @@
       <div>
         <label style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="tw.top22Label">Top of 22% bracket</span> <span class="info-tip" data-i18n-tip="tw.top22Tip" data-tip="2026 MFJ: $201,050. Single: $100,525. Above the 12% cap but still moderate.">?</span></label>
         <input type="number" id="twTop22" value="201050" step="1000" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em" onchange="renderRothLadder(getInputs())">
+      </div>
+      <!-- Feature 007 — IRMAA threshold (filing-status default handled by getInputs) -->
+      <div>
+        <label style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="bracketFill.irmaaThresholdLabel">IRMAA Tier 1 threshold (MFJ)</span> <span class="info-tip" data-i18n-tip="bracketFill.irmaaThresholdTip" data-tip="MAGI above this level triggers Medicare Part B & D premium surcharges two years later. Default 2026 MFJ: $212K. Single: $106K. Enter 0 to disable IRMAA protection.">?</span></label>
+        <input type="number" id="irmaaThreshold" value="212000" min="0" step="1000" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em" onchange="recalcAll()">
+        <div id="irmaaDisabledHint" data-i18n="bracketFill.irmaaDisabled" style="display:none;font-size:0.70em;color:var(--warning);margin-top:3px;line-height:1.3">⚠️ IRMAA protection disabled</div>
       </div>
     </div>
 
@@ -1884,9 +1902,19 @@
       Calculating...
     </div>
     <div id="rothLadderChartSection">
+      <!-- T040 (feature-007 §R3 / FR-040) — 5-year Roth placeholder banner.
+           Always hidden in v1 because synthetic Trad→taxable conversions do not
+           start a Roth clock. The element exists so a future true-Roth-conversion
+           feature can toggle it via strategy[].roth5YearWarning without UI churn. -->
+      <div id="roth5YearBanner" class="chart-caveat chart-caveat--warning" style="display:none;margin:0 0 10px 0;padding:8px 12px;background:rgba(255,217,61,0.08);border:1px solid rgba(255,217,61,0.35);border-radius:8px;color:var(--warning);font-size:0.82em;line-height:1.5">
+        ⚠️ <span data-i18n="chart.roth5YearWarningBanner">A Roth conversion this year starts a 5-year clock — converted principal is penalty-free after that period.</span>
+      </div>
       <div class="chart-wrap" style="height:380px;margin-top:8px">
         <canvas id="rothLadderChart"></canvas>
       </div>
+      <!-- T031 (feature-007 §Change 4) — Social Security bracket-fill reduction caption.
+           Populated by renderRothLadder when strategy[i].ssReducedFill is true for any year. -->
+      <p id="ssReductionCaption" class="chart-caveat" style="display:none;margin:10px 0 0 0;padding:8px 12px;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.25);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5"></p>
       <div style="margin-top:10px;padding:10px 12px;background:rgba(180,220,255,0.05);border:1px solid rgba(180,220,255,0.18);border-radius:8px;font-size:0.78em;color:var(--text-dim);line-height:1.5" data-i18n="tw.howToRead" data-i18n-html></div>
     </div>
   </div>
@@ -1965,6 +1993,8 @@
           </div>
           <div id="fireModeDesc" style="font-size:0.72em;color:var(--text-dim);margin-top:4px;line-height:1.4">Safety buffers at each phase transition. Portfolio survives past plan age.</div>
           <div id="dwzPrecise" style="display:none;font-size:0.78em;color:var(--danger);margin-top:6px;line-height:1.4;font-weight:600;padding:6px 8px;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.3);border-radius:6px"></div>
+          <!-- T027 (feature-007 §Change 10) — DWZ-mode caveat. Visible only when fireMode === 'dieWithZero'. -->
+          <p class="chart-caveat" id="dwzCaveat" data-i18n="chart.dwzCaveat" style="display:none;font-size:0.75em;color:var(--text-dim);margin-top:6px;line-height:1.45;padding:6px 8px;background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.25);border-radius:6px">Die-With-Zero with bracket smoothing retires you earlier than the simple-tax version — synthetic Trad→taxable conversions compound through retirement, so you need a smaller starting portfolio to end at $0. See the ⓘ below for the math.</p>
         </div>
         <div id="safetyBufferControls">
           <div class="control-group">
@@ -1985,6 +2015,28 @@
         <div class="control-group">
           <label><span data-i18n="ss.planAge">Plan until age</span> <span class="val" id="endAgeVal">95</span></label>
           <input type="range" id="endAge" min="85" max="100" step="1" value="95" oninput="document.getElementById('endAgeVal').textContent=this.value;recalcAll()">
+        </div>
+        <!-- ==================== Feature 007 — Bracket-Fill Tax Smoothing controls ==================== -->
+        <hr style="border:none;border-top:1px solid var(--border);margin:10px 0">
+        <div class="control-group">
+          <label><span data-i18n="bracketFill.safetyMarginLabel">Tax Smoothing Safety Margin</span> <span class="val" id="safetyMarginVal">5%</span>
+            <span class="info-tip" data-i18n-tip="bracketFill.safetyMarginTip" data-tip="Leaves room for IRS bracket drift (brackets & standard deduction rise each year with inflation). 5% is safe; 0% assumes brackets never change year-to-year; 10% is conservative.">?</span>
+          </label>
+          <input type="range" id="safetyMargin" min="0" max="10" step="1" value="5" oninput="document.getElementById('safetyMarginVal').textContent=this.value+'%';recalcAll()">
+        </div>
+        <div class="control-group">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="rule55Enabled" onchange="document.getElementById('rule55SeparationAgeGroup').style.display=this.checked?'':'none';recalcAll()">
+            <span data-i18n="bracketFill.rule55Label">Plan to use Rule of 55</span>
+            <span class="info-tip" data-i18n-tip="bracketFill.rule55Tip" data-tip="If you separate from your employer at age 55+, that employer's 401(k) unlocks penalty-free 4.5 years earlier than 59.5. Only covers the one plan you separated from.">?</span>
+          </label>
+        </div>
+        <div class="control-group" id="rule55SeparationAgeGroup" style="display:none">
+          <label><span data-i18n="bracketFill.rule55SeparationAgeLabel">Separation age (year you leave employer)</span>
+            <span class="info-tip" data-i18n-tip="bracketFill.rule55SeparationAgeTip" data-tip="The calendar-year age at which you separate from your current employer. Must be 55 or higher for the rule to apply; if you leave earlier, you can't use Rule of 55.">?</span>
+          </label>
+          <input type="number" id="rule55SeparationAge" min="50" max="65" value="54" onchange="recalcAll()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+          <div id="rule55InvalidSeparation" class="chart-caveat" data-i18n="bracketFill.rule55InvalidSeparation" style="display:none;font-size:0.72em;color:var(--danger);margin-top:4px;line-height:1.4">⚠️ Rule of 55 requires separation at age 55 or older — defaulting to 59.5 unlock.</div>
         </div>
       </div>
       <!-- Calculated SSA Output -->
@@ -2106,6 +2158,9 @@
     </div>
     <!-- T027: reset-to-calculated control (FR-003) — visible only when override active -->
     <button class="override-reset" id="overrideReset" type="button" hidden data-i18n="override.resetButton">Reset to calculated FIRE age</button>
+    <!-- T025 (feature-007 §Change 9) — lifetime-tax-comparison caption. Populated
+         by renderGrowthChart on every recalc. Hidden by default; shown when data exists. -->
+    <p class="chart-caveat" id="lifetimeTaxComparison" style="margin:10px 0 0 0;padding:8px 12px;background:rgba(108,99,255,0.05);border:1px solid rgba(108,99,255,0.22);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5;display:none"></p>
     <div class="fire-drag-hint" id="fireDragHint">💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later</div>
     <div id="fireOverrideBanner" class="fire-override-banner">
       <button class="fire-override-reset" onclick="resetFireOverride()">↺ Reset</button>
@@ -3744,6 +3799,31 @@ const TRANSLATIONS = {
     'scenario.tax.mexico': 'Mexico taxes residents on worldwide income (progressive 1.92-35%). But US-Mexico tax treaty avoids double taxation. Temporary resident visa holders may not be considered tax residents if they maintain US tax home. Consult a cross-border tax advisor.',
     'scenario.tax.costarica': 'Territorial tax system — only Costa Rica-sourced income is taxed. Foreign investment income is NOT taxed. This is very favorable for FIRE retirees living off US investments.',
     'scenario.tax.portugal': 'NHR (Non-Habitual Resident) tax regime was very favorable but ended for new applicants in 2024. New IFICI regime (2025) offers 20% flat tax on qualifying income for 10 years. Foreign pension income may be taxed at 10%. Careful planning needed with new rules.',
+    // Feature 007 — Bracket-fill tax smoothing (controls, caveats, chart annotations, info panel)
+    'bracketFill.safetyMarginLabel': 'Tax Smoothing Safety Margin',
+    'bracketFill.safetyMarginTip': 'Leaves room for IRS bracket drift (brackets & standard deduction rise each year with inflation). 5% is safe; 0% assumes brackets never change year-to-year; 10% is conservative.',
+    'bracketFill.rule55Label': 'Plan to use Rule of 55',
+    'bracketFill.rule55Tip': "If you separate from your employer at age 55+, that employer's 401(k) unlocks penalty-free 4.5 years earlier than 59.5. Only covers the one plan you separated from.",
+    'bracketFill.rule55SeparationAgeLabel': 'Separation age (year you leave employer)',
+    'bracketFill.rule55SeparationAgeTip': "The calendar-year age at which you separate from your current employer. Must be 55 or higher for the rule to apply; if you leave earlier, you can't use Rule of 55.",
+    'bracketFill.rule55InvalidSeparation': '⚠️ Rule of 55 requires separation at age 55 or older — defaulting to 59.5 unlock.',
+    'bracketFill.irmaaThresholdLabel': 'IRMAA Tier 1 threshold (MFJ)',
+    'bracketFill.irmaaThresholdTip': 'MAGI above this level triggers Medicare Part B & D premium surcharges two years later. Default 2026 MFJ: $212K. Single: $106K. Enter 0 to disable IRMAA protection.',
+    'bracketFill.irmaaDisabled': '⚠️ IRMAA protection disabled',
+    'bracketFill.infoSummary': '📖 What is bracket-fill smoothing? (click to expand)',
+    'bracketFill.infoBody1': '<strong>Bracket-fill in plain English:</strong> every year in retirement, the algorithm withdraws a little from your Traditional 401(k), pays cheap 12%-bracket tax on it, and re-invests any excess beyond your spending needs into your taxable brokerage. Over 10+ years this shrinks your Traditional balance <em>before</em> Required Minimum Distributions kick in at age 73, and can cut your lifetime federal tax bill by 20–30%.',
+    'bracketFill.infoBody2': '<strong>Why a 5% safety margin:</strong> IRS brackets and the standard deduction shift each year with inflation, so we leave a little headroom so a bracket-drift year does not accidentally push you into the 22% bracket. <strong>IRMAA:</strong> Medicare Part B & D premiums jump when your MAGI exceeds the Tier 1 threshold (~$212K MFJ / $106K Single in 2026). The algorithm caps your Trad fill to avoid tripping the surcharge cliff.',
+    'bracketFill.infoBody3': '<strong>Rule of 55:</strong> if you leave your employer in or after the calendar year you turn 55, that employer’s 401(k) is penalty-free at age 55 instead of 59.5. It only covers the one plan you separated from — old-employer plans rolled INTO that plan BEFORE separation are covered, but external IRAs are not. <strong>5-year Roth clock:</strong> each Roth conversion carries its own 5-year clock before converted principal is penalty-free. Feature 007 only performs <em>synthetic</em> conversion (Trad → taxable brokerage), which does not start a Roth clock — the warning is wired up for a future true-Roth-conversion feature.',
+    'bracketFill.infoBody4': '<strong>When bracket-fill saves money:</strong> a substantial Traditional balance plus retirement spending below the 12% bracket cap typically saves 10–30% of lifetime federal tax. <strong>When it does not help much:</strong> small Trad balance, a high-tax state (CA/NY/NJ/OR/MN — moot if you retire abroad), spending already deep into the 22%+ bracket, or large planned Qualified Charitable Distributions after age 70.5 all shrink the savings.',
+    'chart.bracketFillExcess': 'Trad: Bracket-fill excess',
+    'chart.irmaaThresholdLine': 'IRMAA threshold (Tier 1)',
+    'chart.rule55Unlock': '🔓 Rule of 55 Trad unlock (age 55)',
+    'chart.ssReductionCaption': '📌 Social Security taxable (85%) fills ${0} of the 12% bracket this year — Traditional fill reduced accordingly.',
+    'chart.lifetimeTaxComparison': 'Lifetime federal tax (bracket-fill): ${0} · vs. no-smoothing: ${1} · savings ${2} ({3}%)',
+    'chart.dwzCaveat': 'Die-With-Zero with bracket smoothing retires you earlier than the simple-tax version — synthetic Trad→taxable conversions compound through retirement, so you need a smaller starting portfolio to end at $0. See the ⓘ below for the math.',
+    'chart.strategyNarrativeBracketFill': 'Strategy: bracket-fill at (stdDed + top12) × (1 − {0}%) safety margin. Fills the cheap 12% bracket with Traditional each year, routes excess ${1}/yr into taxable stocks. Avg tax {2}% — {3}% lower than no-smoothing.',
+    'chart.roth5YearWarning': '5-year Roth clock warning',
+    'chart.roth5YearWarningBanner': '⚠️ A Roth conversion this year starts a 5-year clock — converted principal is penalty-free after that period.',
   },
   zh: {
     'header.title': 'Roger & Rebecca FIRE 指揮中心',
@@ -4408,6 +4488,31 @@ const TRANSLATIONS = {
     'scenario.tax.mexico': '墨西哥對居民課徵全球所得稅（累進 1.92-35%）。但美墨條約避免雙重課稅。臨時居留者若仍維持美國稅務居住可能不被視為墨稅居民。建議諮詢跨境稅務顧問。',
     'scenario.tax.costarica': '屬地稅制 — 僅哥斯大黎加來源所得課稅。海外投資收入<strong>不</strong>課稅。對靠美國投資生活的 FIRE 退休者非常有利。',
     'scenario.tax.portugal': 'NHR（非慣常居民）稅制原本很優惠，但 2024 年起新申請者已停止適用。新的 IFICI 制度（2025）對合格所得提供 10 年 20% 平稅。海外退休金可能課 10%。新規則下需仔細規劃。',
+    // Feature 007 — 級距填平稅務平滑化（控制項、警示、圖表標註、說明面板）
+    'bracketFill.safetyMarginLabel': '稅務平滑安全緩衝',
+    'bracketFill.safetyMarginTip': '預留空間應付 IRS 級距漂移（級距與標準扣除額每年隨通膨調整）。5% 為穩健值；0% 假設級距完全不變；10% 則偏保守。',
+    'bracketFill.rule55Label': '啟用「55 歲規則」',
+    'bracketFill.rule55Tip': '若你於 55 歲（含）之後離職，該雇主的 401(k) 可提前於 59.5 歲之前的 4.5 年免罰提領。僅適用於你離職時的那一個計劃。',
+    'bracketFill.rule55SeparationAgeLabel': '離職年齡（離開雇主的當年）',
+    'bracketFill.rule55SeparationAgeTip': '離開現任雇主時的曆年年齡。必須滿 55 歲才能適用本規則；若更早離職，就不能套用 55 歲規則。',
+    'bracketFill.rule55InvalidSeparation': '⚠️ 「55 歲規則」要求離職時滿 55 歲 — 已自動回復為 59.5 歲解鎖。',
+    'bracketFill.irmaaThresholdLabel': 'IRMAA 第一階門檻（MFJ）',
+    'bracketFill.irmaaThresholdTip': 'MAGI 超過此門檻，會在兩年後觸發 Medicare Part B 與 D 的附加保費。2026 年 MFJ 預設 $212K，單身為 $106K。填 0 表示停用 IRMAA 保護。',
+    'bracketFill.irmaaDisabled': '⚠️ IRMAA 保護已停用',
+    'bracketFill.infoSummary': '📖 什麼是「級距填平」平滑化？（點擊展開）',
+    'bracketFill.infoBody1': '<strong>級距填平白話版：</strong>每一個退休年度，演算法會從你的 Traditional 401(k) 提領一小部分，僅以便宜的 12% 級距繳稅，再把超出當年支出的部分轉投到你的應稅券商帳戶。10 年以上的累積下來，會在 73 歲 RMD（Required Minimum Distribution）啟動前縮小 Traditional 餘額，可為你一生的聯邦稅單省下 20–30%。',
+    'bracketFill.infoBody2': '<strong>為何預留 5% 安全緩衝：</strong>IRS 級距與標準扣除額每年會隨通膨調整，我們預留一些緩衝，避免「級距漂移年」把你意外推進 22% 級距。<strong>IRMAA：</strong>MAGI 超過第一階門檻（2026 年 MFJ 約 $212K、單身約 $106K），Medicare Part B 與 D 保費就會跳漲。演算法會把 Trad 填平量壓在門檻之下，避開這個斷崖。',
+    'bracketFill.infoBody3': '<strong>55 歲規則：</strong>若你在滿 55 歲的當年（含以後）離開雇主，那個雇主的 401(k) 自 55 歲起免罰，而不必等到 59.5 歲。僅適用於你離職時的那一個計劃 — 在離職「之前」合併進該計劃的舊雇主資金也算，但外部 IRA 不適用。<strong>五年 Roth 時鐘：</strong>每一次 Roth 轉換都會各自起算一個 5 年時鐘，之後轉換本金才能免罰提領。Feature 007 僅進行<em>合成轉換</em>（Trad → 應稅券商），並不會啟動 Roth 時鐘 — 此警示先佈線，供未來真正的 Roth 轉換功能使用。',
+    'bracketFill.infoBody4': '<strong>什麼情況能省：</strong>Traditional 餘額可觀、退休支出又低於 12% 級距上限時，通常能省下 10–30% 的一生聯邦稅。<strong>什麼情況幫不大：</strong>Trad 餘額很小、住在高州稅州（CA/NY/NJ/OR/MN — 若你海外退休就不影響）、支出早已深入 22%+ 級距，或計劃在 70.5 歲後做大額合格慈善分配（QCD）時，節稅效益都會縮水。',
+    'chart.bracketFillExcess': 'Trad：級距填平超額',
+    'chart.irmaaThresholdLine': 'IRMAA 門檻（第一階）',
+    'chart.rule55Unlock': '🔓 55 歲規則 Trad 解鎖（55 歲）',
+    'chart.ssReductionCaption': '📌 社會安全金應稅部分（85%）今年填滿了 12% 級距的 ${0} — Traditional 填平量因此減少。',
+    'chart.lifetimeTaxComparison': '一生聯邦稅（級距填平）：${0} · 對照未平滑：${1} · 節省 ${2}（{3}%）',
+    'chart.dwzCaveat': '搭配級距平滑的「歸零」策略，比單純稅務版本更早退休 — 合成 Trad→應稅轉換在整個退休期間持續複利，因此起始投資組合可以更小就能在終老時歸零。詳情見下方 ⓘ。',
+    'chart.strategyNarrativeBracketFill': '策略：以 (stdDed + top12) × (1 − {0}%) 安全緩衝進行級距填平。每年用 Traditional 填滿便宜的 12% 級距，並將超額 ${1}/年 轉入應稅股票帳戶。平均稅率 {2}% — 比未平滑低 {3}%。',
+    'chart.roth5YearWarning': '五年 Roth 時鐘警示',
+    'chart.roth5YearWarningBanner': '⚠️ 今年的 Roth 轉換會起算一個 5 年時鐘，期滿後轉換本金方可免罰提領。',
   }
 };
 
@@ -4532,6 +4637,11 @@ function setFireMode(mode) {
     bufferControls.style.display = 'none';
     terminalControls.style.display = 'none';
   }
+  // T027 (feature-007 §Change 10) — DWZ caveat caption visibility.
+  const dwzCaveatEl = document.getElementById('dwzCaveat');
+  if (dwzCaveatEl) {
+    dwzCaveatEl.style.display = (mode === 'dieWithZero') ? '' : 'none';
+  }
   // Feature 006 fix — strategy switch always clears any active drag override
   // and runs a full recalc. Previously (T023b / FR-015) we preserved the
   // override and only revalidated feasibility under the new mode, but users
@@ -4632,6 +4742,28 @@ function getInputs() {
   // Derived totals for back-compat with code that reads inp.roger401k / inp.contrib401k
   inp.roger401k = inp.roger401kTrad + inp.roger401kRoth;
   inp.contrib401k = inp.contrib401kTrad + inp.contrib401kRoth;
+
+  // ==================== Feature 007 — Bracket-Fill Tax Smoothing ====================
+  // Read the four new DOM controls defensively. Missing/blank values fall back
+  // to spec defaults so early-boot or partial-DOM callers do not throw.
+  // Contract: specs/007-bracket-fill-tax-smoothing/contracts/ui-controls.contract.md
+  const _smEl = document.getElementById('safetyMargin');
+  const _smRaw = _smEl ? parseFloat(_smEl.value) : NaN;
+  inp.safetyMargin = Number.isFinite(_smRaw) ? (_smRaw / 100) : 0.05;
+
+  const _r55El = document.getElementById('rule55Enabled');
+  const _r55AgeEl = document.getElementById('rule55SeparationAge');
+  const _r55AgeRaw = _r55AgeEl ? parseInt(_r55AgeEl.value) : NaN;
+  inp.rule55 = {
+    enabled: !!(_r55El && _r55El.checked),
+    separationAge: Number.isFinite(_r55AgeRaw) ? _r55AgeRaw : 54,
+  };
+
+  const _irmaaEl = document.getElementById('irmaaThreshold');
+  const _irmaaRaw = _irmaaEl ? parseFloat(_irmaaEl.value) : NaN;
+  // RR hardcodes MFJ per FR-067 → 212000 default when DOM missing.
+  inp.irmaaThreshold = Number.isFinite(_irmaaRaw) ? _irmaaRaw : 212000;
+
   return inp;
 }
 
@@ -5519,21 +5651,36 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
       // so Phase 1 / Phase 2 / Phase 3 collapse to one call — same as chart.
       const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
       const grossSpend = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry);
-      const brackets = getTaxBrackets(true); // MFJ — same as chart
+      const brackets = getTaxBrackets(true); // MFJ — same as chart (RR hardcoded per FR-067)
+      // Feature 007: forward bracket-fill options (safety margin, Rule of 55, IRMAA).
+      // Defensive defaults in case inp is missing feature-007 fields (pre-DOM boot / tests).
+      const bfOpts = {
+        safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
+        rule55: inp.rule55 || { enabled: false, separationAge: 54 },
+        irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+      };
       const mix = taxOptimizedWithdrawal(
         grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
-        age, brackets, inp.stockGainPct
+        age, brackets, inp.stockGainPct, bfOpts
       );
+      // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
+      // pool-operation ordering (NON-NEGOTIABLE). All three primary consumers
+      // MUST run these four steps in this exact order so signed intermediate
+      // state is identical across simulators (FR-063 cross-surface consistency).
+      // Step 1: subtract normal withdrawals from each pool
       pTrad -= mix.wTrad;
       pRoth -= mix.wRoth;
       pStocks -= mix.wStocks;
       pCash -= mix.wCash;
-      // Any unmet spending becomes signed debt on stocks (matches chart logic).
+      // Step 2: subtract shortfall from stocks (signed) if any
       if (mix.shortfall > 0) pStocks -= mix.shortfall;
-      // Signed sim does NOT clamp before compounding — preserves shortfall
-      // so `endBalance` goes truly negative when the plan fails. The chart
-      // clamps pools to ≥0 before compounding (for display), which would
-      // hide accumulated debt; the signed sim's purpose is to detect it.
+      // Step 3: add synthetic conversion to stocks (signed) if any
+      if (mix.syntheticConversion > 0) pStocks += mix.syntheticConversion;
+      // Step 4: compound. Signed sim does NOT clamp — feature-006 invariant:
+      // preserves shortfall so `endBalance` goes truly negative when the plan
+      // fails. Chart consumers (projectFullLifecycle, computeWithdrawalStrategy)
+      // clamp pools to ≥0 before compounding; the signed sim's purpose is to
+      // detect plan infeasibility as negative balance.
       pTrad *= (1 + realReturn401k);
       pRoth *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
@@ -6081,23 +6228,49 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS) {
       // Single unified algorithm: fills cheap Trad bracket first, then Roth, then LTCG stocks.
       // `taxOptimizedWithdrawal` internally handles pre-59.5 lock + post-73 RMDs.
       const grossSpendLC = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry);
-      const bracketsLC = getTaxBrackets(true); // R&R = MFJ
+      const bracketsLC = getTaxBrackets(true); // R&R = MFJ (FR-067)
+      // Feature 007: forward bracket-fill options (safety margin, Rule of 55, IRMAA).
+      const bfOpts = {
+        safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
+        rule55: inp.rule55 || { enabled: false, separationAge: 54 },
+        irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+      };
       const mix = taxOptimizedWithdrawal(
         grossSpendLC, ssThisYear,
         portfolio401kTrad, portfolio401kRoth, portfolioStocks, portfolioCash,
-        age, bracketsLC, inp.stockGainPct
+        age, bracketsLC, inp.stockGainPct, bfOpts
       );
+      // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
+      // pool-operation ordering (NON-NEGOTIABLE). Identical to the other two
+      // consumers so signed intermediate state matches before the clamp below.
+      // Step 1: subtract normal withdrawals from each pool
       portfolio401kTrad -= mix.wTrad;
       portfolio401kRoth -= mix.wRoth;
       portfolioStocks  -= mix.wStocks;
       portfolioCash    -= mix.wCash;
-      // Any unmet need accumulates as signed debt in stocks (matches prior convention)
+      // Step 2: subtract shortfall from stocks (signed) if any
       if (mix.shortfall > 0) portfolioStocks -= mix.shortfall;
-      // Apply growth (pools clamped to 0 on the low end before compounding)
+      // Step 3: add synthetic conversion to stocks (signed) if any
+      if (mix.syntheticConversion > 0) portfolioStocks += mix.syntheticConversion;
+      // Step 4: compound with clamp-to-zero (chart-display invariant — accumulated
+      // debt would distort the y-axis and hide the underlying infeasibility;
+      // `signedLifecycleEndBalance` is the authoritative detector of that case).
       portfolio401kTrad = Math.max(0, portfolio401kTrad) * (1 + realReturn401k);
       portfolio401kRoth = Math.max(0, portfolio401kRoth) * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
       portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
+      // Annotate the most recent per-year row with feature-007 flags so the
+      // sidebar mirror + future chart renderers can read them from
+      // _lastLifecycleDataset without re-running this function.
+      if (data.length > 0) {
+        const lastRow = data[data.length - 1];
+        lastRow.syntheticConversion = mix.syntheticConversion;
+        lastRow.ssReducedFill = mix.ssReducedFill;
+        lastRow.irmaaCapped = mix.irmaaCapped;
+        lastRow.irmaaBreached = mix.irmaaBreached;
+        lastRow.rule55Active = mix.rule55Active;
+        lastRow.magi = mix.magi;
+      }
     }
   }
   return data;
@@ -6139,6 +6312,51 @@ function calcOrdinaryTax(taxableIncome, brackets) {
     if (taxableIncome <= cap) break;
   }
   return tax;
+}
+
+// T044 (feature-007) — IRMAA-disabled hint visibility. Shows the ⚠ hint
+// beneath #irmaaThreshold when the value is 0 or blank (IRMAA protection off).
+// Idempotent; safe to call multiple times. Listeners attached in initFeature007Listeners.
+function _refreshIrmaaDisabledHint() {
+  const el = document.getElementById('irmaaThreshold');
+  const hint = document.getElementById('irmaaDisabledHint');
+  if (!el || !hint) return;
+  const v = parseFloat(el.value);
+  hint.style.display = (!Number.isFinite(v) || v <= 0) ? '' : 'none';
+}
+
+// T043 (feature-007) — Rule-of-55 separation-age validation. Shows the warning
+// below #rule55SeparationAge when the checkbox is checked AND the age < 55
+// (algorithm falls back to 59.5 unlock). Idempotent.
+function _refreshRule55Warning() {
+  const chk = document.getElementById('rule55Enabled');
+  const ageEl = document.getElementById('rule55SeparationAge');
+  const warn = document.getElementById('rule55InvalidSeparation');
+  if (!warn) return;
+  const enabled = !!(chk && chk.checked);
+  const age = parseFloat((ageEl || {}).value);
+  const invalid = enabled && Number.isFinite(age) && age < 55;
+  warn.style.display = invalid ? '' : 'none';
+}
+
+// T043/T044 (feature-007) — wire DOM change listeners so the validation hints
+// refresh live as the user interacts. Idempotent (guards via dataset flag).
+function _wireFeature007Hints() {
+  const irmaaEl = document.getElementById('irmaaThreshold');
+  if (irmaaEl && irmaaEl.dataset._f7HintWired !== '1') {
+    irmaaEl.dataset._f7HintWired = '1';
+    irmaaEl.addEventListener('input', _refreshIrmaaDisabledHint);
+  }
+  const chk = document.getElementById('rule55Enabled');
+  if (chk && chk.dataset._f7WarnWired !== '1') {
+    chk.dataset._f7WarnWired = '1';
+    chk.addEventListener('change', _refreshRule55Warning);
+  }
+  const ageEl = document.getElementById('rule55SeparationAge');
+  if (ageEl && ageEl.dataset._f7WarnWired !== '1') {
+    ageEl.dataset._f7WarnWired = '1';
+    ageEl.addEventListener('input', _refreshRule55Warning);
+  }
 }
 
 // Read the user-editable bracket inputs from the DOM. Auto-fill defaults by filing status.
@@ -6185,14 +6403,36 @@ function calcLTCGTax(gain, ordinaryTaxableIncome, brackets) {
 //   brackets: from getTaxBrackets
 //   withdrawal target already reflects SS offset — but we still need SS for tax calc.
 // Returns { wTrad, wRoth, wStocks, wCash, rmd, taxOwed, effRate, ordIncome, shortfall }
-function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCash, age, brackets, stockGainPct) {
-  // grossSpend = TOTAL annual spend need (BEFORE subtracting SS). SS is netted inside this function.
-  // stockGainPct = fraction of each stock sale that is long-term gain (default 0.60)
-  const UNLOCK = 59.5;
-  const canAccess401k = age >= UNLOCK;
+// ==================== FEATURE 007 — BRACKET-FILL TAX SMOOTHING ====================
+// Inputs  : grossSpend, ssIncome, pTrad, pRoth, pStocks, pCash, age, brackets,
+//           stockGainPct, options { safetyMargin, rule55, irmaaThreshold }
+// Outputs : { wTrad, wRoth, wStocks, wCash, rmd, taxOwed, ordIncome, shortfall,
+//             ltcgTax, effRate, syntheticConversion, ssReducedFill, irmaaCapped,
+//             irmaaBreached, rule55Active, roth5YearWarning, magi, bracketHeadroom }
+// Consumers: signedLifecycleEndBalance, projectFullLifecycle,
+//            computeWithdrawalStrategy (all three MUST apply identical
+//            pool-operation ordering; see bracket-fill-algorithm.contract.md
+//            §Caller pool-operation ordering).
+// Contract : specs/007-bracket-fill-tax-smoothing/contracts/bracket-fill-algorithm.contract.md
+function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCash, age, brackets, stockGainPct, options) {
+  // Feature 007 bracket-fill algorithm. Fills the 12% bracket with Trad draws every
+  // accessible year, routes excess above spend into stocks as a synthetic conversion,
+  // and detects the four transparency caveats (SS, IRMAA, Rule of 55, Roth 5y).
+  const opts = options || {};
+  const safetyMargin = (typeof opts.safetyMargin === 'number' && opts.safetyMargin >= 0 && opts.safetyMargin <= 0.10)
+    ? opts.safetyMargin : 0.05;
+  const rule55 = opts.rule55 || { enabled: false, separationAge: 54 };
+  const irmaaThreshold = (typeof opts.irmaaThreshold === 'number' && opts.irmaaThreshold >= 0)
+    ? opts.irmaaThreshold : 212000;
+
   const gainPct = (typeof stockGainPct === 'number' && stockGainPct >= 0 && stockGainPct <= 1) ? stockGainPct : 0.60;
   const taxableSS = ssIncome * 0.85; // approximation; actual ranges 0-85% by provisional income
   const { stdDed, top12 } = brackets;
+
+  // === Step 0: Resolve effective 401k unlock age (Rule of 55 support) ===
+  const effectiveUnlockAge = (rule55.enabled && (rule55.separationAge || 0) >= 55) ? 55 : 59.5;
+  const canAccess401k = age >= effectiveUnlockAge;
+  const rule55Active = (effectiveUnlockAge === 55) && (age >= 55) && (age < 59.5);
 
   // === Step 1: Forced RMD on Trad 401K (age 73+) ===
   let rmd = 0;
@@ -6200,116 +6440,183 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     rmd = Math.min(pTrad, pTrad / getRMDDivisor(age));
   }
 
-  // === Step 2: Tax-optimal Trad withdrawal (fills low bracket) ===
-  // Target: keep ordinary taxable income at or below (stdDed + top12) — the 12% cap.
-  // Already in that taxable income: taxableSS + rmd.
-  // Room for MORE Trad withdrawal (above RMD) before hitting 22% = (stdDed + top12) - taxableSS - rmd.
+  // === Step 2: Bracket-fill headroom — fill the 12% bracket (minus safety margin) every year ===
+  // targetBracketCap = (stdDed + top12) * (1 - safetyMargin)
+  // headroom for fresh Trad = targetBracketCap - taxableSS - rmd
+  const targetBracketCap = (stdDed + top12) * (1 - safetyMargin);
+  const bracketHeadroom = Math.max(0, targetBracketCap - taxableSS - rmd);
+
   let wTrad = rmd;
   if (canAccess401k) {
-    const targetOrdIncome = stdDed + top12; // fills up through 12% bracket
-    const currentOrdIncome = taxableSS + rmd;
-    const roomLow = Math.max(0, targetOrdIncome - currentOrdIncome);
-    // Compute tax on current ordIncome path (SS + RMD only)
-    const ordLow = Math.max(0, taxableSS + rmd - stdDed);
-    const taxLow = calcOrdinaryTax(ordLow, brackets);
-    const netFromRMDSS = ssIncome + rmd - taxLow; // net received so far (SS + RMD after tax)
-    const gapAfterRMD = Math.max(0, grossSpend - netFromRMDSS);
-    // Pull more Trad up to cheaper bracket cap, but only if we need it for spend
-    const additionalTrad = Math.min(pTrad - rmd, roomLow, gapAfterRMD * 1.15); // 1.15 ≈ gross-up for 12% tax
-    wTrad += Math.max(0, additionalTrad);
+    const additionalTrad = Math.min(Math.max(0, pTrad - rmd), bracketHeadroom);
+    wTrad += additionalTrad;
   }
 
-  // === Step 3: Compute ordinary income + tax after Trad draw ===
-  const ordIncome = taxableSS + wTrad;
-  const taxable = Math.max(0, ordIncome - stdDed);
-  const taxOwed = calcOrdinaryTax(taxable, brackets);
-  const netFromTradAndSS = ssIncome + wTrad - taxOwed; // net cash received from SS + Trad after tax
+  // Step 3/4/5 are computed in a helper so Step 7 (IRMAA cap) can re-run them
+  // with a reduced wTrad. This is a feedback loop, not a pure recompute.
+  function computeSpendMix(currentWTrad) {
+    const ordIncomeLocal = taxableSS + currentWTrad;
+    const taxableLocal = Math.max(0, ordIncomeLocal - stdDed);
+    const taxOwedLocal = calcOrdinaryTax(taxableLocal, brackets);
+    const netFromTradAndSS = ssIncome + currentWTrad - taxOwedLocal;
 
-  // === Step 4: Remaining spend need — fill from Roth (tax-free) ===
-  let stillNeeded = Math.max(0, grossSpend - netFromTradAndSS);
-  let wRoth = 0;
-  if (canAccess401k && pRoth > 0 && stillNeeded > 0) {
-    wRoth = Math.min(pRoth, stillNeeded);
-    stillNeeded -= wRoth;
-  }
-
-  // === Step 5: Taxable stocks — with LTCG tax (iteratively gross up so net covers need) ===
-  let wStocks = 0;
-  let ltcgTax = 0;
-  if (pStocks > 0 && stillNeeded > 0) {
-    // LTCG stacks on ordinary taxable income (SS taxable portion + wTrad, minus std ded).
-    const ordTaxableForLTCG = Math.max(0, taxable); // "taxable" computed above (ordIncome - stdDed)
-    let sellEstimate = Math.min(pStocks, stillNeeded);
-    // Fixed-point: sell X → gain = X*gainPct → LTCG(gain) → net = X - LTCG. Want net ≈ stillNeeded.
-    for (let iter = 0; iter < 5; iter++) {
-      const gain = sellEstimate * gainPct;
-      const tax = calcLTCGTax(gain, ordTaxableForLTCG, brackets);
-      const net = sellEstimate - tax;
-      const shortfall = stillNeeded - net;
-      if (Math.abs(shortfall) < 10 || sellEstimate >= pStocks) break;
-      sellEstimate = Math.min(pStocks, sellEstimate + shortfall);
+    // Step 4: Remaining spend → Roth
+    let needed = Math.max(0, grossSpend - netFromTradAndSS);
+    let wRothLocal = 0;
+    if (canAccess401k && pRoth > 0 && needed > 0) {
+      wRothLocal = Math.min(pRoth, needed);
+      needed -= wRothLocal;
     }
-    wStocks = Math.min(pStocks, sellEstimate);
-    const actualGain = wStocks * gainPct;
-    ltcgTax = calcLTCGTax(actualGain, ordTaxableForLTCG, brackets);
-    const netFromStocks = Math.max(0, wStocks - ltcgTax);
-    stillNeeded = Math.max(0, stillNeeded - netFromStocks);
-  }
 
-  // === Step 6: Cash (last resort, no tax) ===
-  let wCash = 0;
-  if (pCash > 0 && stillNeeded > 0) {
-    wCash = Math.min(pCash, stillNeeded);
-    stillNeeded -= wCash;
-  }
-
-  // === Pre-59.5 fallback: 401K locked, reallocate from taxable first (apply LTCG on stocks) ===
-  if (!canAccess401k && grossSpend > 0) {
-    wTrad = 0; wRoth = 0; rmd = 0;
-    let remaining = Math.max(0, grossSpend - ssIncome); // SS (if any) reduces the gap first
-    const ordRecomp = taxableSS;
-    const taxableRecomp = Math.max(0, ordRecomp - stdDed);
-    const ordTaxRecomp = calcOrdinaryTax(taxableRecomp, brackets);
-    // Iteratively solve stock sale so NET (after LTCG) covers the remaining gap
-    let sellEstimate = Math.min(pStocks, remaining);
-    let ltcgTaxPre = 0;
-    for (let iter = 0; iter < 5; iter++) {
-      const gain = sellEstimate * gainPct;
-      const tax = calcLTCGTax(gain, taxableRecomp, brackets);
-      const net = sellEstimate - tax;
-      const shortfall = remaining - net;
-      if (Math.abs(shortfall) < 10 || sellEstimate >= pStocks) break;
-      sellEstimate = Math.min(pStocks, sellEstimate + shortfall);
+    // Step 5: Remaining spend → Taxable stocks (with LTCG, iterative fixed-point solve)
+    let wStocksLocal = 0;
+    let ltcgTaxLocal = 0;
+    if (pStocks > 0 && needed > 0) {
+      const ordTaxableForLTCG = Math.max(0, taxableLocal);
+      let sellEstimate = Math.min(pStocks, needed);
+      for (let iter = 0; iter < 5; iter++) {
+        const gain = sellEstimate * gainPct;
+        const tax = calcLTCGTax(gain, ordTaxableForLTCG, brackets);
+        const net = sellEstimate - tax;
+        const gap = needed - net;
+        if (Math.abs(gap) < 10 || sellEstimate >= pStocks) break;
+        sellEstimate = Math.min(pStocks, sellEstimate + gap);
+      }
+      wStocksLocal = Math.min(pStocks, sellEstimate);
+      const actualGain = wStocksLocal * gainPct;
+      ltcgTaxLocal = calcLTCGTax(actualGain, ordTaxableForLTCG, brackets);
+      const netFromStocks = Math.max(0, wStocksLocal - ltcgTaxLocal);
+      needed = Math.max(0, needed - netFromStocks);
     }
-    wStocks = Math.min(pStocks, sellEstimate);
-    const actualGainPre = wStocks * gainPct;
-    ltcgTaxPre = calcLTCGTax(actualGainPre, taxableRecomp, brackets);
-    remaining = Math.max(0, remaining - Math.max(0, wStocks - ltcgTaxPre));
-    wCash = Math.min(pCash, remaining); remaining -= wCash;
-    stillNeeded = remaining;
-    const totalTaxPre = ordTaxRecomp + ltcgTaxPre;
-    const grossReceivedPre = ssIncome + wStocks + wCash;
+
+    // Step 6: Cash (last resort)
+    let wCashLocal = 0;
+    if (pCash > 0 && needed > 0) {
+      wCashLocal = Math.min(pCash, needed);
+      needed -= wCashLocal;
+    }
+
     return {
-      wTrad: 0, wRoth: 0, wStocks, wCash, rmd: 0,
-      taxOwed: totalTaxPre,
-      ordIncome: ordRecomp,
-      shortfall: stillNeeded,
-      ltcgTax: ltcgTaxPre,
-      effRate: grossReceivedPre > 0 ? totalTaxPre / grossReceivedPre : 0,
+      wRoth: wRothLocal,
+      wStocks: wStocksLocal,
+      wCash: wCashLocal,
+      ltcgTax: ltcgTaxLocal,
+      taxOwed: taxOwedLocal,
+      ordIncome: ordIncomeLocal,
+      shortfall: needed,
     };
   }
 
+  // === Pre-unlock (Invariant I-5): wTrad = 0, wRoth = 0, rmd = 0. Taxable + cash only. ===
+  if (!canAccess401k) {
+    wTrad = 0; rmd = 0;
+    const mixPre = computeSpendMix(0); // wTrad = 0
+    // Under pre-unlock, wRoth should also be zero per invariant; computeSpendMix
+    // already gates wRoth on canAccess401k so it returns 0 naturally.
+    const totalTaxPre = mixPre.taxOwed + mixPre.ltcgTax;
+    const grossReceivedPre = ssIncome + mixPre.wStocks + mixPre.wCash;
+    const magiPre = 0 + taxableSS + mixPre.wStocks * gainPct;
+    return {
+      wTrad: 0,
+      wRoth: 0,
+      wStocks: mixPre.wStocks,
+      wCash: mixPre.wCash,
+      rmd: 0,
+      taxOwed: totalTaxPre,
+      ordIncome: mixPre.ordIncome,
+      shortfall: mixPre.shortfall,
+      ltcgTax: mixPre.ltcgTax,
+      effRate: grossReceivedPre > 0 ? totalTaxPre / grossReceivedPre : 0,
+      // Feature 007 additions
+      syntheticConversion: 0,
+      ssReducedFill: taxableSS > (targetBracketCap * 0.2),
+      irmaaCapped: false,
+      irmaaBreached: false,
+      rule55Active: false, // pre-unlock means even Rule 55 hasn't engaged yet
+      roth5YearWarning: false,
+      magi: magiPre,
+      bracketHeadroom,
+    };
+  }
+
+  // === Steps 3-6: compute tax + fill remaining spend from Roth / Stocks / Cash ===
+  let phase = computeSpendMix(wTrad);
+  let wRoth = phase.wRoth;
+  let wStocks = phase.wStocks;
+  let wCash = phase.wCash;
+  let ltcgTax = phase.ltcgTax;
+  let taxOwed = phase.taxOwed;
+  let ordIncome = phase.ordIncome;
+  let stillNeeded = phase.shortfall;
+
+  // === Step 7: IRMAA cap (age 63+) — may reduce wTrad, re-run Steps 3-5 ===
+  let irmaaCapped = false;
+  let irmaaBreached = false;
+  let magi = wTrad + taxableSS + wStocks * gainPct;
+  const effectiveIrmaaCap = irmaaThreshold * (1 - safetyMargin);
+
+  if (irmaaThreshold > 0 && age >= 63 && magi > effectiveIrmaaCap) {
+    const overage = magi - effectiveIrmaaCap;
+    const tradReducible = Math.max(0, wTrad - rmd); // can't reduce below RMD
+    const tradReduction = Math.min(tradReducible, overage);
+    if (tradReduction > 0) {
+      wTrad -= tradReduction;
+      irmaaCapped = true;
+      // Re-run Steps 3-5 with the reduced wTrad
+      phase = computeSpendMix(wTrad);
+      wRoth = phase.wRoth;
+      wStocks = phase.wStocks;
+      wCash = phase.wCash;
+      ltcgTax = phase.ltcgTax;
+      taxOwed = phase.taxOwed;
+      ordIncome = phase.ordIncome;
+      stillNeeded = phase.shortfall;
+      magi = wTrad + taxableSS + wStocks * gainPct;
+    }
+    // Check if we still breach (SS + stocks alone can exceed)
+    if (magi > effectiveIrmaaCap) {
+      irmaaBreached = true;
+    }
+  }
+
+  // === Step 8: Synthetic conversion — excess of net receipts over gross spend ===
   const totalTax = taxOwed + ltcgTax;
   const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
+  const netReceived = grossReceived - totalTax;
+  const syntheticConversion = (netReceived > grossSpend) ? (netReceived - grossSpend) : 0;
+
+  // === Step 9: Annotation flags ===
+  const ssReducedFill = taxableSS > (targetBracketCap * 0.2);
+  const roth5YearWarning = false; // reserved for future true-Roth-conversion feature
+
+  // === Step 10: Return ===
   return {
     wTrad, wRoth, wStocks, wCash, rmd,
-    taxOwed: totalTax, ordIncome, shortfall: stillNeeded,
+    taxOwed: totalTax,
+    ordIncome,
+    shortfall: stillNeeded,
     ltcgTax,
     effRate: grossReceived > 0 ? totalTax / grossReceived : 0,
+    // Feature 007 additions
+    syntheticConversion,
+    ssReducedFill,
+    irmaaCapped,
+    irmaaBreached,
+    rule55Active,
+    roth5YearWarning,
+    magi,
+    bracketHeadroom,
   };
 }
 
 // Main: simulate FIRE → endAge with tax-optimal withdrawals. Returns per-year strategy.
+// Feature 007 — each strategy.push row includes new bracket-fill flags
+// (`syntheticConversion`, `ssReducedFill`, `irmaaCapped`, `irmaaBreached`,
+// `rule55Active`, `magi`) consumed by the Lifetime Withdrawal Strategy chart
+// renderer (bracket-fill-excess stacked segment, IRMAA threshold line, IRMAA
+// warning glyph, SS-reduction caption). Consumers (Constitution Principle VI):
+//   - renderWithdrawalStrategyChart (Lifetime Withdrawal Strategy bars + caption)
+//   - future chart annotators reading `strategy[i].irmaaCapped / ssReducedFill / ...`
 function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   const endAge = inp.endAge || 95;
   const realReturnStocks = inp.returnRate - inp.inflationRate;
@@ -6320,6 +6627,14 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   const ssAnnual = getSSAnnual(inp, inp.ssClaimAge, fireAge);
   const mtgAdj = getMortgageAdjustedRetirement(annualSpend, yrsToFire);
   const retireSpend = mtgAdj.annualSpend;
+
+  // Feature 007: pack options once so bracket-fill params are consistent across
+  // every retirement-year call and every downstream consumer sees the same run.
+  const bfOpts = {
+    safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
+    rule55: inp.rule55 || { enabled: false, separationAge: 54 },
+    irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+  };
 
   // Accumulate to FIRE first (mirrors projectFullLifecycle's accumulation branch)
   let pTrad = inp.roger401kTrad;
@@ -6349,8 +6664,9 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
     const grossSpend = retireSpend + hcDelta + collegeCostThisYear;
 
-    // Pass GROSS spend (SS netting happens inside the helper to avoid double-counting)
-    const mix = taxOptimizedWithdrawal(grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash, age, brackets, inp.stockGainPct);
+    // Pass GROSS spend (SS netting happens inside the helper to avoid double-counting).
+    // Feature 007: forward bracket-fill options.
+    const mix = taxOptimizedWithdrawal(grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash, age, brackets, inp.stockGainPct, bfOpts);
 
     // Strategy tag — detect flips
     let tag = null;
@@ -6365,6 +6681,20 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     totalLifetimeTax += mix.taxOwed;
     totalLifetimeDraw += (mix.wTrad + mix.wRoth + mix.wStocks + mix.wCash);
 
+    // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
+    // pool-operation ordering (NON-NEGOTIABLE). Steps 1-3 run BEFORE we read
+    // the post-draw pool balances into pTradAfter/etc so those values reflect
+    // the same signed intermediate state as the other two consumers (pre-clamp).
+    // Step 1: subtract normal withdrawals from each pool
+    let postTrad   = pTrad   - mix.wTrad;
+    let postRoth   = pRoth   - mix.wRoth;
+    let postStocks = pStocks - mix.wStocks;
+    let postCash   = pCash   - mix.wCash;
+    // Step 2: subtract shortfall from stocks (signed) if any
+    if (mix.shortfall > 0) postStocks -= mix.shortfall;
+    // Step 3: add synthetic conversion to stocks (signed) if any
+    if (mix.syntheticConversion > 0) postStocks += mix.syntheticConversion;
+
     strategy.push({
       age, year,
       ssIncome: Math.round(ssThisYear),
@@ -6376,26 +6706,32 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
       taxOwed: Math.round(mix.taxOwed),
       effRate: mix.effRate,
       ordIncome: Math.round(mix.ordIncome),
-      pTradAfter: Math.round(Math.max(0, pTrad - mix.wTrad)),
-      pRothAfter: Math.round(Math.max(0, pRoth - mix.wRoth)),
-      pStocksAfter: Math.round(Math.max(0, pStocks - mix.wStocks)),
-      pCashAfter: Math.round(Math.max(0, pCash - mix.wCash)),
+      pTradAfter: Math.round(Math.max(0, postTrad)),
+      pRothAfter: Math.round(Math.max(0, postRoth)),
+      pStocksAfter: Math.round(Math.max(0, postStocks)),
+      pCashAfter: Math.round(Math.max(0, postCash)),
       grossSpend: Math.round(grossSpend),
       shortfall: Math.round(mix.shortfall),
       tag: isFlip ? tag : null,
       phase: age < 59.5 ? 'locked' : (age < inp.ssClaimAge ? 'phase2' : 'phase3'),
+      // Feature 007 additions — consumed by the Lifetime Withdrawal Strategy
+      // chart renderer (bracket-fill-excess segment, IRMAA line, caveat glyphs).
+      syntheticConversion: Math.round(mix.syntheticConversion),
+      ssReducedFill: mix.ssReducedFill,
+      irmaaCapped: mix.irmaaCapped,
+      irmaaBreached: mix.irmaaBreached,
+      rule55Active: mix.rule55Active,
+      magi: Math.round(mix.magi),
     });
 
-    // Deplete pools by the year's draw
-    pTrad = Math.max(0, pTrad - mix.wTrad);
-    pRoth = Math.max(0, pRoth - mix.wRoth);
-    pStocks = Math.max(0, pStocks - mix.wStocks);
-    pCash = Math.max(0, pCash - mix.wCash);
-    // Grow remaining balances
-    pTrad *= (1 + realReturn401k);
-    pRoth *= (1 + realReturn401k);
-    pStocks *= (1 + realReturnStocks);
-    pCash *= 1.005;
+    // Step 4: compound with clamp-to-zero (chart-display invariant — matches
+    // projectFullLifecycle; divergence would violate FR-063 cross-surface
+    // consistency). signedLifecycleEndBalance is the authoritative infeasibility
+    // detector; this consumer displays floored values.
+    pTrad   = Math.max(0, postTrad)   * (1 + realReturn401k);
+    pRoth   = Math.max(0, postRoth)   * (1 + realReturn401k);
+    pStocks = Math.max(0, postStocks) * (1 + realReturnStocks);
+    pCash   = Math.max(0, postCash)   * 1.005;
   }
 
   const avgEffRate = strategy.length > 0
@@ -6410,6 +6746,59 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     endAge,
     bridgeYears: Math.max(0, 59.5 - fireAge),
   };
+}
+
+// ==================== T025 — LEGACY (NO-SMOOTHING) LIFETIME TAX COMPARISON ====================
+// Feature 007 §Change 9: one-shot estimate of lifetime federal tax under the
+// retired "cover-spend" algorithm (pre-bracket-fill baseline), cached per
+// stable input hash so we don't recompute on every Chart.js update (SC-010).
+//
+// Approach: re-run `computeWithdrawalStrategy` with a near-1.0 `safetyMargin`
+// override. That collapses `targetBracketCap` to a tiny sliver so bracket-fill
+// effectively degenerates — `wTrad ≈ rmd`, no synthetic conversions — which
+// mirrors the old cover-spend behavior where Trad was only touched for RMDs.
+// Sum per-year `taxOwed + ltcgTax` over retirement years.
+//
+// Inputs : inp (dashboard inputs), annualSpend, fireAge, brackets
+// Outputs: { legacy, current, savings, savingsPct }
+// Consumers: renderRothLadder (T023 strategy narrative), renderGrowthChart
+//            (T025 lifetime-tax-comparison caption).
+let _legacyTaxCache = { key: null, value: null };
+function _computeLegacyLifetimeTax(inp, annualSpend, fireAge, brackets) {
+  // Stable key — any input that affects the sim must be part of it.
+  const key = [
+    inp.ageRoger, inp.endAge, inp.ssClaimAge, fireAge,
+    Math.round(annualSpend), Math.round(brackets.stdDed), Math.round(brackets.top12),
+    Math.round(inp.roger401kTrad || 0), Math.round(inp.roger401kRoth || 0),
+    Math.round((inp.rogerStocks || 0) + (inp.rebeccaStocks || 0)),
+    Math.round((inp.cashSavings || 0) + (inp.otherAssets || 0)),
+    Math.round((inp.contrib401kTrad || 0) + (inp.empMatch || 0)),
+    Math.round(inp.contrib401kRoth || 0),
+    Math.round((inp.monthlySavings || 0) * 12),
+    (inp.returnRate || 0).toFixed(4), (inp.return401k || 0).toFixed(4),
+    (inp.inflationRate || 0).toFixed(4), (inp.stockGainPct || 0).toFixed(2),
+    (inp.rule55 && inp.rule55.enabled) ? (inp.rule55.separationAge || 0) : 0,
+  ].join('|');
+  if (_legacyTaxCache.key === key && _legacyTaxCache.value != null) {
+    return _legacyTaxCache.value;
+  }
+
+  // Snapshot current inp fields, then override safetyMargin to disable bracket-fill.
+  const savedSM = inp.safetyMargin;
+  inp.safetyMargin = 0.95;
+  let legacy = 0;
+  try {
+    const res = computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets);
+    legacy = res.strategy.reduce((sum, r) => sum + (r.taxOwed || 0), 0);
+  } catch (_e) {
+    legacy = 0;
+  } finally {
+    inp.safetyMargin = savedSM;
+  }
+
+  const value = { legacy: Math.round(legacy) };
+  _legacyTaxCache = { key, value };
+  return value;
 }
 
 // ==================== ROTH CONVERSION LADDER (bridge helper, still used for bridge summary) ====================
@@ -7394,13 +7783,92 @@ function renderRothLadder(inp) {
   const bridgeNote = bridge.feasible ? t('tw.dyn.bridgeFeasible') : t('tw.dyn.bridgeInfeasible');
   html += `<div style="padding:8px 12px;background:rgba(100,220,100,0.06);border-left:3px solid var(--success);border-radius:6px;color:var(--success);font-weight:600;font-size:0.9em">${t('tw.dyn.strategyBanner', brackets.stdDed/1000, (brackets.top12/1000).toFixed(0), (result.avgEffRate*100).toFixed(1), bridgeNote)}</div>`;
 
-  // Strategy-flip annotations (up to 4)
-  if (flips.length > 0) {
+  // T023 (feature-007 §Change 5) — strategy narrative describing bracket-fill math.
+  // Template: "Strategy: bracket-fill at (stdDed+top12) × (1 − X%) safety margin.
+  // Fills the cheap 12% bracket with Traditional each year, routes excess $Y/yr
+  // into taxable stocks. Avg tax Z% — N% lower than no-smoothing."
+  const safetyMarginPct = Math.round(((inp.safetyMargin != null) ? inp.safetyMargin : 0.05) * 100);
+  const avgConv = yearsInRetirement > 0
+    ? Math.round(result.strategy.reduce((s, r) => s + (r.syntheticConversion || 0), 0) / yearsInRetirement)
+    : 0;
+  const avgTaxPct = Math.round(result.avgEffRate * 100);
+  // Savings vs no-smoothing: one-shot legacy comparison (cached in
+  // _computeLegacyLifetimeTax so it runs once per input change).
+  let savingsPct = 0;
+  try {
+    const legacyRes = _computeLegacyLifetimeTax(inp, scenarioSpend, effectiveFireAge, brackets);
+    if (legacyRes.legacy > 0) {
+      savingsPct = Math.max(0, Math.round(100 * (1 - result.totalLifetimeTax / legacyRes.legacy)));
+    }
+  } catch (_e) { /* leave at 0 */ }
+  let narrative = t('chart.strategyNarrativeBracketFill',
+    safetyMarginPct,
+    avgConv.toLocaleString(),
+    avgTaxPct,
+    savingsPct);
+  if (inp.rule55 && inp.rule55.enabled && (inp.rule55.separationAge || 0) >= 55) {
+    // Rule-of-55 suffix — per chart-transparency.contract.md §Change 5.
+    // Literal string (not data-i18n) because the key is optional-append and
+    // the parent template `chart.strategyNarrativeBracketFill` handles the
+    // core sentence. Translated variant used when currentLang is 'zh'.
+    const rule55Suffix = (typeof currentLang !== 'undefined' && currentLang === 'zh')
+      ? '55 歲規則在 55 歲（而非 59.5 歲）解鎖 Trad — 你多出 4.5 年的級距填平空間。'
+      : 'Rule of 55 unlocks Trad at 55 (not 59.5) — you have 4.5 extra bracket-fill years.';
+    narrative += ' ' + rule55Suffix;
+  }
+  html += `<p id="strategyNarrative" class="bracketFill-narrative" style="margin:10px 0 0 0;padding:8px 12px;background:rgba(108,99,255,0.06);border-left:3px solid #6c63ff;border-radius:6px;color:var(--text);font-size:0.85em;line-height:1.55"></p>`;
+
+  // Strategy-flip annotations (up to 4). T039 (feature-007 §Change 8): when Rule
+  // of 55 is active, prepend "Age 55 🔓 Rule of 55 Trad unlock" to the caption.
+  const rule55ActiveKY = !!(inp.rule55 && inp.rule55.enabled && (inp.rule55.separationAge || 0) >= 55);
+  if (flips.length > 0 || rule55ActiveKY) {
+    const parts = [];
+    if (rule55ActiveKY) {
+      const rule55Label = (typeof currentLang !== 'undefined' && currentLang === 'zh')
+        ? '55 歲 🔓 55 歲規則 Trad 解鎖'
+        : 'Age 55 🔓 Rule of 55 Trad unlock';
+      parts.push(rule55Label);
+    }
+    flips.slice(0, 4).forEach(f => {
+      parts.push(t('tw.dyn.ageTag', f.age, translateStrategyTag(f.tag)));
+    });
     html += `<div style="margin-top:8px;font-size:0.82em;color:var(--text-dim)">${t('tw.dyn.keyYears')} ` +
-      flips.slice(0, 4).map(f => t('tw.dyn.ageTag', f.age, translateStrategyTag(f.tag))).join(' · ') +
+      parts.join(' · ') +
       `</div>`;
   }
   summaryBox.innerHTML = html;
+  // Populate narrative via textContent to avoid any HTML interpolation concerns.
+  const narrativeEl = summaryBox.querySelector('#strategyNarrative');
+  if (narrativeEl) narrativeEl.textContent = narrative;
+
+  // T031 (feature-007 §Change 4) — SS-reduction caption. Find the first year
+  // where ssReducedFill is true and populate the caption with the taxable SS
+  // portion ($ = ssIncome × 0.85). Hidden when no year triggers.
+  try {
+    const ssCapEl = document.getElementById('ssReductionCaption');
+    if (ssCapEl) {
+      const firstSsRow = result.strategy.find(r => r.ssReducedFill === true);
+      if (firstSsRow) {
+        const taxableSs = Math.round((firstSsRow.ssIncome || 0) * 0.85);
+        ssCapEl.textContent = t('chart.ssReductionCaption', taxableSs.toLocaleString());
+        ssCapEl.style.display = '';
+      } else {
+        ssCapEl.style.display = 'none';
+      }
+    }
+  } catch (_e) { /* swallow */ }
+
+  // T040 (feature-007 §R3 / FR-040) — Roth 5-year banner. Always hidden in v1
+  // because synthetic conversions do not start a Roth clock. Wired now so a
+  // future feature can flip strategy[i].roth5YearWarning and the banner will
+  // surface without any additional UI work.
+  try {
+    const roth5El = document.getElementById('roth5YearBanner');
+    if (roth5El) {
+      const hasWarning = result.strategy.some(r => r.roth5YearWarning === true);
+      roth5El.style.display = hasWarning ? '' : 'none';
+    }
+  } catch (_e) { /* swallow */ }
 
   // ---- Chart ----
   if (_rothLadderChart) { _rothLadderChart.destroy(); _rothLadderChart = null; }
@@ -7413,10 +7881,58 @@ function renderRothLadder(inp) {
   const labels = result.strategy.map(r => `${r.age}`);
   const ssData = result.strategy.map(r => r.ssIncome);
   const tradData = result.strategy.map(r => r.wTrad);
+  // T021 (feature-007 §Change 1) — bracket-fill excess routed into taxable stocks.
+  // Stacks between Trad and Roth in a distinct hue so the eye distinguishes
+  // "Trad used for spend" from "Trad routed to taxable".
+  const bracketFillExcessData = result.strategy.map(r => r.syntheticConversion || 0);
   const rothData = result.strategy.map(r => r.wRoth);
   const stocksData = result.strategy.map(r => r.wStocks);
   const cashData = result.strategy.map(r => r.wCash);
   const effRateData = result.strategy.map(r => r.effRate * 100); // %
+
+  // T033 (feature-007 §Change 2) — IRMAA horizontal threshold line.
+  // `effectiveIrmaaCap = inp.irmaaThreshold * (1 - inp.safetyMargin)` — the
+  // ceiling the algorithm caps MAGI to. Hidden when IRMAA protection is off.
+  const irmaaThreshold = (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 0;
+  const safetyMargin = (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05;
+  const effectiveIrmaaCap = irmaaThreshold > 0 ? irmaaThreshold * (1 - safetyMargin) : 0;
+  const irmaaLineData = labels.map(() => effectiveIrmaaCap);
+
+  // T035 (feature-007 §Change 3) — per-year IRMAA ⚠ glyph plugin.
+  // Mirrors the feature-006 drag-hint plugin pattern. Walks the strategy[]
+  // array once per draw; reads irmaaCapped / irmaaBreached flags; draws a
+  // small glyph above the stacked bar. yellow = capped (advisory), red =
+  // breached (MAGI exceeded the cap — Medicare surcharge will apply).
+  const irmaaGlyphPlugin = {
+    id: 'irmaaGlyph',
+    afterDatasetsDraw(chart) {
+      if (!(irmaaThreshold > 0)) return;
+      const ctx = chart.ctx;
+      // Dataset index 1 = Trad bar (see datasets order below). Use the top of
+      // that dataset's stacked bars as the y-anchor for the glyph.
+      const meta = chart.getDatasetMeta(1);
+      if (!meta || !meta.data) return;
+      ctx.save();
+      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      for (let i = 0; i < result.strategy.length && i < meta.data.length; i++) {
+        const row = result.strategy[i];
+        if (!row) continue;
+        const breached = row.irmaaBreached === true;
+        const capped = row.irmaaCapped === true;
+        if (!breached && !capped) continue;
+        const bar = meta.data[i];
+        if (!bar) continue;
+        const x = bar.x;
+        // Anchor glyph 6px above the full bar stack (use top of chart area as fallback).
+        const yTop = chart.chartArea.top + 14;
+        ctx.fillStyle = breached ? 'rgba(255,107,107,1)' : 'rgba(255,217,61,1)';
+        ctx.fillText('⚠', x, yTop);
+      }
+      ctx.restore();
+    },
+  };
 
   const ctx = canvas.getContext('2d');
   _rothLadderChart = new Chart(ctx, {
@@ -7427,11 +7943,31 @@ function renderRothLadder(inp) {
         // Stacked income/draw sources
         { label: t('tw.legend.ss'), data: ssData, backgroundColor: 'rgba(74,158,255,0.8)', borderColor: 'rgba(74,158,255,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
         { label: t('tw.legend.trad'), data: tradData, backgroundColor: 'rgba(255,107,107,0.8)', borderColor: 'rgba(255,107,107,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
+        // T021 — Trad bracket-fill excess routed into taxable (feature-007 §Change 1)
+        { label: t('chart.bracketFillExcess'), data: bracketFillExcessData, backgroundColor: 'rgba(108,99,255,0.55)', borderColor: 'rgba(108,99,255,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
         { label: t('tw.legend.roth'), data: rothData, backgroundColor: 'rgba(94,227,138,0.8)', borderColor: 'rgba(94,227,138,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
         { label: t('tw.legend.ltcg'), data: stocksData, backgroundColor: 'rgba(255,180,90,0.8)', borderColor: 'rgba(255,180,90,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
         { label: t('tw.legend.cash'), data: cashData, backgroundColor: 'rgba(192,144,96,0.8)', borderColor: 'rgba(192,144,96,1)', borderWidth: 1, stack: 'income', yAxisID: 'y', order: 4 },
         // Effective tax rate overlay line
         { type: 'line', label: t('tw.legend.effTax'), data: effRateData, borderColor: 'rgba(255,200,100,1)', backgroundColor: 'rgba(255,200,100,0.1)', borderWidth: 2.5, tension: 0.25, pointRadius: 2, yAxisID: 'y1', order: 0 },
+        // T033 (feature-007 §Change 2) — IRMAA horizontal threshold line.
+        // Placed on the dollar-amount axis (y), not the tax-rate axis (y1).
+        // hidden: true when IRMAA protection is disabled (threshold === 0).
+        // `stack` key is ignored for line-type datasets so it floats at its
+        // absolute y-value rather than joining the 'income' stacked group.
+        {
+          type: 'line',
+          label: t('chart.irmaaThresholdLine'),
+          data: irmaaLineData,
+          borderColor: 'rgba(255,107,107,0.4)',
+          borderDash: [5, 5],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          yAxisID: 'y',
+          order: 1,
+          hidden: !(irmaaThreshold > 0),
+        },
       ],
     },
     options: {
@@ -7459,6 +7995,17 @@ function renderRothLadder(inp) {
               ];
               if (r.rmd > 0) lines.push(t('tw.tooltip.rmd', (r.rmd/1000).toFixed(1)));
               if (r.shortfall > 0) lines.push(t('tw.tooltip.shortfall', (r.shortfall/1000).toFixed(1)));
+              // T035 (feature-007 §Change 3) — IRMAA tooltip context. Shows MAGI
+              // and the estimated Medicare surcharge when this year's row has
+              // either flag set. Hardcoded $70/month for v1 (single-tier model).
+              if (r.irmaaBreached === true || r.irmaaCapped === true) {
+                const magi = Math.round(r.magi || 0);
+                if (r.irmaaBreached === true) {
+                  lines.push(`⚠ MAGI $${magi.toLocaleString()} — Medicare surcharge est $70/mo applies 2 years later.`);
+                } else {
+                  lines.push(`⚠ Bracket-fill capped to stay under IRMAA Tier 1 threshold.`);
+                }
+              }
               if (r.tag) lines.push(translateStrategyTag(r.tag));
               return lines;
             },
@@ -7488,6 +8035,8 @@ function renderRothLadder(inp) {
         },
       },
     },
+    // T035 (feature-007 §Change 3) — local plugin (scoped to this chart only).
+    plugins: [irmaaGlyphPlugin],
   });
 }
 
@@ -7959,6 +8508,12 @@ function _applyInitialDragHintState() {
 //            #lifecycleSidebarCanvas (reads _lastLifecycleDataset populated below).
 // Any new consumer MUST read _lastLifecycleDataset — never re-run
 // projectFullLifecycle (Principle III, single source of truth).
+//
+// Feature 007 — projectFullLifecycle now annotates each retirement-year row
+// with per-year bracket-fill flags (`syntheticConversion`, `ssReducedFill`,
+// `irmaaCapped`, `irmaaBreached`, `rule55Active`, `magi`). A future consumer
+// that draws SS-reduction captions, IRMAA threshold lines, or Rule-of-55
+// markers reads those fields off the cached `_lastLifecycleDataset.lifecycle`.
 function renderGrowthChart(inp) {
   const ctx = document.getElementById('growthChart').getContext('2d');
   const scenario = scenarios.find(s => s.id === selectedScenario);
@@ -8113,6 +8668,29 @@ function renderGrowthChart(inp) {
     },
   );
 
+  // T037 (feature-007 §Change 7) — Rule of 55 unlock scatter marker.
+  // Single diamond at age 55 on the total-portfolio line, visually distinct
+  // from the existing 59.5 square. Only rendered when the rule applies.
+  const rule55Cfg = inp.rule55 || { enabled: false, separationAge: 59 };
+  const rule55Applies = !!(rule55Cfg.enabled && (rule55Cfg.separationAge || 0) >= 55);
+  if (rule55Applies) {
+    const rule55Row = lifecycle.find(d => d.age === 55);
+    if (rule55Row) {
+      const rule55Marker = lifecycle.map(d => d.age === 55 ? Math.round(rule55Row.total) : null);
+      datasets.push({
+        label: t('chart.rule55Unlock'),
+        data: rule55Marker,
+        borderColor: '#ffd93d',
+        backgroundColor: '#ffd93d',
+        pointRadius: 7,
+        pointStyle: 'rectRot',
+        showLine: false,
+        pointBorderWidth: 2,
+        pointBorderColor: '#8a6d00',
+      });
+    }
+  }
+
   // Legacy marker — if the user selected "Inherit" mode, show the home's final
   // appreciated value at end-of-plan as a separate annotation on the chart.
   // It's NOT added to portfolio totals — it's a visual reminder of the bequest.
@@ -8251,11 +8829,51 @@ function renderGrowthChart(inp) {
     updateOverrideBanner(inp, scenarioSpend);
   }
 
+  // T025 (feature-007 §Change 9) — lifetime tax comparison caption.
+  // Reads cached legacy tax and current `computeWithdrawalStrategy` result.
+  // Degrades to a neutral tone when savings ≤ 5%.
+  try { _updateLifetimeTaxComparison(inp, scenarioSpend, effectiveFireAge); } catch (_e) { /* swallow */ }
+
   // Feature 006 fix — mirror sidebar immediately so drag-preview renders stay in
   // sync. chartState.onChange only fires on committed state transitions, not on
   // preview renders triggered by _previewFireAge, so the sidebar would otherwise
   // lag one commit behind.
   try { renderLifecycleSidebarChart(null); } catch (_e) { /* swallow */ }
+}
+
+// T025 (feature-007 §Change 9) — update the lifetime-tax-comparison caption
+// below the Full Portfolio Lifecycle chart.
+//
+// Inputs : inp, scenarioSpend, effectiveFireAge
+// Outputs: populates textContent of #lifetimeTaxComparison; toggles display.
+// Consumers: none (leaf updater). Uses _computeLegacyLifetimeTax cache to
+//            respect SC-010 (≤2 Chart.js updates per recalc).
+function _updateLifetimeTaxComparison(inp, scenarioSpend, effectiveFireAge) {
+  const el = document.getElementById('lifetimeTaxComparison');
+  if (!el) return;
+  // RR dashboard is MFJ. Generic branch uses detectMFJ(inp) — see parity file.
+  const brackets = getTaxBrackets(true);
+  const current = computeWithdrawalStrategy(inp, scenarioSpend, effectiveFireAge, brackets);
+  const { legacy } = _computeLegacyLifetimeTax(inp, scenarioSpend, effectiveFireAge, brackets);
+  const currentTax = current.totalLifetimeTax || 0;
+  if (!legacy || legacy <= 0 || !currentTax) {
+    el.style.display = 'none';
+    return;
+  }
+  const savings = legacy - currentTax;
+  const savingsPct = Math.round(100 * savings / legacy);
+  if (savingsPct <= 5) {
+    el.textContent = (typeof currentLang !== 'undefined' && currentLang === 'zh')
+      ? '級距填平在此情境中節稅微薄（≤5%）— 你本來就處於低稅率區間。'
+      : "Bracket-fill saves negligible tax for your scenario (≤5%) — you're already in a low-tax regime.";
+  } else {
+    el.textContent = t('chart.lifetimeTaxComparison',
+      Math.round(currentTax).toLocaleString(),
+      Math.round(legacy).toLocaleString(),
+      Math.round(savings).toLocaleString(),
+      savingsPct);
+  }
+  el.style.display = '';
 }
 
 // Update the comparison banner when FIRE age is overridden
@@ -8717,6 +9335,8 @@ const PERSIST_IDS = [
   'mtg2HomePrice', 'mtg2DownPayment', 'mtg2ClosingCosts',
   'mtg2Rate', 'mtg2Term', 'mtg2PropertyTax',
   'mtg2OtherCarry', 'mtg2RentalIncome', 'mtg2Apprec', 'mtg2Destiny',
+  // Feature 007 — Bracket-Fill Tax Smoothing
+  'safetyMargin', 'rule55Enabled', 'rule55SeparationAge', 'irmaaThreshold',
 ];
 
 // Slider label IDs that need updating when values are restored
@@ -8752,13 +9372,22 @@ const SLIDER_LABELS = {
   loanParentPctKid1:{ el: 'loanParentPctKid1Val', fmt: v => v + '%' },
   loanParentPctKid2:{ el: 'loanParentPctKid2Val', fmt: v => v + '%' },
   stockGainPct:     { el: 'stockGainPctVal',      fmt: v => v + '%' },
+  // Feature 007 — Bracket-Fill Tax Smoothing
+  safetyMargin:     { el: 'safetyMarginVal',      fmt: v => v + '%' },
 };
 
 function saveState() {
   const state = {};
   PERSIST_IDS.forEach(id => {
     const el = document.getElementById(id);
-    if (el) state[id] = el.value;
+    if (!el) return;
+    // Feature 007 — checkbox inputs (e.g. #rule55Enabled) must serialize .checked,
+    // not .value (which is always 'on'). Store as '1'/'0' string for round-trip parity.
+    if (el.type === 'checkbox') {
+      state[id] = el.checked ? '1' : '0';
+    } else {
+      state[id] = el.value;
+    }
   });
   // Save expenses
   state._expenses = defaultExpenses.map((exp, i) => {
@@ -8803,7 +9432,15 @@ function restoreState() {
     PERSIST_IDS.forEach(id => {
       if (state[id] !== undefined) {
         const el = document.getElementById(id);
-        if (el) el.value = state[id];
+        if (!el) return;
+        // Feature 007 — checkbox round-trip: stored as '1'/'0'; restore .checked.
+        if (el.type === 'checkbox') {
+          el.checked = (state[id] === '1' || state[id] === true);
+          // Fire onchange so dependent visibility (e.g. #rule55SeparationAgeGroup) updates.
+          try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_e) {}
+        } else {
+          el.value = state[id];
+        }
       }
     });
 
@@ -9428,6 +10065,18 @@ function renderSnapshotHistory() {
 updateAges();
 buildExpenseTable();
 restoreState();       // Load saved values (inputs, sliders, expenses, scenario, SS age, earnings history)
+// T043/T044 (feature-007) — wire the IRMAA-disabled hint + Rule-of-55 warning
+// listeners after restoreState so `.value` writes during restore don't trigger
+// stale warning states. Reflect initial state now that values are in place.
+if (typeof _wireFeature007Hints === 'function') {
+  try { _wireFeature007Hints(); } catch (_e) { /* noop */ }
+}
+if (typeof _refreshIrmaaDisabledHint === 'function') {
+  try { _refreshIrmaaDisabledHint(); } catch (_e) { /* noop */ }
+}
+if (typeof _refreshRule55Warning === 'function') {
+  try { _refreshRule55Warning(); } catch (_e) { /* noop */ }
+}
 buildSSEarningsTable(); // Build SSA earnings table (after restore so it uses restored data)
 // Refresh the per-country cap-gains note based on whatever home location we restored.
 // (Do NOT overwrite user's saved mortgage values — just sync the explanation line.)
