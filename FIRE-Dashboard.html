@@ -753,12 +753,16 @@
     }
   }
 
-  /* Snapshot tracking */
-  .snapshot-section {
-    max-width: 1400px;
-    margin: 30px auto 0;
+  /* Mortgage Impact — full-width lateral block with 2-col content flow */
+  #mortgageImpact > div,
+  #mortgageImpact strong {
+    break-inside: avoid;
+  }
+  @media (max-width: 900px) {
+    #mortgageImpact { column-count: 1 !important; }
   }
 
+  /* Snapshot tracking */
   .snapshot-table {
     width: 100%;
     border-collapse: collapse;
@@ -805,31 +809,17 @@
   .obj-tag.obj { background: rgba(0,212,170,0.15); color: var(--success); }
   .obj-tag.est { background: rgba(255,217,61,0.15); color: var(--warning); }
 
-  .save-bar {
-    max-width: 1400px;
-    margin: 20px auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 20px 24px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-  }
-
   .btn-save {
-    padding: 14px 40px;
+    padding: 10px 22px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: #fff;
     border: none;
-    border-radius: 12px;
-    font-size: 1.05em;
+    border-radius: 10px;
+    font-size: 0.9em;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.3s;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.3px;
   }
 
   .btn-save:hover {
@@ -1596,7 +1586,7 @@
           </div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <!-- Purchase Details -->
         <div>
           <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:10px;font-weight:600" data-i18n="mtg.purchaseDetails">Purchase Details</div>
@@ -1642,28 +1632,30 @@
             <input type="number" id="mtgHOA" value="300" onchange="recalcAll()">
           </div>
         </div>
+      </div>
 
-        <!-- Impact Summary -->
-        <div>
-          <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:10px;font-weight:600" data-i18n="mtg.impact">Impact on FIRE</div>
-          <div style="padding:12px;background:var(--bg);border-radius:10px;font-size:0.85em;line-height:1.7" id="mortgageImpact">
-            Calculating...
-          </div>
-          <div style="margin-top:10px">
-            <div class="control-group">
+      <!-- Impact Summary — full-width lateral block -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+          <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--accent);font-weight:600" data-i18n="mtg.impact">Impact on FIRE</div>
+          <div style="display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:16px;flex:1;min-width:320px;max-width:620px">
+            <div class="control-group" style="margin:0">
               <label><span data-i18n="mtg.appreciation">Home Appreciation Rate</span> <span class="val" id="mtgApprecVal">3.0%</span>/yr</label>
               <input type="range" id="mtgApprec" min="0" max="6" step="0.5" value="3" oninput="document.getElementById('mtgApprecVal').textContent=this.value+'%';recalcAll()">
             </div>
-            <div class="input-group">
+            <div class="input-group" style="margin:0">
               <label><span data-i18n="mtg.sellAtFire">What happens to the home?</span> <span class="info-tip" data-tip="SELL: equity becomes cash at FIRE (minus selling costs). LIVE-IN: you keep and occupy it; pay tax+ins+HOA in retirement. INHERIT: keep it for your kids — pay carrying costs until end-of-plan; home value leaves the portfolio as legacy, NOT cash.">?</span></label>
               <select id="mtgSellAtFire" onchange="updateInheritanceNote();recalcAll()" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.95em">
                 <option value="no" data-i18n="mtg.keepHome">🏡 Live in — Keep &amp; occupy</option>
                 <option value="yes" data-i18n="mtg.sellHome">💰 Sell at FIRE — Geo-arbitrage</option>
                 <option value="inherit" data-i18n="mtg.inherit">👪 Inherit — Give to children</option>
               </select>
-              <div id="mtgInheritanceNote" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(180,255,100,0.06);border:1px solid rgba(180,255,100,0.25);border-radius:6px;font-size:0.75em;color:var(--text-dim);line-height:1.5"></div>
             </div>
           </div>
+        </div>
+        <div id="mtgInheritanceNote" style="display:none;margin-bottom:12px;padding:8px 12px;background:rgba(180,255,100,0.06);border:1px solid rgba(180,255,100,0.25);border-radius:6px;font-size:0.75em;color:var(--text-dim);line-height:1.5"></div>
+        <div style="padding:16px 18px;background:var(--bg);border-radius:10px;font-size:0.85em;line-height:1.7;column-count:2;column-gap:28px;column-rule:1px solid var(--border)" id="mortgageImpact">
+          Calculating...
         </div>
       </div>
     </div>
@@ -2289,13 +2281,11 @@
     </div>
   </div>
 
-</div>
+  <!-- ==================== SNAPSHOT HISTORY ==================== -->
+  <!-- V4 — Section divider: Track (in-grid, consistent with other dividers) -->
+  <div class="section-divider"><span data-i18n="section.track">Track</span></div>
 
-<!-- ==================== SNAPSHOT HISTORY ==================== -->
-<!-- V4 — Section divider: Track (outside .dashboard grid, inside snapshot-section) -->
-<div class="snapshot-section">
-  <div class="section-divider" style="grid-column:auto;max-width:1400px;margin:0 auto 16px"><span data-i18n="section.track">Track</span></div>
-  <div class="card">
+  <div class="card span-3">
     <div class="card-title"><span class="icon">📸</span> <span data-i18n="sec.snapshots">Snapshot History — Track Your Progress Over Time</span></div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:16px">
       <span data-i18n="snap.desc">Save a snapshot of your current numbers whenever you update them.</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span> = objective (real number from account), <span class="obj-tag est" data-i18n="badge.est">EST</span> = estimated/projected. Only objective fields are tracked for changes.
@@ -2325,19 +2315,22 @@
         </tbody>
       </table>
     </div>
-  </div>
-</div>
 
-<!-- FILE STATUS + SAVE BAR — at the very bottom -->
-<div style="max-width:1400px;margin:12px auto 0;text-align:center;font-size:0.82em;padding:8px" id="csvFileStatus">
-  Checking CSV file link...
-</div>
-<div class="save-bar" id="saveBar">
-  <button class="btn-secondary" onclick="relinkCSVFile()" title="Link or re-link to a CSV file on disk" data-i18n="snap.linkCSV">📂 Link CSV File</button>
-  <button class="btn-secondary" onclick="importCSVFromFile()" title="Import snapshots from a CSV file" data-i18n="snap.importCSV">📥 Import CSV</button>
-  <button class="btn-save" onclick="saveSnapshot()" data-i18n="snap.save">💾 Save Current Snapshot</button>
-  <button class="btn-secondary" onclick="exportSnapshotsCSV()" title="Download a copy of all snapshots" data-i18n="snap.exportCSV">📤 Export CSV</button>
-  <button class="btn-danger-outline" onclick="clearAllSnapshots()" title="Delete all saved snapshots" data-i18n="snap.clearAll">🗑️ Clear All</button>
+    <!-- Action row: CSV status + snapshot actions — left-aligned, integrated with card flow -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+      <div id="csvFileStatus" style="font-size:0.82em;color:var(--text-dim);flex:1;min-width:220px">
+        Checking CSV file link...
+      </div>
+      <div id="saveBar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn-secondary" onclick="relinkCSVFile()" title="Link or re-link to a CSV file on disk" data-i18n="snap.linkCSV">📂 Link CSV File</button>
+        <button class="btn-secondary" onclick="importCSVFromFile()" title="Import snapshots from a CSV file" data-i18n="snap.importCSV">📥 Import CSV</button>
+        <button class="btn-save" onclick="saveSnapshot()" data-i18n="snap.save">💾 Save Current Snapshot</button>
+        <button class="btn-secondary" onclick="exportSnapshotsCSV()" title="Download a copy of all snapshots" data-i18n="snap.exportCSV">📤 Export CSV</button>
+        <button class="btn-danger-outline" onclick="clearAllSnapshots()" title="Delete all saved snapshots" data-i18n="snap.clearAll">🗑️ Clear All</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Toast notification -->
