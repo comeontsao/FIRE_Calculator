@@ -459,7 +459,25 @@
   .scenario-card .name { font-weight: 600; margin-bottom: 4px; font-size: 0.92em; }
   .scenario-card .fire-num { font-size: 1.3em; font-weight: 700; color: var(--accent2); margin: 6px 0; }
   .scenario-card .detail { font-size: 0.78em; color: var(--text-dim); }
-  .scenario-card .badges { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+  .scenario-card .badges { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+  /* Inline expansion: when a scenario-card is selected, reveal a details
+     block inside the card with Annual Budget + FIRE portfolio target.
+     The separate #scenarioInsight panel below still renders the full deep-dive. */
+  .scenario-card__expand { display: none; }
+  .scenario-card.selected .scenario-card__expand {
+    display: block;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.80em;
+    color: var(--text-dim);
+    line-height: 1.55;
+    text-align: left;
+  }
+  .scenario-card__expand .row { display: flex; justify-content: space-between; gap: 6px; }
+  .scenario-card__expand strong { color: var(--text); font-weight: 600; }
+  .scenario-card__expand .target-line { margin-top: 4px; font-size: 0.94em; color: var(--text-faint); }
+
   .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.68em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   .badge-lang { background: rgba(108,99,255,0.2); color: #a9a3ff; }
   .badge-zh { background: rgba(255,107,107,0.2); color: #ff9a9a; }
@@ -2212,7 +2230,8 @@
               <option value="philippines" data-i18n="country.mtg.philippines">🇵🇭 Philippines</option>
               <option value="mexico" data-i18n="country.mtg.mexico">🇲🇽 Mexico</option>
               <option value="costarica" data-i18n="country.mtg.costarica">🇨🇷 Costa Rica</option>
-              <option value="portugal" data-i18n="country.mtg.portugal">🇵🇹 Portugal</option>
+              <option value="portugal" data-i18n="country.mtg.portugal">🇵🇹 Portugal</option>
+              <option value="china" data-i18n="country.mtg.china">🇨🇳 China</option>
             </select>
             <div id="mtgLocationNote" style="font-size:0.72em;color:var(--text-dim);margin-top:6px;line-height:1.4" data-i18n="mtg.locationNote">Defaults auto-fill when you change country. Override any field below.</div>
           </div>
@@ -2342,7 +2361,8 @@
             <option value="philippines" data-i18n="country.mtg.philippines">🇵🇭 Philippines</option>
             <option value="mexico" data-i18n="country.mtg.mexico">🇲🇽 Mexico</option>
             <option value="costarica" data-i18n="country.mtg.costarica">🇨🇷 Costa Rica</option>
-            <option value="portugal" data-i18n="country.mtg.portugal">🇵🇹 Portugal</option>
+            <option value="portugal" data-i18n="country.mtg.portugal">🇵🇹 Portugal</option>
+            <option value="china" data-i18n="country.mtg.china">🇨🇳 China</option>
           </select>
         </div>
         <div class="input-group">
@@ -3598,6 +3618,10 @@ const scenarios = [
     notes: 'Top-rated FIRE destination in Europe. D7 visa designed for passive income earners — perfect for FIRE. Excellent healthcare (public + affordable private). Safe, beautiful, great food and wine. Lisbon & Porto are vibrant; Algarve for beach life. English widely spoken. EU access — travel freely across Europe.',
     taxNote: 'NHR (Non-Habitual Resident) tax regime was very favorable but ended for new applicants in 2024. New IFICI regime (2025) offers 20% flat tax on qualifying income for 10 years. Foreign pension income may be taxed at 10%. Careful planning needed with new rules.',
     pros: 'D7 visa for FIRE, EU access, safe, beautiful, English-friendly', cons: 'NHR ended (new IFICI less generous), no Chinese community, far from Asia, bureaucracy' },
+  { id: 'china', flag: '🇨🇳', name: 'China', costMult: 0.55, annualSpend: 66000, comfortableSpend: 66000, normalSpend: 33000, relocationCost: 15000, visaCostAnnual: 1500, lang: 'ZH (EN in tier-1 expat bubbles)', visa: 'Z Visa (work) / Q1/Q2 (family reunion) / D Visa (PR, rare)',
+    notes: 'Shanghai baseline — vibrant tier-1 city with world-class food, public transit, and private healthcare. Cost ~55% of US comfortable. Mandarin-dominant, though tier-1 cities have sizable expat communities and international schools (Shanghai American School, Concordia). Family reunion (Q1/Q2) visas are the common path if you have Chinese family; otherwise work-sponsored Z visa. High-speed rail connects the entire country.',
+    taxNote: 'Residents taxed on worldwide income after 6 years of continuous residency (progressive 3-45%, carve-outs available). Under 183 days/yr = non-resident, China-sourced income only. US-China tax treaty provides some relief. Foreign pension/SS treatment still evolving.',
+    pros: 'ZH language match, modern tier-1 infrastructure, low daily cost, great food, extensive high-speed rail', cons: 'Worldwide income tax after 6yr residency, internet restrictions (VPN needed), winter air quality, capital outflow controls' },
 ];
 
 // Per-country healthcare monthly USD (family of 4 pre-65, couple Medicare-equivalent post-65).
@@ -3617,6 +3641,7 @@ const HEALTHCARE_BY_COUNTRY = {
   mexico:      { pre65: 600,  post65: 400,  note: 'IMSS voluntary $10-50/mo/person + private $150-300/mo/person for 60-70yr.' },
   costarica:   { pre65: 500,  post65: 350,  note: 'Caja (CCSS) 7-11% of declared income + INS private $100-300/mo/person.' },
   portugal:    { pre65: 300,  post65: 200,  note: 'SNS free post-residency + private top-up €30-150/mo/person. D7 visa requires 1yr travel insurance at entry.' },
+  china:       { pre65: 650,  post65: 450,  note: 'Tier-1 international private hospitals (United Family, Parkway, Jiahui) $500-900/mo family; public hospitals cheap but crowded. Foreign insurers (Cigna, AIA) sell expat plans.' },
 };
 
 // Pre-65 family-size scaling: kids drop off family health plan at 22 (post-college).
@@ -3699,6 +3724,7 @@ const HOME_BY_COUNTRY = {
   mexico:      { homePrice: 220000,  propertyTaxRate: 0.0010, insuranceRate: 0.0030, hoaMonthly: 150, appreciation: 0.040, mortgageRate: 0.105, mortgageAvailable: true,  sellingCostPct: 0.08,  capGainsNote: 'ISR (income tax) up to 35% on gains. Primary-residence exclusion up to ~$180K USD if residency proven 3+yrs.' },
   costarica:   { homePrice: 280000,  propertyTaxRate: 0.0025, insuranceRate: 0.0030, hoaMonthly: 150, appreciation: 0.030, mortgageRate: 0.080, mortgageAvailable: true,  sellingCostPct: 0.06,  capGainsNote: 'Capital Gains Tax 15% flat (since 2019). Primary residence exempt if declared for tax purposes.' },
   portugal:    { homePrice: 350000,  propertyTaxRate: 0.0040, insuranceRate: 0.0020, hoaMonthly: 80,  appreciation: 0.030, mortgageRate: 0.035, mortgageAvailable: true,  sellingCostPct: 0.06,  capGainsNote: 'Capital gains: 50% taxed at marginal rate (up to 48%). Rollover relief if reinvested in EU primary residence.' },
+  china:       { homePrice: 700000,  propertyTaxRate: 0.0008, insuranceRate: 0.0015, hoaMonthly: 200, appreciation: 0.015, mortgageRate: 0.040, mortgageAvailable: true,  sellingCostPct: 0.06,  capGainsNote: 'Individual income tax 20% on gains OR 1-2% of sale price (whichever lower). Primary residence 5+yr hold may be exempt. Foreigners face purchase restrictions (residence/work permit required).' },
 };
 
 // Look up per-country home defaults. Falls back to US if unknown id.
@@ -4075,7 +4101,8 @@ const TRANSLATIONS = {
     'country.philippines': 'Philippines',
     'country.mexico': 'Mexico',
     'country.costarica': 'Costa Rica',
-    'country.portugal': 'Portugal',
+    'country.portugal': 'Portugal',
+    'country.china': 'China',
     'mode.safe': '🛡️ Safe',
     'mode.exact': '⚡ Exact',
     'mode.dieWithZero': '💀 Die-With-Zero',
@@ -4094,7 +4121,7 @@ const TRANSLATIONS = {
     'chart.axis.annualDollars': 'Annual $',
     'chart.axis.effectiveTax': 'Effective tax %',
     'chart.axis.yearsToFire': 'Years to FIRE',
-    'chart.axis.fireNumber': 'FIRE Number ($)',
+    'chart.axis.fireNumber': 'Bridge $ Needed at FIRE',
     'chart.lifecycleSubtitle': '🟣 Saving → 🔴 Phase 1: Taxable Only → 🟡 Phase 2: 401K Unlocks → 🟢 Phase 3: With SS',
     'chart.lifecycleSubtitleOverride': '🟣 Saving → 🔴 Phase 1: Taxable Only → 🟡 Phase 2: 401K Unlocks → 🟢 Phase 3: With SS  |  🔥 Adjusted: age {0} (was {1})',
     'chart.countrySubtitle': '🔴 EN+中文  |  🟡 中文  |  🟢 English  |  🟣 Selected / Other',
@@ -4187,7 +4214,8 @@ const TRANSLATIONS = {
     'country.mtg.philippines': '🇵🇭 Philippines',
     'country.mtg.mexico': '🇲🇽 Mexico',
     'country.mtg.costarica': '🇨🇷 Costa Rica',
-    'country.mtg.portugal': '🇵🇹 Portugal',
+    'country.mtg.portugal': '🇵🇹 Portugal',
+    'country.mtg.china': '🇨🇳 China',
     'country.mtg2.us': '🇺🇸 US',
     // Mortgage dynamic block — status / planning
     'mtg.dyn.status': 'Status:',
@@ -4449,7 +4477,9 @@ const TRANSLATIONS = {
     'scenario.notes.philippines': 'English is an official language — huge advantage. SRRV (Special Resident Retiree Visa) is one of the easiest retirement visas in Asia. Very low cost of living. Beautiful beaches and islands. Large, welcoming expat community. Chinese-Filipino community exists. Cebu and Manila have good international schools.',
     'scenario.notes.mexico': 'Closest geo-arbitrage option to the US — easy to visit family. Huge American expat communities (San Miguel de Allende, Lake Chapala, Mérida, Puerto Vallarta). Low cost, great food, warm weather. Easy residency process. Private healthcare is high quality and affordable.',
     'scenario.notes.costarica': 'Stable democracy, "Pura Vida" lifestyle. Excellent nature (beaches + mountains + rainforest). No military — peaceful. Pensionado visa requires only $1,000/mo income proof. Good private healthcare (Clínica Bíblica, CIMA). Growing expat community, English widely spoken in tourist/expat areas.',
-    'scenario.notes.portugal': 'Top-rated FIRE destination in Europe. D7 visa designed for passive income earners — perfect for FIRE. Excellent healthcare (public + affordable private). Safe, beautiful, great food and wine. Lisbon & Porto are vibrant; Algarve for beach life. English widely spoken. EU access — travel freely across Europe.',
+    'scenario.notes.portugal': 'Top-rated FIRE destination in Europe. D7 visa designed for passive income earners — perfect for FIRE. Excellent healthcare (public + affordable private). Safe, beautiful, great food and wine. Lisbon & Porto are vibrant; Algarve for beach life. English widely spoken. EU access — travel freely across Europe.',
+    'scenario.notes.china': '以上海為基準—充滿活力的一線城市，美食、公共運輸、私人醫療皆世界級。成本約為美國舒適版的 55%。以普通話為主，但一線城市有相當規模的外籍圈與國際學校（上海美國學校、協和）。若有中國親屬，Q1/Q2 家庭團聚簽最常見；否則需工作簽（Z 簽）。高鐵網遍全國。',
+    'scenario.notes.china': 'Shanghai baseline — vibrant tier-1 city with world-class food, public transit, and private healthcare. Cost ~55% of US comfortable. Mandarin-dominant, though tier-1 cities have sizable expat communities and international schools (Shanghai American School, Concordia). Family reunion (Q1/Q2) visas are the common path if you have Chinese family; otherwise work-sponsored Z visa. High-speed rail connects the entire country.',
     // Scenario visa labels
     'scenario.visa.us': 'N/A (citizen)',
     'scenario.visa.taiwan': 'Gold Card / APRC',
@@ -4461,7 +4491,9 @@ const TRANSLATIONS = {
     'scenario.visa.philippines': 'SRRV (Retirement Visa)',
     'scenario.visa.mexico': 'Temporary/Permanent Resident',
     'scenario.visa.costarica': 'Pensionado / Rentista',
-    'scenario.visa.portugal': 'D7 Passive Income Visa',
+    'scenario.visa.portugal': 'D7 Passive Income Visa',
+    'scenario.visa.china': 'Z 簽（工作）/ Q1/Q2（家庭團聚）/ D 簽（永居，罕見）',
+    'scenario.visa.china': 'Z Visa (work) / Q1/Q2 (family reunion) / D Visa (PR, rare)',
     // Scenario pros/cons
     'scenario.pros.us': 'No relocation hassle, kids stay in school, family nearby',
     'scenario.cons.us': 'Highest cost, healthcare expensive, highest FIRE number',
@@ -4483,8 +4515,12 @@ const TRANSLATIONS = {
     'scenario.cons.mexico': 'Language (Spanish needed outside expat zones), safety varies by region, no Chinese community',
     'scenario.pros.costarica': 'Territorial tax, stable democracy, beautiful nature, easy visa',
     'scenario.cons.costarica': 'Higher cost than Mexico/SE Asia, Spanish needed, rainy season, no Chinese community',
-    'scenario.pros.portugal': 'D7 visa for FIRE, EU access, safe, beautiful, English-friendly',
-    'scenario.cons.portugal': 'NHR ended (new IFICI less generous), no Chinese community, far from Asia, bureaucracy',
+    'scenario.pros.portugal': 'D7 visa for FIRE, EU access, safe, beautiful, English-friendly',
+    'scenario.pros.china': '語言相通、現代一線基礎建設、日常成本低、美食豐富、高鐵便利',
+    'scenario.pros.china': 'ZH language match, modern tier-1 infrastructure, low daily cost, great food, extensive high-speed rail',
+    'scenario.cons.portugal': 'NHR ended (new IFICI less generous), no Chinese community, far from Asia, bureaucracy',
+    'scenario.cons.china': '居滿 6 年後全球所得課稅、網路限制（需 VPN）、冬季空氣、外匯管制',
+    'scenario.cons.china': 'Worldwide income tax after 6yr residency, internet restrictions (VPN needed), winter air quality, capital outflow controls',
     // Scenario tax notes
     'scenario.tax.us': 'Federal + MA 5% flat tax. Capital gains taxed. ACA subsidies depend on MAGI — controlling Roth conversions is key.',
     'scenario.tax.taiwan': 'Residents taxed on worldwide income (progressive, 5-40%). However, first 183-day rule matters. Foreign-sourced income under $1M TWD (~$33K) per household is exempt. Careful structuring needed.',
@@ -4496,7 +4532,9 @@ const TRANSLATIONS = {
     'scenario.tax.philippines': 'Philippines taxes residents on worldwide income (progressive 0-35%). SRRV holders are considered residents. However, cost of living is so low that even with taxes, total outflow is minimal.',
     'scenario.tax.mexico': 'Mexico taxes residents on worldwide income (progressive 1.92-35%). But US-Mexico tax treaty avoids double taxation. Temporary resident visa holders may not be considered tax residents if they maintain US tax home. Consult a cross-border tax advisor.',
     'scenario.tax.costarica': 'Territorial tax system — only Costa Rica-sourced income is taxed. Foreign investment income is NOT taxed. This is very favorable for FIRE retirees living off US investments.',
-    'scenario.tax.portugal': 'NHR (Non-Habitual Resident) tax regime was very favorable but ended for new applicants in 2024. New IFICI regime (2025) offers 20% flat tax on qualifying income for 10 years. Foreign pension income may be taxed at 10%. Careful planning needed with new rules.',
+    'scenario.tax.portugal': 'NHR (Non-Habitual Resident) tax regime was very favorable but ended for new applicants in 2024. New IFICI regime (2025) offers 20% flat tax on qualifying income for 10 years. Foreign pension income may be taxed at 10%. Careful planning needed with new rules.',
+    'scenario.tax.china': '居民連續居住滿 6 年後對全球所得課稅（累進 3-45%，有豁免）。每年居住不滿 183 天為非居民，僅就中國境內所得課稅。中美稅收協定提供部分減免。境外退休金/社會安全福利規則仍在演進中。',
+    'scenario.tax.china': 'Residents taxed on worldwide income after 6 years of continuous residency (progressive 3-45%, with carve-outs). Under 183 days/yr = non-resident, China-sourced income only. US-China tax treaty provides some relief. Foreign pension/SS treatment still evolving.',
     // Feature 007 — Bracket-fill tax smoothing (controls, caveats, chart annotations, info panel)
     'bracketFill.safetyMarginLabel': 'Tax Smoothing Safety Margin',
     'bracketFill.safetyMarginTip': 'Leaves room for IRS bracket drift (brackets & standard deduction rise each year with inflation). 5% is safe; 0% assumes brackets never change year-to-year; 10% is conservative.',
@@ -4820,7 +4858,8 @@ const TRANSLATIONS = {
     'country.philippines': '菲律賓',
     'country.mexico': '墨西哥',
     'country.costarica': '哥斯大黎加',
-    'country.portugal': '葡萄牙',
+    'country.portugal': '葡萄牙',
+    'country.china': '中國',
     'mode.safe': '🛡️ 安全',
     'mode.exact': '⚡ 精確',
     'mode.dieWithZero': '💀 歸零',
@@ -4924,7 +4963,8 @@ const TRANSLATIONS = {
     'country.mtg.philippines': '🇵🇭 菲律賓',
     'country.mtg.mexico': '🇲🇽 墨西哥',
     'country.mtg.costarica': '🇨🇷 哥斯大黎加',
-    'country.mtg.portugal': '🇵🇹 葡萄牙',
+    'country.mtg.portugal': '🇵🇹 葡萄牙',
+    'country.mtg.china': '🇨🇳 中國',
     'country.mtg2.us': '🇺🇸 美國',
     'mtg.dyn.status': '狀態：',
     'mtg.dyn.paidOff': '✓ 已繳清',
@@ -9879,7 +9919,8 @@ function renderScenarios(inp) {
     if (hasZH) badges += '<span class="badge badge-zh">中文</span>';
     if (isTerritorialTax) badges += `<span class="badge badge-tax">${t('geo.noForeignTax')}</span>`;
 
-    card.innerHTML = `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> yrs</div>`;
+    const simpleFire = calcSimpleFIRENumber(sSpend, inp.swr);
+    card.innerHTML = `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> yrs</div><div class="scenario-card__expand"><div class="row"><span>Budget</span><strong>$${sSpend.toLocaleString()}/yr</strong></div><div class="row target-line"><span>Bridge $ at FIRE</span><strong>$${Math.round(fireNum).toLocaleString()}</strong></div><div class="row target-line"><span>25× total target</span><strong>$${Math.round(simpleFire).toLocaleString()}</strong></div></div>`;
     grid.appendChild(card);
   });
 
@@ -10858,13 +10899,15 @@ function renderCountryChart(inp) {
       datasets: [
         {
           label: 'Years to FIRE',
+          order: 2,
           data: sorted.map(s => s.yrs),
           backgroundColor: sorted.map(s => barColor(s)),
           borderRadius: 8,
           yAxisID: 'y',
         },
         {
-          label: 'FIRE Number ($)',
+          label: 'Bridge $ at FIRE',
+          order: 1,
           data: sorted.map(s => s.fireNum),
           type: 'line',
           borderColor: '#00d4aa',
@@ -10895,7 +10938,7 @@ function renderCountryChart(inp) {
                 const s = sorted[ctx.dataIndex];
                 return `${ctx.parsed.y} years (age ${inp.ageRoger + ctx.parsed.y}) | Lang: ${s.lang}`;
               }
-              return `FIRE #: $${ctx.parsed.y.toLocaleString()}`;
+              return `Bridge $: $${ctx.parsed.y.toLocaleString()}`;
             }
           }
         }
