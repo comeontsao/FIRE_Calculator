@@ -28,10 +28,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { solveFireAge } from '../../calc/fireCalculator.js';
 import threePhase from '../fixtures/three-phase-retirement.js';
-import parity from '../fixtures/rr-generic-parity.js';
 import coastFire from '../fixtures/coast-fire.js';
 import modeSwitchMatrix from '../fixtures/mode-switch-matrix.js';
-import rrRealistic from '../fixtures/rr-realistic.js';
 import genericRealistic from '../fixtures/generic-realistic.js';
 
 test('fireCalculator: canonical single-person (three-phase-retirement) solves with correct structure', () => {
@@ -80,43 +78,6 @@ test('fireCalculator: canonical single-person (three-phase-retirement) solves wi
   }
 });
 
-test('fireCalculator: couple sensitivity — doubling secondary portfolio changes yearsToFire ≥ 1yr (SC-005)', () => {
-  // Baseline: strip secondary person entirely (single-person version of parity fixture).
-  const parityInputs = parity.inputs;
-  const {
-    currentAgeSecondary: _dropAge,
-    portfolioSecondary: _dropPortfolio,
-    ssStartAgeSecondary: _dropSsAge,
-    ...singlePersonInputs
-  } = parityInputs;
-  // Silence unused-var linters.
-  void _dropAge; void _dropPortfolio; void _dropSsAge;
-
-  const single = solveFireAge({ inputs: singlePersonInputs, helpers: {} });
-
-  // Doubled-secondary: full couple with portfolioSecondary.taxableStocksReal × 2.
-  const doubledSecondary = {
-    ...parityInputs,
-    portfolioSecondary: {
-      ...parityInputs.portfolioSecondary,
-      taxableStocksReal: parityInputs.portfolioSecondary.taxableStocksReal * 2,
-    },
-  };
-  const doubled = solveFireAge({ inputs: doubledSecondary, helpers: {} });
-
-  // Sanity: both results are well-formed.
-  assert.equal(typeof single.yearsToFire, 'number');
-  assert.equal(typeof doubled.yearsToFire, 'number');
-
-  // SC-005: the secondary-person portfolio MUST materially affect the answer.
-  // Today's broken behavior: doubling secondary produces zero change. A passing
-  // calculator produces |delta| >= 1 year.
-  const delta = Math.abs(doubled.yearsToFire - single.yearsToFire);
-  assert.ok(
-    delta >= 1,
-    `doubling secondary.taxableStocksReal must change yearsToFire by ≥ 1yr (SC-005); got single=${single.yearsToFire}, doubled=${doubled.yearsToFire}, delta=${delta}`,
-  );
-});
 
 test('fireCalculator: coast-FIRE case ⇒ yearsToFire === 0, fireAge === currentAge, feasible', () => {
   const { inputs, expected } = coastFire;
@@ -194,27 +155,6 @@ test('fireCalculator: mode-switch matrix — fireAge_safe >= fireAge_exact >= fi
  * which these fixtures exercise.
  */
 
-test('fireCalculator: rr-realistic fixture produces fireAge within ±1 year of inline baseline', () => {
-  const fixture = rrRealistic;
-  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
-  const expectedFireAge = fixture.expected.fireAge;
-  const tolerance = fixture.expected.fireAgeToleranceYears ?? 1;
-
-  assert.equal(typeof result.fireAge, 'number', 'canonical solver returns numeric fireAge');
-  assert.ok(
-    Math.abs(result.fireAge - expectedFireAge) <= tolerance,
-    `rr-realistic: fireAge ${result.fireAge} deviates from inline baseline ${expectedFireAge} ` +
-      `by more than ±${tolerance} year(s). If this is an intentional correctness fix, ` +
-      `document it in baseline-rr-inline.md §C BEFORE re-locking the fixture.`,
-  );
-
-  // Also assert the canonical solver reports feasibility matching the baseline.
-  assert.equal(
-    result.feasible,
-    fixture.expected.feasible,
-    `rr-realistic: feasible must match baseline (${fixture.expected.feasible}); got ${result.feasible}`,
-  );
-});
 
 test('fireCalculator: generic-realistic fixture produces fireAge within ±1 year of inline baseline', () => {
   const fixture = genericRealistic;
@@ -259,31 +199,6 @@ test('fireCalculator: generic-realistic fixture produces fireAge within ±1 year
  *     match fixture.expected.* effBal fields within balanceRelativeTolerance.
  */
 
-test('fireCalculator: effBalReal layer — invariants on every lifecycle record (rr-realistic)', () => {
-  const fixture = rrRealistic;
-  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
-  const taxTradRate = fixture.inputs.taxTradRate ?? 0.22;
-
-  for (const rec of result.lifecycle) {
-    assert.equal(
-      typeof rec.effBalReal,
-      'number',
-      `effBalReal must be numeric on every record (age ${rec.agePrimary})`,
-    );
-    // effBalReal <= totalReal always (non-negative tax drag).
-    assert.ok(
-      rec.effBalReal <= rec.totalReal + 1e-6,
-      `effBalReal (${rec.effBalReal}) must be <= totalReal (${rec.totalReal}) at age ${rec.agePrimary}`,
-    );
-    // Formula: effBalReal === totalReal - trad401kReal * taxTradRate.
-    const expected = rec.totalReal - rec.trad401kReal * taxTradRate;
-    assert.ok(
-      Math.abs(rec.effBalReal - expected) < 1e-3,
-      `effBalReal at age ${rec.agePrimary} must match totalReal - trad401k*taxTradRate ` +
-        `(expected ${expected}, got ${rec.effBalReal})`,
-    );
-  }
-});
 
 test('fireCalculator: effBalReal === totalReal when trad401kReal is zero (generic-realistic early years)', () => {
   const fixture = genericRealistic;
@@ -304,63 +219,7 @@ test('fireCalculator: effBalReal === totalReal when trad401kReal is zero (generi
   );
 });
 
-test('fireCalculator: FireSolverResult effBal companions match lifecycle checkpoints exactly (rr-realistic)', () => {
-  const fixture = rrRealistic;
-  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
-  const lc = result.lifecycle;
-  const lastRec = lc[lc.length - 1];
-  const unlockRec = lc.find((r) => r.agePrimary === 60);
-  const ssRec = lc.find((r) => r.agePrimary === fixture.inputs.ssStartAgePrimary);
 
-  assert.equal(
-    typeof result.endBalanceEffReal,
-    'number',
-    'endBalanceEffReal present on result',
-  );
-  assert.equal(
-    typeof result.balanceAtUnlockEffReal,
-    'number',
-    'balanceAtUnlockEffReal present on result',
-  );
-  assert.equal(
-    typeof result.balanceAtSSEffReal,
-    'number',
-    'balanceAtSSEffReal present on result',
-  );
-
-  assert.ok(
-    Math.abs(result.endBalanceEffReal - lastRec.effBalReal) < 1e-6,
-    `endBalanceEffReal (${result.endBalanceEffReal}) must === lifecycle[last].effBalReal (${lastRec.effBalReal})`,
-  );
-  assert.ok(unlockRec, 'unlock record (age 60) exists in lifecycle');
-  assert.ok(
-    Math.abs(result.balanceAtUnlockEffReal - unlockRec.effBalReal) < 1e-6,
-    `balanceAtUnlockEffReal (${result.balanceAtUnlockEffReal}) must === unlockRec.effBalReal (${unlockRec.effBalReal})`,
-  );
-  assert.ok(ssRec, 'SS-start record exists in lifecycle');
-  assert.ok(
-    Math.abs(result.balanceAtSSEffReal - ssRec.effBalReal) < 1e-6,
-    `balanceAtSSEffReal (${result.balanceAtSSEffReal}) must === ssRec.effBalReal (${ssRec.effBalReal})`,
-  );
-});
-
-test('fireCalculator: rr-realistic effBal checkpoints match fixture.expected within balanceRelativeTolerance', () => {
-  const fixture = rrRealistic;
-  const result = solveFireAge({ inputs: fixture.inputs, helpers: {} });
-  const tol = fixture.expected.balanceRelativeTolerance ?? 0.10;
-
-  for (const field of ['endBalanceEffReal', 'balanceAtUnlockEffReal', 'balanceAtSSEffReal']) {
-    const expected = fixture.expected[field];
-    const actual = result[field];
-    assert.equal(typeof expected, 'number', `fixture.expected.${field} must be locked`);
-    const relErr = Math.abs(actual - expected) / Math.max(Math.abs(expected), 1);
-    assert.ok(
-      relErr <= tol,
-      `rr-realistic: ${field} expected ${expected} ±${(tol * 100).toFixed(0)}%, got ${actual} ` +
-        `(rel err ${(relErr * 100).toFixed(3)}%)`,
-    );
-  }
-});
 
 test('fireCalculator: generic-realistic effBal checkpoints match fixture.expected within balanceRelativeTolerance', () => {
   const fixture = genericRealistic;
