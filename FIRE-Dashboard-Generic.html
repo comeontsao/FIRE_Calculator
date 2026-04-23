@@ -1054,10 +1054,13 @@
     max-height: 2000px;
     opacity: 1;
   }
-  /* Make date picker calendar icon visible on dark background */
+  /* Date picker calendar icon — default (light) theme shows the dark icon
+     as-is; dark theme inverts it so a light icon shows against dark bg. */
   input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
     cursor: pointer;
+  }
+  html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 
   /* FIRE Override Banner & Drag Support */
