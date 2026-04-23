@@ -1966,7 +1966,7 @@
     </div>
     <button id="themeToggle" aria-label="Toggle light/dark" title="Toggle light/dark" style="min-width:36px;min-height:36px;padding:6px 10px;background:var(--card);color:var(--text-dim);border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:1em;line-height:1">🌙</button>
     <button id="sidebarToggle" aria-pressed="false" data-i18n-aria="sidebar.toggleAria" aria-label="Toggle lifecycle sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="3,17 9,11 13,15 21,6"/><polyline points="3,20 21,20" opacity="0.4"/></svg></button>
-    <button onclick="resetToDefaults()" style="padding:6px 14px;background:var(--danger);color:#fff;border:none;border-radius:6px;font-size:0.82em;cursor:pointer;opacity:0.8" title="Clear all saved state and reload with factory defaults">🔄 Reset to Defaults</button>
+    <button onclick="resetToDefaults()" style="padding:6px 14px;background:var(--danger);color:#fff;border:none;border-radius:6px;font-size:0.82em;cursor:pointer;opacity:0.8" data-i18n="btn.resetDefaults" data-i18n-tip="btn.resetDefaultsTip" title="Clear all saved state and reload with factory defaults">🔄 Reset to Defaults</button>
   </div>
 </header>
 
@@ -2007,7 +2007,7 @@
     <span id="progressPct" style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">—</span>
   </div>
 
-  <div class="section-divider" data-chapter="plan"><span>1 · Your Plan</span></div>
+  <div class="section-divider" data-chapter="plan"><span data-i18n="section.1YourPlan">1 · Your Plan</span></div>
 
   <div class="card">
     <div class="card-title"><span class="icon">👤</span> <span data-i18n="sec.profileIncome">Profile & Income</span></div>
@@ -2382,7 +2382,7 @@
     </div>
   </div>
 
-  <div class="section-divider" data-chapter="compare"><span>2 · Compare Destinations</span></div>
+  <div class="section-divider" data-chapter="compare"><span data-i18n="section.2Compare">2 · Compare Destinations</span></div>
 
   <div class="card span-3">
     <div class="flex-between" style="margin-bottom:16px">
@@ -2459,7 +2459,7 @@
     </div>
   </div>
 
-  <div class="section-divider" data-chapter="outlook"><span>3 · Your Outlook</span></div>
+  <div class="section-divider" data-chapter="outlook"><span data-i18n="section.3Outlook">3 · Your Outlook</span></div>
 
   <div class="card span-3 surface--secondary">
     <div class="card-title">
@@ -2660,11 +2660,11 @@
         <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:10px;font-weight:600" data-i18n="hc.overrideMonthly">Override (monthly $)</div>
         <div class="input-group">
           <label><span data-i18n="hc.pre65">Pre-65 healthcare ($/mo)</span> <span class="info-tip" data-i18n-tip="hc.pre65Tip" data-tip="Leave blank or 0 to use scenario default. Typical family-of-4 costs for the selected country.">?</span></label>
-          <input type="number" id="hcOverridePre65" placeholder="(scenario default)" min="0" step="50" onchange="recalcAll()">
+          <input type="number" id="hcOverridePre65" placeholder="(scenario default)" data-i18n-placeholder="hc.placeholderDefault" min="0" step="50" onchange="recalcAll()">
         </div>
         <div class="input-group">
           <label><span data-i18n="hc.post65">Post-65 healthcare ($/mo)</span> <span class="info-tip" data-i18n-tip="hc.post65Tip" data-tip="Leave blank or 0 to use scenario default. Typical couple costs with Medicare / senior coverage.">?</span></label>
-          <input type="number" id="hcOverridePost65" placeholder="(scenario default)" min="0" step="50" onchange="recalcAll()">
+          <input type="number" id="hcOverridePost65" placeholder="(scenario default)" data-i18n-placeholder="hc.placeholderDefault" min="0" step="50" onchange="recalcAll()">
         </div>
         <div style="font-size:0.75em;color:var(--text-dim);margin-top:6px;line-height:1.4">
           <span data-i18n="hc.baseline" data-i18n-html></span>
@@ -2731,7 +2731,7 @@
         </div>
         <div id="terminalBufferControls" style="display:none">
           <div class="control-group">
-            <label><span data-i18n="ss.terminalBuffer">End-of-life cushion</span> <span class="val" id="terminalBufferVal">2</span> yrs of spending</label>
+            <label><span data-i18n="ss.terminalBuffer">End-of-life cushion</span> <span class="val" id="terminalBufferVal">2</span> <span data-i18n="fireMode.yrsSpending">yrs of spending</span></label>
             <input type="range" id="terminalBuffer" min="0" max="5" step="1" value="2" oninput="document.getElementById('terminalBufferVal').textContent=this.value;recalcAll()">
           </div>
         </div>
@@ -2828,7 +2828,7 @@
     <!-- T026 (feature-007 §Change 9) — lifetime-tax-comparison caption. Populated
          by renderGrowthChart on every recalc. Hidden by default; shown when data exists. -->
     <p class="chart-caveat" id="lifetimeTaxComparison" style="margin:10px 0 0 0;padding:8px 12px;background:rgba(108,99,255,0.05);border:1px solid rgba(108,99,255,0.22);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5;display:none"></p>
-    <div class="fire-drag-hint" id="fireDragHint">💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later</div>
+    <div class="fire-drag-hint" id="fireDragHint" data-i18n="fire.dragHint">💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later</div>
     <div id="fireOverrideBanner" class="fire-override-banner">
       <button class="fire-override-reset" onclick="resetFireOverride()">↺ Reset</button>
       <div class="banner-title" id="fireOverrideTitle">What if you retire later?</div>
@@ -2849,7 +2849,7 @@
     </div>
   </div>
 
-  <div class="section-divider" data-chapter="track"><span>4 · Track Your Progress</span></div>
+  <div class="section-divider" data-chapter="track"><span data-i18n="section.4Track">4 · Track Your Progress</span></div>
 
   <div class="card span-3 surface--secondary">
     <div class="card-title"><span data-i18n="sec.milestones">FIRE Milestone Timeline</span></div>
@@ -2897,7 +2897,7 @@
   <div class="card span-3">
     <div class="card-title"><span class="icon">📸</span> <span data-i18n="sec.snapshots">Snapshot History — Track Your Progress Over Time</span></div>
     <p style="font-size:0.85em;color:var(--text-dim);margin-bottom:16px">
-      <span data-i18n="snap.desc">Save a snapshot of your current numbers whenever you update them.</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span> = objective (real number from account), <span class="obj-tag est" data-i18n="badge.est">EST</span> = estimated/projected. Only objective fields are tracked for changes.
+      <span data-i18n="snap.desc">Save a snapshot of your current numbers whenever you update them.</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span> <span data-i18n="snap.descObjSep">= objective (real number from account),</span> <span class="obj-tag est" data-i18n="badge.est">EST</span> <span data-i18n="snap.descEstSep">= estimated/projected. Only objective fields are tracked for changes.</span>
     </p>
     <div style="overflow-x:auto">
       <table class="snapshot-table" id="snapshotTable">
@@ -3453,10 +3453,7 @@ function updateInheritanceNote() {
   const loc = locEl ? locEl.value : 'us';
   const isUS = loc === 'us';
   note.style.display = '';
-  note.innerHTML = `
-    👪 <strong>Inheritance mode</strong> — You'll pay property tax + insurance + HOA (and any remaining P&amp;I) for the full plan horizon. The home's final appreciated value leaves the portfolio as <em>legacy</em> — it does NOT get sold into cash. Kids get the asset at end-of-plan.
-    ${isUS ? '<br>🇺🇸 <strong>US stepped-up basis:</strong> heirs inherit at fair market value at date of death. If they sell immediately, capital gains tax is $0. This is one of the biggest legal tax breaks in US estate planning.' : '<br>🌏 Non-US country — check local inheritance/estate-tax rules. Stepped-up basis is a US-only concept and may not apply.'}
-  `;
+  note.innerHTML = t('mtg.inheritNoteBody') + (isUS ? t('mtg.inheritUs') : t('mtg.inheritNonUs'));
 }
 
 // When the user picks a new Home Location, auto-populate all mortgage defaults from the
@@ -3498,7 +3495,7 @@ function applyHomeLocationDefaults() {
     const capGainsKey = capGainsKeyMap[loc];
     const capGainsText = (capGainsKey && t(capGainsKey) !== capGainsKey) ? t(capGainsKey) : d.capGainsNote;
     note.innerHTML = `<strong>${capGainsText}</strong>` +
-      (d.mortgageAvailable === false ? ' <span style="color:var(--warning)">⚠ Foreign mortgage typically not available — assume cash purchase.</span>' : '');
+      (d.mortgageAvailable === false ? t('mtg.foreignMortgageWarning') : '');
   }
 }
 
@@ -3831,6 +3828,26 @@ const COLLEGE_BY_COUNTRY = {
   'netherlands':  { label: '🇳🇱 Netherlands (TU Delft/Utrecht)',cost: 26000, years: 3, note: 'EU tuition ~€2-10K (non-EU €10-20K) + Amsterdam living €15K. ~$78K total.' },
   'germany':      { label: '🇩🇪 Germany (TUM/Heidelberg)',     cost: 14000, years: 3, note: 'Tuition mostly FREE (~€500/sem) + Munich/Berlin living €14K. Best value in EU.' },
 };
+const COLLEGE_NOTE_KEY = {
+  'none': 'college.note.none',
+  'us-private': 'college.note.usPrivate',
+  'us-public': 'college.note.usPublic',
+  'us-public-oos': 'college.note.usPublicOOS',
+  'taiwan': 'college.note.taiwan',
+  'uk': 'college.note.uk',
+  'canada': 'college.note.canada',
+  'australia': 'college.note.australia',
+  'singapore': 'college.note.singapore',
+  'japan': 'college.note.japan',
+  'netherlands': 'college.note.netherlands',
+  'germany': 'college.note.germany',
+};
+function getCollegeNoteTrans(countryId) {
+  const key = COLLEGE_NOTE_KEY[countryId];
+  if (!key) return '';
+  const s = t(key);
+  return s === key ? '' : s;
+}
 function getCollegeDefaults(countryId) {
   return COLLEGE_BY_COUNTRY[countryId] || COLLEGE_BY_COUNTRY['us-private'];
 }
@@ -4633,6 +4650,121 @@ const TRANSLATIONS = {
     'strategy.tradLastPreserve.name': 'Trad-Last (Preserve)',
     'strategy.tradLastPreserve.desc': 'Stocks + Cash first, then Roth, Trad last — preserves Trad for estate.',
     'strategy.tradLastPreserve.narrative': 'Strategy: drain Taxable stocks and Cash first, then Roth, Traditional only under RMD floor — maximizes Trad balance left to heirs.',
+    // --- i18n sweep A-I ---
+    'timeline.now.label': 'Now',
+    'timeline.now.desc': 'Starting point',
+    'timeline.nw500k.done': '$500K Net Worth ✓',
+    'timeline.nw500k.future': '$500K Net Worth',
+    'timeline.alreadyAchieved': 'Already achieved!',
+    'timeline.ageLabel': 'Age {0}',
+    'timeline.coast.done': 'Coast FIRE ✓',
+    'timeline.coast.future': 'Coast FIRE',
+    'timeline.coast.desc': 'Age {0} — can stop saving',
+    'timeline.million.done': 'Millionaire! ✓',
+    'timeline.million.future': 'Millionaire!',
+    'timeline.fire.label': '{0} FIRE ({1})',
+    'timeline.fire.desc': 'Age {0} — ${1}/yr',
+    'timeline.ss.label': '🏛️ Social Security Starts',
+    'timeline.ss.desc': 'Age {0} — ${1}/mo combined (after haircut)',
+    'timeline.child.label': '🎓 Child {0} → College',
+    'timeline.child.desc': "You'll be age {0} · {1}",
+    'timeline.child.descTotal': "You'll be age {0} · {1} · ~${2}K total",
+    'timeline.janet.label': '🎓 Janet → College',
+    'timeline.ian.label': '🎓 Ian → College',
+    'timeline.kidSkipped': 'Skipped',
+    'fireMode.safeDesc': 'Trajectory cushions: keep ≥ N years of spend on hand throughout retirement (Phase 1, 2, and 3). End balance ≥ 0 at plan age. Numerically simulated — matches the lifecycle chart exactly.',
+    'fireMode.exactDesc': 'No phase buffers. Require ≥ N years of spend left at plan age as end-of-life cushion. Numerically simulated — matches the lifecycle chart exactly.',
+    'fireMode.dwzDesc': 'Minimum FIRE number: portfolio lands at exactly $0 at plan age. Month-precise solver. Retire with more → leftover; retire with less → runs out early.',
+    'dwz.preciseFeasible': '💀 <strong>Precise DWZ:</strong> retire in <strong>{0}y {1}m</strong> (at age <strong>{2}y {3}m</strong>) · est. leftover at {4}: <strong>${5}</strong><br><span style="color:var(--text-dim);font-weight:400">Chart rounds UP to age {6} so it stays feasible — any earlier and the portfolio runs short before {4}.</span>',
+    'dwz.preciseInfeasible': '⚠️ <strong>No feasible DWZ age found</strong> within {0} years. Spend is too high for the portfolio to survive to age {1}. Lower spend tier, shorten plan, or extend savings.',
+    'exp.row.rent': 'Rent / Housing',
+    'exp.row.groceries': 'Groceries & Dining',
+    'exp.row.childcare': 'Childcare / Education',
+    'exp.row.transport': 'Transportation',
+    'exp.row.health': 'Health Insurance & Medical',
+    'exp.row.utilities': 'Utilities & Internet',
+    'exp.row.kids': 'Kids Activities & Stuff',
+    'exp.row.entertainment': 'Entertainment & Subscriptions',
+    'exp.row.clothing': 'Clothing & Personal',
+    'exp.row.misc': 'Miscellaneous',
+    'country.card.budget': 'Budget',
+    'country.card.bridgeAtFire': 'Bridge $ at FIRE',
+    'country.card.target25x': '25× total target',
+    'country.card.yrsSuffix': 'yrs',
+    'geo.twoPhaseLabel': 'Two-Phase FIRE #:',
+    'geo.simpleLabel': 'Simple:',
+    'geo.ofUsBaseline': '% of US baseline',
+    'geo.visaSuffix': '+ ${0} visa',
+    'mtg.inheritNoteBody': '👪 <strong>Inheritance mode</strong> — You will pay property tax + insurance + HOA (and any remaining P&amp;I) for the full plan horizon. The home\'s final appreciated value leaves the portfolio as <em>legacy</em> — it does NOT get sold into cash. Kids get the asset at end-of-plan.',
+    'mtg.inheritUs': '<br>🇺🇸 <strong>US stepped-up basis:</strong> heirs inherit at fair market value at date of death. If they sell immediately, capital gains tax is $0. This is one of the biggest legal tax breaks in US estate planning.',
+    'mtg.inheritNonUs': '<br>🌏 Non-US country — check local inheritance/estate-tax rules. Stepped-up basis is a US-only concept and may not apply.',
+    'mtg.foreignMortgageWarning': ' <span style="color:var(--warning)">⚠ Foreign mortgage typically not available — assume cash purchase.</span>',
+    'snap.csvLinked': '📁 Linked: <strong>{0}</strong>',
+    'snap.csvCount': '{0} snapshot(s)',
+    'snap.noCsvLinked': 'No CSV file linked yet — first save will ask where to save it',
+    'snap.autoDownload': "CSV auto-downloads on save (browser doesn't support file linking)",
+    'snap.empty': 'No snapshots yet. Save your first one below!',
+    'snap.perMo': '/mo',
+    'snap.yrs': 'yrs',
+    'snap.deleteTooltip': 'Delete this snapshot',
+    'snap.deleteAllConfirm': 'Delete ALL saved snapshots? This cannot be undone.',
+    'reset.confirm': 'This will clear ALL saved state (inputs, snapshots, CSV link) and reload with factory defaults. Are you sure?',
+    // --- i18n sweep round 2 ---
+    'college.note.none': 'Kid skips college, gets full scholarship, or cost fully subsidized.',
+    'college.note.usPrivate': 'Top-tier private: tuition $65K + room/board $20K. ~$340K total.',
+    'college.note.usPublic': 'State flagship in-state: tuition $12K + living $16K. ~$112K total.',
+    'college.note.usPublicOOS': 'State flagship out-of-state: tuition $32K + living $16K. ~$192K total.',
+    'college.note.taiwan': 'National univ international tuition ~$6K + Taipei living ~$6K. ~$48K total.',
+    'college.note.uk': 'International tuition £30-45K + London/Oxford living ~$18K. ~$156K total (3-yr program).',
+    'college.note.canada': 'International tuition CAD 50-70K + living CAD 20K. ~$160K total.',
+    'college.note.australia': 'International tuition AUD 45-55K + Sydney living AUD 25K. ~$144K total (3-yr program).',
+    'college.note.singapore': 'International tuition SGD 30-45K + living SGD 15K.',
+    'college.note.japan': 'Tuition ¥800K + Tokyo living ¥1.5M. English programs at top universities.',
+    'college.note.netherlands': 'EU tuition ~€2-10K (non-EU €10-20K) + Amsterdam living €15K. ~$78K total.',
+    'college.note.germany': 'Tuition mostly FREE (~€500/sem) + Munich/Berlin living €14K. Best value in EU.',
+    'strategy.winner.endBalanceDelta': ' (+${0} end-balance vs runner-up)',
+    'strategy.winner.taxDelta': ' (saves ${0} lifetime tax vs runner-up)',
+    'whatIf.years': '{0} years',
+    'whatIf.years40plus': '40+ years',
+    'whatIf.detail': 'FIRE by {0} at age {1} | Need ${2} | Saving ${3}/mo',
+    'whatIf.savingsTooLow': 'Savings rate too low for this scenario',
+    // --- i18n sweep round 3 ---
+    'fireMode.yrsSpending': 'yrs of spending',
+    'fire.dragHint': '💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later',
+    'snap.descObjSep': '= objective (real number from account),',
+    'snap.descEstSep': '= estimated/projected. Only objective fields are tracked for changes.',
+    'chart.lifecycle.totalPortfolio': 'Total Portfolio',
+    'chart.lifecycle.p401k': '401K',
+    'chart.lifecycle.stocks': 'Stocks/Brokerage',
+    'chart.lifecycle.stocksShort': 'Stocks',
+    'chart.lifecycle.fireMarker': '🔥 FIRE (age {0})',
+    'chart.lifecycle.fireMarkerShort': 'FIRE',
+    'chart.lifecycle.originalFire': '📍 Original FIRE (age {0})',
+    'chart.lifecycle.originalFireShort': 'Original FIRE',
+    'chart.lifecycle.unlock401k': '🔓 401K Unlocks (age 59.5)',
+    'chart.lifecycle.unlock401kShort': '401K Unlocks',
+    'chart.lifecycle.ssMarker': '🏛️ SS Starts (age {0})',
+    'chart.lifecycle.ssMarkerShort': 'SS',
+    'chart.lifecycle.dragLabel': '↔ drag to adjust',
+    'chart.drawdown.withSS': 'With Social Security',
+    'chart.drawdown.withoutSS': 'Without Social Security',
+    'chart.drawdown.ssStarts': 'SS Starts (age {0})',
+    'chart.drawdown.titleFmt': '{0} {1} — Retiring at age {2} with ${3} | {4} | {5}',
+    'chart.drawdown.spending': 'Spending ${0}/yr',
+    'chart.drawdown.mtgAdj': ' (mtg-adj)',
+    'chart.drawdown.dwzTail': ' → $0 at {0}',
+    'chart.drawdown.safeBadge': '🛡️ Safe',
+    'chart.drawdown.exactBadge': '⚡ Exact',
+    'chart.drawdown.dwzBadge': '💀 Die-With-Zero',
+    // --- i18n sweep round 4 ---
+    'section.1YourPlan': '1 · Your Plan',
+    'section.2Compare': '2 · Compare Destinations',
+    'section.3Outlook': '3 · Your Outlook',
+    'section.4Track': '4 · Track Your Progress',
+    'btn.resetDefaults': '🔄 Reset to Defaults',
+    'btn.resetDefaultsTip': 'Clear all saved state and reload with factory defaults',
+    'chart.country.tooltipYears': '{0} years (age {1}) | Lang: {2}',
+    'chart.country.tooltipBridge': 'Bridge $: ${0}',
   },
   zh: {
     'header.title': 'FIRE 指揮中心 — 通用模板',
@@ -5342,6 +5474,121 @@ const TRANSLATIONS = {
     'strategy.tradLastPreserve.name': 'Trad 最後（留給後代）',
     'strategy.tradLastPreserve.desc': '先股票與現金，再 Roth，Trad 最後 — 保留 Trad 給後代。',
     'strategy.tradLastPreserve.narrative': '策略：先提領應稅股票與現金，再 Roth，Traditional 僅在 RMD 下限內提領 — 留給後代的 Trad 餘額最大化。',
+    // --- i18n sweep A-I ---
+    'timeline.now.label': '現在',
+    'timeline.now.desc': '起始點',
+    'timeline.nw500k.done': '$500K 淨資產 ✓',
+    'timeline.nw500k.future': '$500K 淨資產',
+    'timeline.alreadyAchieved': '已達成！',
+    'timeline.ageLabel': '{0} 歲',
+    'timeline.coast.done': 'Coast FIRE ✓',
+    'timeline.coast.future': 'Coast FIRE',
+    'timeline.coast.desc': '{0} 歲 — 可停止儲蓄',
+    'timeline.million.done': '百萬達成！ ✓',
+    'timeline.million.future': '百萬達成！',
+    'timeline.fire.label': '{0} FIRE（{1}）',
+    'timeline.fire.desc': '{0} 歲 — ${1}/年',
+    'timeline.ss.label': '🏛️ 社會安全金開始',
+    'timeline.ss.desc': '{0} 歲 — ${1}/月 合計（折扣後）',
+    'timeline.child.label': '🎓 小孩 {0} → 大學',
+    'timeline.child.desc': '您將 {0} 歲 · {1}',
+    'timeline.child.descTotal': '您將 {0} 歲 · {1} · 總計約 ${2}K',
+    'timeline.janet.label': '🎓 Janet → 大學',
+    'timeline.ian.label': '🎓 Ian → 大學',
+    'timeline.kidSkipped': '跳過',
+    'fireMode.safeDesc': '軌跡緩衝：退休期間每年保留 ≥ N 年的支出（階段 1、2、3）。計畫終點餘額 ≥ 0。以數值模擬 — 與生命週期圖一致。',
+    'fireMode.exactDesc': '無階段緩衝。計畫終點仍須留有 ≥ N 年的支出作為晚年緩衝。以數值模擬 — 與生命週期圖一致。',
+    'fireMode.dwzDesc': '最低 FIRE 金額：組合於計畫終點恰好歸零。以月為精度求解。退多一點 → 留下餘額；退少一點 → 提早用盡。',
+    'dwz.preciseFeasible': '💀 <strong>精確 DWZ：</strong>{0} 年 {1} 個月後退休（{2} 歲 {3} 個月）· {4} 歲時預估餘額：<strong>${5}</strong><br><span style="color:var(--text-dim);font-weight:400">圖表向上取整至 {6} 歲以保可行 — 再早組合將在 {4} 歲前用盡。</span>',
+    'dwz.preciseInfeasible': '⚠️ <strong>{0} 年內找不到可行的 DWZ 年齡</strong>。支出過高以致組合無法撐到 {1} 歲。請降低支出、縮短計畫或延長儲蓄。',
+    'exp.row.rent': '房租／住房',
+    'exp.row.groceries': '飲食／外食',
+    'exp.row.childcare': '育兒／教育',
+    'exp.row.transport': '交通',
+    'exp.row.health': '健保與醫療',
+    'exp.row.utilities': '水電網路',
+    'exp.row.kids': '小孩活動與用品',
+    'exp.row.entertainment': '娛樂／訂閱',
+    'exp.row.clothing': '服飾／個人',
+    'exp.row.misc': '其他',
+    'country.card.budget': '預算',
+    'country.card.bridgeAtFire': 'FIRE 橋樑資金',
+    'country.card.target25x': '25× 總目標',
+    'country.card.yrsSuffix': '年',
+    'geo.twoPhaseLabel': '兩階段 FIRE #：',
+    'geo.simpleLabel': '簡易：',
+    'geo.ofUsBaseline': '% 相對於美國基準',
+    'geo.visaSuffix': '＋ ${0} 簽證',
+    'mtg.inheritNoteBody': '👪 <strong>繼承模式</strong> — 計畫期間您將持續負擔房產稅、保險、管理費（以及剩餘本息）。房屋最終增值後的價值將以<em>遺產</em>形式離開投資組合 — 不會被變現。子女於計畫終點繼承該資產。',
+    'mtg.inheritUs': '<br>🇺🇸 <strong>美國遺產成本基礎墊高：</strong>繼承人以過世當日公平市值繼承，若立即出售資本利得稅為 $0，是美國遺產規劃中最大的合法稅務優惠之一。',
+    'mtg.inheritNonUs': '<br>🌏 非美國國家 — 請確認當地繼承／遺產稅規則。成本基礎墊高為美國特有概念，未必適用。',
+    'mtg.foreignMortgageWarning': ' <span style="color:var(--warning)">⚠ 外國房貸通常無法取得 — 假設以現金購買。</span>',
+    'snap.csvLinked': '📁 已連結：<strong>{0}</strong>',
+    'snap.csvCount': '{0} 筆快照',
+    'snap.noCsvLinked': '尚未連結 CSV 檔 — 首次儲存時會詢問儲存位置',
+    'snap.autoDownload': 'CSV 會在儲存時自動下載（瀏覽器不支援檔案連結）',
+    'snap.empty': '尚無快照。請在下方儲存您的第一筆！',
+    'snap.perMo': '/月',
+    'snap.yrs': '年',
+    'snap.deleteTooltip': '刪除此快照',
+    'snap.deleteAllConfirm': '刪除所有已儲存的快照？此動作無法復原。',
+    'reset.confirm': '這將清除所有儲存狀態（輸入、快照、CSV 連結）並以原廠預設值重新載入。確定要繼續嗎？',
+    // --- i18n sweep round 2 ---
+    'college.note.none': '不讀大學、全額獎學金，或費用全額補助。',
+    'college.note.usPrivate': '頂尖私校：學費 $65K + 住宿膳食 $20K，合計約 $340K。',
+    'college.note.usPublic': '州立旗艦（在州）：學費 $12K + 生活費 $16K，合計約 $112K。',
+    'college.note.usPublicOOS': '州立旗艦（外州）：學費 $32K + 生活費 $16K，合計約 $192K。',
+    'college.note.taiwan': '國立大學國際生學費約 $6K + 台北生活費約 $6K，合計約 $48K。',
+    'college.note.uk': '國際生學費 £30-45K + 倫敦／牛津生活費約 $18K，合計約 $156K（3 年制）。',
+    'college.note.canada': '國際生學費加幣 50-70K + 生活費加幣 20K，合計約 $160K。',
+    'college.note.australia': '國際生學費澳幣 45-55K + 雪梨生活費澳幣 25K，合計約 $144K（3 年制）。',
+    'college.note.singapore': '國際生學費新幣 30-45K + 生活費新幣 15K。',
+    'college.note.japan': '學費 ¥800K + 東京生活費 ¥1.5M。頂尖大學有英語學程。',
+    'college.note.netherlands': '歐盟學費約 €2-10K（非歐盟 €10-20K）+ 阿姆斯特丹生活費 €15K，合計約 $78K。',
+    'college.note.germany': '學費幾乎免費（每學期約 €500）+ 慕尼黑／柏林生活費 €14K。歐洲 CP 值最高。',
+    'strategy.winner.endBalanceDelta': '（期末餘額較次佳多 +${0}）',
+    'strategy.winner.taxDelta': '（較次佳一生稅省下 ${0}）',
+    'whatIf.years': '{0} 年',
+    'whatIf.years40plus': '40+ 年',
+    'whatIf.detail': '{0} 年 {1} 歲達成 FIRE | 需要 ${2} | 每月存 ${3}',
+    'whatIf.savingsTooLow': '此情境下儲蓄率過低',
+    // --- i18n sweep round 3 ---
+    'fireMode.yrsSpending': '年支出',
+    'fire.dragHint': '💡 將 🔥 FIRE 三角形拖曳到右邊，看看晚一點退休會怎樣',
+    'snap.descObjSep': '＝ 實際（來自帳戶的真實數字），',
+    'snap.descEstSep': '＝ 估算／預測。僅追蹤實際欄位的變化。',
+    'chart.lifecycle.totalPortfolio': '總投資組合',
+    'chart.lifecycle.p401k': '401K',
+    'chart.lifecycle.stocks': '股票／應稅帳戶',
+    'chart.lifecycle.stocksShort': '股票',
+    'chart.lifecycle.fireMarker': '🔥 FIRE（{0} 歲）',
+    'chart.lifecycle.fireMarkerShort': 'FIRE',
+    'chart.lifecycle.originalFire': '📍 原 FIRE（{0} 歲）',
+    'chart.lifecycle.originalFireShort': '原 FIRE',
+    'chart.lifecycle.unlock401k': '🔓 401K 解鎖（59.5 歲）',
+    'chart.lifecycle.unlock401kShort': '401K 解鎖',
+    'chart.lifecycle.ssMarker': '🏛️ 社安金（{0} 歲）',
+    'chart.lifecycle.ssMarkerShort': '社安金',
+    'chart.lifecycle.dragLabel': '↔ 拖曳調整',
+    'chart.drawdown.withSS': '含社會安全金',
+    'chart.drawdown.withoutSS': '不含社會安全金',
+    'chart.drawdown.ssStarts': '社安金（{0} 歲）',
+    'chart.drawdown.titleFmt': '{0} {1} — {2} 歲退休，資產 ${3} | {4} | {5}',
+    'chart.drawdown.spending': '支出 ${0}/年',
+    'chart.drawdown.mtgAdj': '（含房貸調整）',
+    'chart.drawdown.dwzTail': '（{0} 歲歸零）',
+    'chart.drawdown.safeBadge': '🛡️ 安全',
+    'chart.drawdown.exactBadge': '⚡ 精確',
+    'chart.drawdown.dwzBadge': '💀 歸零',
+    // --- i18n sweep round 4 ---
+    'section.1YourPlan': '1 · 你的規劃',
+    'section.2Compare': '2 · 比較目的地',
+    'section.3Outlook': '3 · 你的展望',
+    'section.4Track': '4 · 追蹤進度',
+    'btn.resetDefaults': '🔄 還原為預設值',
+    'btn.resetDefaultsTip': '清除所有儲存狀態並以原廠預設值重新載入',
+    'chart.country.tooltipYears': '{0} 年（{1} 歲） | 語言：{2}',
+    'chart.country.tooltipBridge': '橋樑資金：${0}',
   }
 };
 
@@ -5377,6 +5624,11 @@ function switchLanguage(lang) {
     const trans = TRANSLATIONS[currentLang]?.[key];
     if (trans) el.setAttribute('data-tip', trans);
   });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    const trans = TRANSLATIONS[currentLang]?.[key];
+    if (trans) el.setAttribute('placeholder', trans);
+  });
   document.getElementById('langEN').style.background = lang === 'en' ? 'var(--accent)' : 'var(--card)';
   document.getElementById('langEN').style.color = lang === 'en' ? '#fff' : 'var(--text-dim)';
   document.getElementById('langZH').style.background = lang === 'zh' ? 'var(--accent)' : 'var(--card)';
@@ -5408,10 +5660,14 @@ function switchLanguage(lang) {
         const capGainsKey = capGainsKeyMap[loc];
         const capGainsText = (capGainsKey && t(capGainsKey) !== capGainsKey) ? t(capGainsKey) : d.capGainsNote;
         note.innerHTML = `<strong>${capGainsText}</strong>` +
-          (d.mortgageAvailable === false ? ' <span style="color:var(--warning)">⚠ Foreign mortgage typically not available — assume cash purchase.</span>' : '');
+          (d.mortgageAvailable === false ? t('mtg.foreignMortgageWarning') : '');
       }
     }
   } catch(e) {}
+  try { if (typeof buildExpenseTable === 'function') buildExpenseTable(); } catch(e) {}
+  try { if (typeof renderSnapshotHistory === 'function') renderSnapshotHistory(); } catch(e) {}
+  try { if (typeof updateFileStatus === 'function') updateFileStatus(); } catch(e) {}
+  try { if (typeof setFireMode === 'function' && typeof fireMode !== 'undefined') setFireMode(fireMode); } catch(e) {}
   recalcAll();
   try { localStorage.setItem('fire_lang', lang); } catch(e) {}
 }
@@ -5452,17 +5708,17 @@ function setFireMode(mode) {
   [safeBtn, exactBtn, dwzBtn].forEach(b => { b.style.background = 'var(--card)'; b.style.color = 'var(--text-dim)'; });
   if (mode === 'safe') {
     safeBtn.style.background = 'var(--accent)'; safeBtn.style.color = '#fff';
-    desc.textContent = 'Trajectory cushions: keep ≥ N years of spend on hand throughout retirement (Phase 1, 2, and 3). End balance ≥ 0 at plan age. Numerically simulated — matches the lifecycle chart exactly.';
+    desc.textContent = t('fireMode.safeDesc');
     bufferControls.style.display = '';
     terminalControls.style.display = 'none';
   } else if (mode === 'exact') {
     exactBtn.style.background = 'var(--warning)'; exactBtn.style.color = '#1a1a2e';
-    desc.textContent = 'No phase buffers. Require ≥ N years of spend left at plan age as end-of-life cushion. Numerically simulated — matches the lifecycle chart exactly.';
+    desc.textContent = t('fireMode.exactDesc');
     bufferControls.style.display = 'none';
     terminalControls.style.display = '';
   } else {
     dwzBtn.style.background = 'var(--danger)'; dwzBtn.style.color = '#fff';
-    desc.textContent = 'Minimum FIRE number: portfolio lands at exactly $0 at plan age. Month-precise solver. Retire with more → leftover; retire with less → runs out early.';
+    desc.textContent = t('fireMode.dwzDesc');
     bufferControls.style.display = 'none';
     terminalControls.style.display = 'none';
   }
@@ -5486,13 +5742,28 @@ function setFireMode(mode) {
 }
 
 // ==================== EXPENSE TABLE ====================
+function expRowKey(name) {
+  const map = {
+    'Rent / Housing': 'exp.row.rent',
+    'Groceries & Dining': 'exp.row.groceries',
+    'Childcare / Education': 'exp.row.childcare',
+    'Transportation': 'exp.row.transport',
+    'Health Insurance & Medical': 'exp.row.health',
+    'Utilities & Internet': 'exp.row.utilities',
+    'Kids Activities & Stuff': 'exp.row.kids',
+    'Entertainment & Subscriptions': 'exp.row.entertainment',
+    'Clothing & Personal': 'exp.row.clothing',
+    'Miscellaneous': 'exp.row.misc',
+  };
+  return map[name] || name;
+}
 function buildExpenseTable() {
   const tbody = document.querySelector('#expenseTable tbody');
   tbody.innerHTML = '';
   defaultExpenses.forEach((exp, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${exp.name}</td>
+      <td>${t(expRowKey(exp.name))}</td>
       <td><input type="number" id="exp_${i}" value="${exp.monthly}" onchange="recalcAll()" style="width:100px"></td>
       <td class="exp-annual">—</td>
       <td class="exp-pct">—</td>
@@ -5906,10 +6177,10 @@ function renderWithdrawalWinnerBanner() {
     let deltaStr = '';
     if (ranking.objective === 'leave-more-behind') {
       const d = Math.round(winner.endOfPlanNetWorthReal - runnerUp.endOfPlanNetWorthReal);
-      deltaStr = ` (+$${d.toLocaleString()} end-balance vs runner-up)`;
+      deltaStr = t('strategy.winner.endBalanceDelta', d.toLocaleString());
     } else {
       const d = Math.round(runnerUp.lifetimeFederalTaxReal - winner.lifetimeFederalTaxReal);
-      deltaStr = ` (saves $${d.toLocaleString()} lifetime tax vs runner-up)`;
+      deltaStr = t('strategy.winner.taxDelta', d.toLocaleString());
     }
     deltaEl.textContent = deltaStr;
   } else {
@@ -6106,7 +6377,7 @@ function renderLifecycleSidebarChart(_state) {
 
   const datasets = [
     {
-      label: 'Total Portfolio',
+      label: t('chart.lifecycle.totalPortfolio'),
       data: totals,
       borderColor: __fireChartColor('accent'),
       backgroundColor: 'rgba(108,99,255,0.08)',
@@ -6134,7 +6405,7 @@ function renderLifecycleSidebarChart(_state) {
       },
     },
     {
-      label: '401K',
+      label: t('chart.lifecycle.p401k'),
       data: p401k,
       borderColor: 'rgba(0,212,170,0.5)',
       borderDash: [4, 4],
@@ -6144,7 +6415,7 @@ function renderLifecycleSidebarChart(_state) {
       fill: false,
     },
     {
-      label: 'Stocks',
+      label: t('chart.lifecycle.stocksShort'),
       data: pStocks,
       borderColor: 'rgba(255,217,61,0.5)',
       borderDash: [4, 4],
@@ -6154,7 +6425,7 @@ function renderLifecycleSidebarChart(_state) {
       fill: false,
     },
     {
-      label: 'FIRE',
+      label: t('chart.lifecycle.fireMarkerShort'),
       data: fireMarker,
       borderColor: '#ff6b6b',
       backgroundColor: '#ff6b6b',
@@ -6164,7 +6435,7 @@ function renderLifecycleSidebarChart(_state) {
       pointBorderWidth: 1.5,
     },
     {
-      label: '401K Unlocks',
+      label: t('chart.lifecycle.unlock401kShort'),
       data: unlockMarker,
       borderColor: '#ffd93d',
       backgroundColor: '#ffd93d',
@@ -6174,7 +6445,7 @@ function renderLifecycleSidebarChart(_state) {
       pointBorderWidth: 1.5,
     },
     {
-      label: 'SS',
+      label: t('chart.lifecycle.ssMarkerShort'),
       data: ssMarker,
       borderColor: '#00d4aa',
       backgroundColor: '#00d4aa',
@@ -6186,7 +6457,7 @@ function renderLifecycleSidebarChart(_state) {
   ];
   if (ghostMarker) {
     datasets.push({
-      label: 'Original FIRE',
+      label: t('chart.lifecycle.originalFireShort'),
       data: ghostMarker,
       borderColor: 'rgba(255,107,107,0.35)',
       backgroundColor: 'rgba(255,107,107,0.35)',
@@ -8789,10 +9060,10 @@ function recalcAll() {
       const preciseAgeMonths = Math.round((preciseAge - preciseAgeYears) * 12);
       if (r.feasible) {
         dwzPreciseEl.style.display = '';
-        dwzPreciseEl.innerHTML = `💀 <strong>Precise DWZ:</strong> retire in <strong>${r.years}y ${r.months}m</strong> (at age <strong>${preciseAgeYears}y ${preciseAgeMonths}m</strong>) · est. leftover at ${inp.endAge}: <strong>$${Math.round(r.endBalance).toLocaleString()}</strong><br><span style="color:var(--text-dim);font-weight:400">Chart rounds UP to age ${fireAge} so it stays feasible — any earlier and the portfolio runs short before ${inp.endAge}.</span>`;
+        dwzPreciseEl.innerHTML = t('dwz.preciseFeasible', r.years, r.months, preciseAgeYears, preciseAgeMonths, inp.endAge, Math.round(r.endBalance).toLocaleString(), fireAge);
       } else {
         dwzPreciseEl.style.display = '';
-        dwzPreciseEl.innerHTML = `⚠️ <strong>No feasible DWZ age found</strong> within ${Math.min(45, (inp.endAge || 95) - inp.agePerson1 - 1)} years. Spend is too high for the portfolio to survive to age ${inp.endAge}. Lower spend tier, shorten plan, or extend savings.`;
+        dwzPreciseEl.innerHTML = t('dwz.preciseInfeasible', Math.min(45, (inp.endAge || 95) - inp.agePerson1 - 1), inp.endAge);
       }
     } else {
       dwzPreciseEl.style.display = 'none';
@@ -9391,7 +9662,7 @@ function renderCollegeSummary(inp) {
   // Add first note if any kid has non-zero plan
   const firstPaid = inp.childCollegePlans && inp.childCollegePlans.find(p => (getCollegeDefaults(p).cost) > 0);
   if (firstPaid) {
-    const note = getCollegeDefaults(firstPaid).note;
+    const note = getCollegeNoteTrans(firstPaid) || getCollegeDefaults(firstPaid).note;
     if (note) html += `<br><span style="font-size:0.92em;color:var(--text-dim)">💡 ${note}</span>`;
   }
   box.innerHTML = html;
@@ -9823,7 +10094,7 @@ function renderScenarios(inp) {
     if (isTerritorialTax) badges += `<span class="badge badge-tax">${t('geo.noForeignTax')}</span>`;
 
     const simpleFire = calcSimpleFIRENumber(sSpend, inp.swr);
-    card.innerHTML = `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> yrs</div><div class="scenario-card__expand"><div class="row"><span>Budget</span><strong>$${sSpend.toLocaleString()}/yr</strong></div><div class="row target-line"><span>Bridge $ at FIRE</span><strong>$${Math.round(fireNum).toLocaleString()}</strong></div><div class="row target-line"><span>25× total target</span><strong>$${Math.round(simpleFire).toLocaleString()}</strong></div></div>`;
+    card.innerHTML = `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> ${t('country.card.yrsSuffix')}</div><div class="scenario-card__expand"><div class="row"><span>${t('country.card.budget')}</span><strong>$${sSpend.toLocaleString()}/yr</strong></div><div class="row target-line"><span>${t('country.card.bridgeAtFire')}</span><strong>$${Math.round(fireNum).toLocaleString()}</strong></div><div class="row target-line"><span>${t('country.card.target25x')}</span><strong>$${Math.round(simpleFire).toLocaleString()}</strong></div></div>`;
     grid.appendChild(card);
   });
 
@@ -9842,7 +10113,7 @@ function renderScenarios(inp) {
     <strong>${t('geo.tax')}</strong> ${scTax}<br><br>
     <strong style="color:var(--success)">${t('geo.pros')}</strong> ${scPros}<br>
     <strong style="color:var(--danger)">${t('geo.cons')}</strong> ${scCons}<br><br>
-    <strong>${t('geo.annualBudget')}</strong> $${s.annualSpend.toLocaleString()}/yr (${(s.costMult * 100).toFixed(0)}% of US baseline)${s.visaCostAnnual ? ` + $${s.visaCostAnnual.toLocaleString()} visa` : ''} = <strong>$${getScenarioEffectiveSpend(s).toLocaleString()}/yr</strong> → <strong>Two-Phase FIRE #: $${Math.round(getTwoPhaseFireNum(inp, getScenarioEffectiveSpend(s), inp.agePerson1 + yearsToFIRE(inp, getScenarioEffectiveSpend(s)))).toLocaleString()}</strong> (Simple: $${Math.round(calcSimpleFIRENumber(getScenarioEffectiveSpend(s), inp.swr)).toLocaleString()})<br><br>
+    <strong>${t('geo.annualBudget')}</strong> $${s.annualSpend.toLocaleString()}/yr (${(s.costMult * 100).toFixed(0)}${t('geo.ofUsBaseline')})${s.visaCostAnnual ? ' ' + t('geo.visaSuffix', s.visaCostAnnual.toLocaleString()) : ''} = <strong>$${getScenarioEffectiveSpend(s).toLocaleString()}/yr</strong> → <strong>${t('geo.twoPhaseLabel')} $${Math.round(getTwoPhaseFireNum(inp, getScenarioEffectiveSpend(s), inp.agePerson1 + yearsToFIRE(inp, getScenarioEffectiveSpend(s)))).toLocaleString()}</strong> (${t('geo.simpleLabel')} $${Math.round(calcSimpleFIRENumber(getScenarioEffectiveSpend(s), inp.swr)).toLocaleString()})<br><br>
     <strong>${t('geo.relocationCost')}</strong>
     <input type="number" id="reloc_${s.id}" value="${s.relocationCost}" style="width:100px;padding:4px 8px;text-align:right;font-size:0.9em;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);margin-left:6px"
       onchange="updateRelocationCost('${s.id}', this.value)">
@@ -10391,7 +10662,7 @@ function renderGrowthChart(inp) {
   // Build datasets
   const datasets = [
     {
-      label: 'Total Portfolio',
+      label: t('chart.lifecycle.totalPortfolio'),
       data: lifecycle.map(d => Math.round(d.total)),
       borderColor: __fireChartColor('accent'),
       backgroundColor: 'rgba(108,99,255,0.08)',
@@ -10426,7 +10697,7 @@ function renderGrowthChart(inp) {
       },
     },
     {
-      label: '401K',
+      label: t('chart.lifecycle.p401k'),
       data: lifecycle.map(d => Math.round(d.p401k)),
       borderColor: 'rgba(0,212,170,0.4)',
       borderDash: [5,5],
@@ -10435,7 +10706,7 @@ function renderGrowthChart(inp) {
       borderWidth: 1.5,
     },
     {
-      label: 'Stocks/Brokerage',
+      label: t('chart.lifecycle.stocks'),
       data: lifecycle.map(d => Math.round(d.pStocks)),
       borderColor: 'rgba(255,217,61,0.4)',
       borderDash: [5,5],
@@ -10444,7 +10715,7 @@ function renderGrowthChart(inp) {
       borderWidth: 1.5,
     },
     {
-      label: `🔥 FIRE (age ${fireAge})`,
+      label: t('chart.lifecycle.fireMarker', fireAge),
       data: fireMarker,
       borderColor: '#ff6b6b',
       backgroundColor: '#ff6b6b',
@@ -10459,7 +10730,7 @@ function renderGrowthChart(inp) {
   // Ghost marker for original FIRE when override is active
   if (hasOverride) {
     datasets.push({
-      label: `📍 Original FIRE (age ${calculatedFireAge})`,
+      label: t('chart.lifecycle.originalFire', calculatedFireAge),
       data: ghostFireMarker,
       borderColor: 'rgba(255,107,107,0.3)',
       backgroundColor: 'rgba(255,107,107,0.3)',
@@ -10473,7 +10744,7 @@ function renderGrowthChart(inp) {
 
   datasets.push(
     {
-      label: '🔓 401K Unlocks (age 59.5)',
+      label: t('chart.lifecycle.unlock401k'),
       data: lifecycle.map((d, i) => d.age === 60 ? Math.round(d.total) : null),
       borderColor: '#ffd93d',
       backgroundColor: '#ffd93d',
@@ -10483,7 +10754,7 @@ function renderGrowthChart(inp) {
       pointBorderWidth: 2,
     },
     {
-      label: `🏛️ SS Starts (age ${inp.ssClaimAge})`,
+      label: t('chart.lifecycle.ssMarker', inp.ssClaimAge),
       data: ssMarker,
       borderColor: '#00d4aa',
       backgroundColor: '#00d4aa',
@@ -10585,7 +10856,7 @@ function renderGrowthChart(inp) {
           c.font = '600 10px system-ui, sans-serif';
           c.fillStyle = _fireDrag.active ? 'rgba(255,107,107,0.9)' : 'rgba(255,107,107,0.55)';
           c.textAlign = 'center';
-          c.fillText('↔ drag to adjust', pos.x, pos.y - 18);
+          c.fillText(t('chart.lifecycle.dragLabel'), pos.x, pos.y - 18);
           c.restore();
           break;
         }
@@ -10783,10 +11054,10 @@ function renderCountryChart(inp) {
   charts.country = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: sorted.map(s => s.flag + ' ' + s.name),
+      labels: sorted.map(s => s.flag + ' ' + (t('country.' + s.id) !== ('country.' + s.id) ? t('country.' + s.id) : s.name)),
       datasets: [
         {
-          label: 'Years to FIRE',
+          label: t('chart.axis.yearsToFire'),
           order: 2,
           data: sorted.map(s => s.yrs),
           backgroundColor: sorted.map(s => barColor(s)),
@@ -10794,7 +11065,7 @@ function renderCountryChart(inp) {
           yAxisID: 'y',
         },
         {
-          label: 'Bridge $ at FIRE',
+          label: t('country.card.bridgeAtFire'),
           order: 1,
           data: sorted.map(s => s.fireNum),
           type: 'line',
@@ -10822,11 +11093,11 @@ function renderCountryChart(inp) {
         tooltip: {
           callbacks: {
             label: (ctx) => {
-              if (ctx.dataset.label === 'Years to FIRE') {
+              if (ctx.datasetIndex === 0) {
                 const s = sorted[ctx.dataIndex];
-                return `${ctx.parsed.y} years (age ${inp.agePerson1 + ctx.parsed.y}) | Lang: ${s.lang}`;
+                return t('chart.country.tooltipYears', ctx.parsed.y, inp.agePerson1 + ctx.parsed.y, s.lang);
               }
-              return `Bridge $: $${ctx.parsed.y.toLocaleString()}`;
+              return t('chart.country.tooltipBridge', ctx.parsed.y.toLocaleString());
             }
           }
         }
@@ -10888,7 +11159,7 @@ function renderSSChart(inp) {
       labels: withSS.map(d => `Age ${d.age}`),
       datasets: [
         {
-          label: 'With Social Security',
+          label: t('chart.drawdown.withSS'),
           data: withSS.map(d => Math.round(d.portfolio)),
           borderColor: '#00d4aa',
           backgroundColor: 'rgba(0,212,170,0.1)',
@@ -10897,7 +11168,7 @@ function renderSSChart(inp) {
           pointRadius: 0,
         },
         {
-          label: 'Without Social Security',
+          label: t('chart.drawdown.withoutSS'),
           data: withoutSS.map(d => Math.round(d.portfolio)),
           borderColor: '#ff6b6b',
           backgroundColor: 'rgba(255,107,107,0.1)',
@@ -10906,7 +11177,7 @@ function renderSSChart(inp) {
           pointRadius: 0,
         },
         {
-          label: `SS Starts (age ${inp.ssClaimAge})`,
+          label: t('chart.drawdown.ssStarts', inp.ssClaimAge),
           data: withSS.map(d => d.age === inp.ssClaimAge ? Math.round(d.portfolio) : null),
           borderColor: '#ffd93d',
           backgroundColor: '#ffd93d',
@@ -10923,7 +11194,7 @@ function renderSSChart(inp) {
         legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
         subtitle: {
           display: true,
-          text: `${scenario.flag} ${scenario.name} — Retiring at age ${fireAge} with $${Math.round(fire401k + fireAccessible).toLocaleString()} | ${'Spending $' + Math.round(mtgAdj.annualSpend).toLocaleString() + '/yr' + (mortgageEnabled ? ' (mtg-adj)' : '') + (fireMode === 'dieWithZero' ? ' → $0 at ' + (inp.endAge || 95) : '')} | ${({safe:'🛡️ Safe', exact:'⚡ Exact', dieWithZero:'💀 Die-With-Zero'})[fireMode]}`,
+          text: t('chart.drawdown.titleFmt', scenario.flag, (t('country.' + scenario.id) !== ('country.' + scenario.id) ? t('country.' + scenario.id) : scenario.name), fireAge, Math.round(fire401k + fireAccessible).toLocaleString(), t('chart.drawdown.spending', Math.round(mtgAdj.annualSpend).toLocaleString()) + (mortgageEnabled ? t('chart.drawdown.mtgAdj') : '') + (fireMode === 'dieWithZero' ? t('chart.drawdown.dwzTail', inp.endAge || 95) : ''), ({safe:t('chart.drawdown.safeBadge'), exact:t('chart.drawdown.exactBadge'), dieWithZero:t('chart.drawdown.dwzBadge')})[fireMode]),
           color: '#8b8fa3',
           font: { size: 11 },
           padding: { bottom: 10 },
@@ -10953,7 +11224,7 @@ function renderTimeline(inp) {
   const projection = projectGrowth(inp, 25);
 
   const milestones = [
-    { label: 'Now', year: 2026, desc: 'Starting point', amount: nw, type: 'completed' },
+    { label: t('timeline.now.label'), year: 2026, desc: t('timeline.now.desc'), amount: nw, type: 'completed' },
   ];
 
   // $500K milestone — achieved if current net worth already crosses target OR
@@ -10961,10 +11232,10 @@ function renderTimeline(inp) {
   // the milestone independent of projection quirks (e.g. mortgage down payment
   // pushing year-0 below target even though actual nw is already past it).
   if (nw >= 500000) {
-    milestones.push({ label: '$500K Net Worth ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
+    milestones.push({ label: t('timeline.nw500k.done'), year: 2026, desc: t('timeline.alreadyAchieved'), amount: nw, type: 'completed' });
   } else {
     const m500k = projection.find(d => d.total >= 500000);
-    if (m500k && m500k.year > 2026) milestones.push({ label: '$500K Net Worth', year: m500k.year, desc: `Age ${m500k.age}`, amount: 500000, type: 'future' });
+    if (m500k && m500k.year > 2026) milestones.push({ label: t('timeline.nw500k.future'), year: m500k.year, desc: t('timeline.ageLabel', m500k.age), amount: 500000, type: 'future' });
   }
 
   // Coast FIRE
@@ -10979,21 +11250,21 @@ function renderTimeline(inp) {
         const realReturn = inp.returnRate - inp.inflationRate;
         const fv = d.total * Math.pow(1 + realReturn, yearsLeft);
         if (fv >= target) {
-          milestones.push({ label: 'Coast FIRE', year: d.year, desc: `Age ${d.age} — can stop saving`, amount: Math.round(d.total), type: 'future' });
+          milestones.push({ label: t('timeline.coast.future'), year: d.year, desc: t('timeline.coast.desc', d.age), amount: Math.round(d.total), type: 'future' });
           break;
         }
       }
     }
   } else {
-    milestones.push({ label: 'Coast FIRE ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
+    milestones.push({ label: t('timeline.coast.done'), year: 2026, desc: t('timeline.alreadyAchieved'), amount: nw, type: 'completed' });
   }
 
   // $1M milestone — same nw-first pattern as the $500K milestone.
   if (nw >= 1000000) {
-    milestones.push({ label: 'Millionaire! ✓', year: 2026, desc: 'Already achieved!', amount: nw, type: 'completed' });
+    milestones.push({ label: t('timeline.million.done'), year: 2026, desc: t('timeline.alreadyAchieved'), amount: nw, type: 'completed' });
   } else {
     const m1m = projection.find(d => d.total >= 1000000);
-    if (m1m) milestones.push({ label: 'Millionaire!', year: m1m.year, desc: `Age ${m1m.age}`, amount: 1000000, type: 'future' });
+    if (m1m) milestones.push({ label: t('timeline.million.future'), year: m1m.year, desc: t('timeline.ageLabel', m1m.age), amount: 1000000, type: 'future' });
   }
 
   // FIRE milestone for each scenario (using two-phase model)
@@ -11005,7 +11276,7 @@ function renderTimeline(inp) {
     if (yrs < 40) {
       const hit = projection[yrs];
       if (hit) {
-        milestones.push({ label: `${s.flag} FIRE (${s.name})`, year: hit.year, desc: `Age ${hit.age} — $${sSpend.toLocaleString()}/yr`, amount: Math.round(fireNum), type: 'future' });
+        milestones.push({ label: t('timeline.fire.label', s.flag, (t('country.' + s.id) !== ('country.' + s.id) ? t('country.' + s.id) : s.name)), year: hit.year, desc: t('timeline.fire.desc', hit.age, sSpend.toLocaleString()), amount: Math.round(fireNum), type: 'future' });
       }
     }
   });
@@ -11013,7 +11284,7 @@ function renderTimeline(inp) {
   // Social Security milestone
   const ssYear = 2026 + (inp.ssClaimAge - inp.agePerson1);
   const ssAnn = getSSAnnual(inp, inp.ssClaimAge);
-  milestones.push({ label: `🏛️ Social Security Starts`, year: ssYear, desc: `Age ${inp.ssClaimAge} — $${Math.round(ssAnn/12).toLocaleString()}/mo combined (after haircut)`, amount: Math.round(ssAnn), type: 'future' });
+  milestones.push({ label: t('timeline.ss.label'), year: ssYear, desc: t('timeline.ss.desc', inp.ssClaimAge, Math.round(ssAnn/12).toLocaleString()), amount: Math.round(ssAnn), type: 'future' });
 
   // Kid milestones (dynamic) — include per-kid college location and total cost
   if (inp.childAges && inp.childAges.length > 0) {
@@ -11023,8 +11294,8 @@ function renderTimeline(inp) {
         const plan = getCollegeDefaults((inp.childCollegePlans && inp.childCollegePlans[i]) || 'us-private');
         const total = plan.cost * plan.years;
         const shortLabel = plan.label.replace(/^[^\s]+\s/, '');
-        const desc = `You'll be age ${inp.agePerson1 + (18 - childAge)} · ${shortLabel}${total > 0 ? ` · ~$${(total/1000).toFixed(0)}K total` : ''}`;
-        milestones.push({ label: `🎓 Child ${i + 1} → College`, year: collegeYear, desc, amount: total > 0 ? total : null, type: 'future' });
+        const desc = total > 0 ? t('timeline.child.descTotal', inp.agePerson1 + (18 - childAge), shortLabel, (total/1000).toFixed(0)) : t('timeline.child.desc', inp.agePerson1 + (18 - childAge), shortLabel);
+        milestones.push({ label: t('timeline.child.label', i + 1), year: collegeYear, desc, amount: total > 0 ? total : null, type: 'future' });
       }
     });
   }
@@ -11141,13 +11412,13 @@ function runWhatIf() {
   const tpNum = getTwoPhaseFireNum(wiInp, wiSpendEff, fireAge);
 
   const el = document.getElementById('whatIfResult');
-  el.textContent = yrs <= 40 ? `${yrs} years` : '40+ years';
+  el.textContent = yrs <= 40 ? t('whatIf.years', yrs) : t('whatIf.years40plus');
   el.className = '';
   el.style.color = yrs <= 10 ? 'var(--success)' : yrs <= 15 ? 'var(--warning)' : 'var(--danger)';
 
   document.getElementById('whatIfDetail').textContent = yrs <= 40
-    ? `FIRE by ${2026 + yrs} at age ${fireAge} | Need $${Math.round(tpNum).toLocaleString()} | Saving $${Math.round(wiInp.monthlySavings).toLocaleString()}/mo`
-    : 'Savings rate too low for this scenario';
+    ? t('whatIf.detail', 2026 + yrs, fireAge, Math.round(tpNum).toLocaleString(), Math.round(wiInp.monthlySavings).toLocaleString())
+    : t('whatIf.savingsTooLow');
 }
 
 // ==================== AUTO-PERSIST STATE ====================
@@ -11741,7 +12012,7 @@ async function deleteSnapshot(index) {
 }
 
 async function clearAllSnapshots() {
-  if (!confirm('Delete ALL saved snapshots? This cannot be undone.')) return;
+  if (!confirm(t('snap.deleteAllConfirm'))) return;
   saveSnapshotsToLS([]);
   if (csvFileHandle) await writeCSVToFile(snapshotsToCSV([]));
   renderSnapshotHistory();
@@ -11834,11 +12105,11 @@ function updateFileStatus() {
   if (!el) return;
   const count = getSnapshots().length;
   if (csvFileHandle) {
-    csvFileHandle.name && (el.innerHTML = `<span style="color:var(--success)">📁 Linked: <strong>${csvFileHandle.name}</strong></span> · ${count} snapshot(s)`);
+    csvFileHandle.name && (el.innerHTML = `<span style="color:var(--success)">${t('snap.csvLinked', csvFileHandle.name)}</span> · ${t('snap.csvCount', count)}`);
   } else if (hasFileAPI) {
-    el.innerHTML = `<span style="color:var(--text-dim)">No CSV file linked yet — first save will ask where to save it</span>`;
+    el.innerHTML = `<span style="color:var(--text-dim)">${t('snap.noCsvLinked')}</span>`;
   } else {
-    el.innerHTML = `<span style="color:var(--text-dim)">CSV auto-downloads on save (browser doesn't support file linking)</span>`;
+    el.innerHTML = `<span style="color:var(--text-dim)">${t('snap.autoDownload')}</span>`;
   }
 }
 
@@ -11864,7 +12135,7 @@ function renderSnapshotHistory() {
   const tbody = document.getElementById('snapshotBody');
 
   if (all.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:30px">No snapshots yet. Save your first one below!</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:30px">${t('snap.empty')}</td></tr>`;
     return;
   }
 
@@ -11897,12 +12168,12 @@ function renderSnapshotHistory() {
       <td>${fmtMoney(snap.person2Stocks)}${dPerson2Stocks}</td>
       <td>${fmtMoney(snap.cashSavings)}${dCash}</td>
       <td>${fmtMoney(snap.annualIncome)}${dIncome}</td>
-      <td>$${snap.monthlySpend.toLocaleString()}/mo${dSpend}</td>
+      <td>$${snap.monthlySpend.toLocaleString()}${t('snap.perMo')}${dSpend}</td>
       <td>${snap.savingsRate}%</td>
       <td>${fmtMoney(snap.fireTarget)}</td>
-      <td style="font-weight:700;color:var(--accent)">${snap.yearsToFire} yrs</td>
+      <td style="font-weight:700;color:var(--accent)">${snap.yearsToFire} ${t('snap.yrs')}</td>
       <td>${snap.targetCountry || '—'}</td>
-      <td><button onclick="deleteSnapshot(${origIdx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.9em;padding:4px" title="Delete this snapshot">✕</button></td>
+      <td><button onclick="deleteSnapshot(${origIdx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.9em;padding:4px" title="${t('snap.deleteTooltip')}">✕</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -11910,7 +12181,7 @@ function renderSnapshotHistory() {
 
 // ==================== RESET TO DEFAULTS ====================
 function resetToDefaults() {
-  if (!confirm('This will clear ALL saved state (inputs, snapshots, CSV link) and reload with factory defaults. Are you sure?')) return;
+  if (!confirm(t('reset.confirm'))) return;
   localStorage.removeItem('fire_dashboard_generic_state');
   localStorage.removeItem('fire_dashboard_generic_snapshots');
   // Clear IndexedDB handle
@@ -11968,7 +12239,7 @@ buildSSEarningsTable(); // Build SSA earnings table (after restore so it uses re
   if (locEl && note) {
     const d = getHomeDefaults(locEl.value || 'us');
     note.innerHTML = `<strong>${d.capGainsNote}</strong>` +
-      (d.mortgageAvailable === false ? ' <span style="color:var(--warning)">⚠ Foreign mortgage typically not available — assume cash purchase.</span>' : '');
+      (d.mortgageAvailable === false ? t('mtg.foreignMortgageWarning') : '');
   }
 })();
 // Refresh inheritance note on init (best-effort — function may not exist if markup didn't load)
