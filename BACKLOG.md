@@ -128,6 +128,19 @@ These items were explicitly scoped into `001-modular-calc-engine` but deferred a
 - **Where**: `data-model.md §1` declares `Math.floor` for RR's birthdate-derived age. Not verified against actual dashboard behavior.
 - **Fix**: write a test that loads RR's dashboard with Roger's birthday set to 1983-06-15, asserts `chartState` sees `currentAgePrimary = 42` (not 43) on 2026-04-19. ~30 minutes.
 
+### U6. SSA Earnings Record cannot add pre-2020 years
+
+- **Where**: `FIRE-Dashboard-Generic.html` — `ssEarningsHistory` is initialised at line ~3286 starting 2020; "add year" button (line ~3325) only appends `lastYear + 1`. There is no button to insert a PRIOR year.
+- **Impact**: any user with US work history before 2020 cannot enter those earnings, which are needed for SSA's highest-35-years AIME calculation. Pre-2020 high-earning years silently count as \$0, understating projected SS benefit.
+- **Parity note**: check whether RR (`FIRE-Dashboard.html`) has the same limitation or already supports earlier years — fix in both if lockstep applies.
+- **Proposed fix** (future feature, target branch `011-ssa-earnings-pre-2020`):
+  1. Add "Add prior year" button next to "Add year" — prepends `firstYear − 1` to the list.
+  2. Floor: sensible minimum year (e.g., 1960, covering anyone currently planning FIRE who started working as a teen in that era) or compute from an "earliest work year" input the user can set.
+  3. Input validation: years must be strictly increasing; duplicates rejected; empty earnings treated as \$0 with a warning (still a valid record — SSA allows \$0 years for highest-35).
+  4. i18n: EN + zh-TW labels for the new button (reuse `ss.addYear` pattern).
+  5. Unit test: prepend + validate + sort invariant + AIME computation includes prepended years.
+- **Effort**: small spec + ~40 LoC UI change + 2–3 unit tests. Independent from feature 010 (country budget scaling).
+
 ---
 
 ## 🧪 P4 — Testing & infrastructure gaps

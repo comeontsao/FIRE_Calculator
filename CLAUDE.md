@@ -1,16 +1,16 @@
 <!-- SPECKIT START -->
-Active feature: **008-multi-strategy-withdrawal-optimizer** (branch `008-multi-strategy-withdrawal-optimizer`).
+Active feature: **010-country-budget-scaling** (branch `010-country-budget-scaling`).
 For technical context, structure, and commands, read the current plan:
 
-- Plan: [specs/008-multi-strategy-withdrawal-optimizer/plan.md](./specs/008-multi-strategy-withdrawal-optimizer/plan.md)
-- Spec: [specs/008-multi-strategy-withdrawal-optimizer/spec.md](./specs/008-multi-strategy-withdrawal-optimizer/spec.md)
-- Research: [specs/008-multi-strategy-withdrawal-optimizer/research.md](./specs/008-multi-strategy-withdrawal-optimizer/research.md)
-- Data model: [specs/008-multi-strategy-withdrawal-optimizer/data-model.md](./specs/008-multi-strategy-withdrawal-optimizer/data-model.md)
-- Contracts: [specs/008-multi-strategy-withdrawal-optimizer/contracts/](./specs/008-multi-strategy-withdrawal-optimizer/contracts/)
-- Quickstart: [specs/008-multi-strategy-withdrawal-optimizer/quickstart.md](./specs/008-multi-strategy-withdrawal-optimizer/quickstart.md)
+- Plan: [specs/010-country-budget-scaling/plan.md](./specs/010-country-budget-scaling/plan.md)
+- Spec: [specs/010-country-budget-scaling/spec.md](./specs/010-country-budget-scaling/spec.md)
+- Research: [specs/010-country-budget-scaling/research.md](./specs/010-country-budget-scaling/research.md)
+- Data model: [specs/010-country-budget-scaling/data-model.md](./specs/010-country-budget-scaling/data-model.md)
+- Contracts: [specs/010-country-budget-scaling/contracts/](./specs/010-country-budget-scaling/contracts/)
+- Quickstart: [specs/010-country-budget-scaling/quickstart.md](./specs/010-country-budget-scaling/quickstart.md)
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

@@ -928,3 +928,58 @@ All 36 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in BOTH `F
 | `strategy.tradLastPreserve.name` | Trad-Last (Preserve) | Trad 最後（留給後代） |
 | `strategy.tradLastPreserve.desc` | Stocks + Cash first, then Roth, Trad last — preserves Trad for estate. | 先股票與現金，再 Roth，Trad 最後 — 保留 Trad 給後代。 |
 | `strategy.tradLastPreserve.narrative` | Strategy: drain Taxable stocks and Cash first, then Roth, Traditional only under RMD floor — maximizes Trad balance left to heirs. | 策略：先提領應稅股票與現金，再 Roth，Traditional 僅在 RMD 下限內提領 — 留給後代的 Trad 餘額最大化。 |
+
+---
+
+## Feature 009 — Single-Person Mode (Generic only)
+
+All 11 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-Dashboard-Generic.html` only (per FR-029 — the RR dashboard `FIRE-Dashboard.html` is explicitly untouched on this branch). Sourced from `specs/009-single-person-mode/contracts/i18n.contract.md` §§ 1–3.
+
+### Profile — Household composition block (6 keys)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `profile.householdComposition` | Household composition | 家庭組成 |
+| `profile.adults` | Adults | 成人 |
+| `profile.adultsTip` | Set to 1 to switch tax brackets, healthcare scaling, and Social Security to single-person defaults. Person 2 inputs are hidden but preserved. | 設為 1 時稅率級距、健保計算與社會安全福利將切換為單人預設。成員 2 的輸入會隱藏但會保留。 |
+| `profile.adultsDec` | Decrease adults | 減少成人 |
+| `profile.adultsInc` | Increase adults | 增加成人 |
+| `profile.children` | Children | 小孩 |
+
+### Tax — Filing-status display (3 keys)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `tax.filingStatus.label` | Filing status | 報稅身分 |
+| `tax.filingStatus.single` | Single | 單身 |
+| `tax.filingStatus.mfj` | Married Filing Jointly | 夫妻合併申報 |
+
+### Snapshots — Adults column (2 keys)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `snap.adults` | Adults | 成人 |
+| `snap.adultsTip` | Number of adults modeled at the time the snapshot was taken. | 快照當時計入計算的成人數。 |
+
+## Feature 010 — Country budget scaling
+
+All 4 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-Dashboard-Generic.html` only (per FR-021 — the RR dashboard `FIRE-Dashboard.html` is explicitly untouched on this branch). Sourced from `specs/010-country-budget-scaling/contracts/i18n.contract.md`.
+
+### Scaling indicator and tooltip (4 keys)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `geo.scale.line1` | Country budget: {0} adult{1} → {2}× couple baseline | 國家預算：{0} 位成人 → {2}× 夫妻基準 |
+| `geo.scale.line2` | + per-child allowance during pre-college years ({0} children tracked) | + 大學前每位子女津貼（已計入 {0} 位子女） |
+| `geo.scale.tooltip` | Country budget uses an adults-only factor (OECD-modified: solo ≈ 0.67× couple). Children don’t move this factor. Post-FIRE, each child adds an age-graded allowance: $2,000/yr from ages 0–12, ramping to $6,000/yr at age 17. College tuition is tracked separately per child. | 國家預算採用僅計成人的係數（OECD 修正：單人約為夫妻的 0.67 倍）。子女不影響此係數。退休後每位子女依年齡加計津貼：0–12 歲每年 $2,000，至 17 歲漸升至每年 $6,000。大學學費則依每位子女單獨計算。 |
+| `geo.scale.childrenTracked` | {0} children tracked | 已計入 {0} 位子女 |
+
+**Placeholder semantics for `geo.scale.line1`:** `{0}` = integer `adultCount`; `{1}` = English plural suffix (`''` or `'s'`) — the zh-TW template intentionally omits `{1}` because Chinese has no plural suffix; `{2}` = factor formatted to 2 decimals (e.g., `0.67` or `1.00`).
+
+### Adjust Annual Spend override (1 key, Phase 6 US4)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `geo.customOverride` | (custom) | （自訂） |
+
+Used as a trailing badge on a country card's spend line when `scenarioOverrides[scenario.id]` is set, signalling that the displayed figure is a user override rather than the lifestyle-preset default. Contract: `specs/010-country-budget-scaling/contracts/adjust-annual-spend.contract.md`. Note: `geo.adjustSpend` (💰 Adjust Annual Spend:) and `geo.adjustNote` ((overrides lifestyle preset for this country)) were also added in this phase but live in the main Geography key block above.
