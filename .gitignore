@@ -1,2 +1,6 @@
 # Design reference bundle (downloaded from design app, kept locally for reference)
 FIRE Design/
+
+# Node / Playwright (feature 011 dev tooling)
+node_modules/
+tests/e2e/artifacts/

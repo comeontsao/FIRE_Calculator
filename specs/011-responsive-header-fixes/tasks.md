@@ -32,11 +32,11 @@ description: "Task list for feature 011 implementation"
 
 **Purpose**: Install Playwright dev dependency, scaffold `package.json` and config, set up `.gitignore` entries. No code logic yet.
 
-- [ ] T001 Create `package.json` at repo root with `{ "name": "fire-calculator", "private": true, "devDependencies": { "@playwright/test": "^1.47.0" } }` and a minimal `scripts` section: `{ "test:unit": "node --test tests/unit/*.test.js", "test:e2e": "playwright test" }`. This is the first `package.json` in the repo; Principle V carve-out documented in plan.md Complexity Tracking.
-- [ ] T002 Create `playwright.config.ts` at repo root per `contracts/playwright-matrix.contract.md` §Playwright config requirements. Chromium-only, testDir `tests/e2e`, 30s timeout, HTML reporter to `tests/e2e/artifacts/html-report/`, screenshot-on-failure to `tests/e2e/artifacts/`.
-- [ ] T003 Update `.gitignore` to add `node_modules/` and `tests/e2e/artifacts/` (if not already present). Verify with `git check-ignore -v node_modules` after the edit.
-- [ ] T004 Run `npm install` from repo root to hydrate `node_modules/` with `@playwright/test`. Then run `npx playwright install chromium` to download the chromium binary. Report any install warnings.
-- [ ] T005 Create empty directory structure: `mkdir -p tests/e2e/artifacts/responsive-header`. The directory is gitignored per T003, but the path must exist for Playwright to write into it.
+- [X] T001 Create `package.json` at repo root with `{ "name": "fire-calculator", "private": true, "devDependencies": { "@playwright/test": "^1.47.0" } }` and a minimal `scripts` section: `{ "test:unit": "node --test tests/unit/*.test.js", "test:e2e": "playwright test" }`. This is the first `package.json` in the repo; Principle V carve-out documented in plan.md Complexity Tracking.
+- [X] T002 Create `playwright.config.ts` at repo root per `contracts/playwright-matrix.contract.md` §Playwright config requirements. Chromium-only, testDir `tests/e2e`, 30s timeout, HTML reporter to `tests/e2e/artifacts/html-report/`, screenshot-on-failure to `tests/e2e/artifacts/`.
+- [X] T003 Update `.gitignore` to add `node_modules/` and `tests/e2e/artifacts/` (if not already present). Verify with `git check-ignore -v node_modules` after the edit.
+- [X] T004 Run `npm install` from repo root to hydrate `node_modules/` with `@playwright/test`. Then run `npx playwright install chromium` to download the chromium binary. Report any install warnings.
+- [X] T005 Create empty directory structure: `mkdir -p tests/e2e/artifacts/responsive-header`. The directory is gitignored per T003, but the path must exist for Playwright to write into it.
 
 **Checkpoint**: `npm install` succeeds, `npx playwright test --list` prints zero tests (but exits 0). Ready for foundational phase.
 
@@ -48,8 +48,8 @@ description: "Task list for feature 011 implementation"
 
 **⚠️ CRITICAL**: No user story work (other than US1's purely visual CSS) should begin until this phase is complete.
 
-- [ ] T006 In `FIRE-Dashboard-Generic.html`, add `--header-height: 0px;` to the existing `:root { ... }` CSS block (Grep for `:root {` to find it — should be near the other CSS custom properties like `--bg`, `--accent`). This is the default fallback; the JS producer (T014) will overwrite it with the live value.
-- [ ] T007 [P] Create `tests/e2e/helpers.ts` with shared utilities used across the matrix:
+- [X] T006 In `FIRE-Dashboard-Generic.html`, add `--header-height: 0px;` to the existing `:root { ... }` CSS block (Grep for `:root {` to find it — should be near the other CSS custom properties like `--bg`, `--accent`). This is the default fallback; the JS producer (T014) will overwrite it with the live value.
+- [X] T007 [P] Create `tests/e2e/helpers.ts` with shared utilities used across the matrix:
   - `loadDashboard(page)` — `page.goto('file://<repo>/FIRE-Dashboard-Generic.html')` + clear localStorage + reload
   - `setLanguage(page, 'en' | 'zh')` — click `#langEN` or `#langZH` + wait for settle
   - `setSidebarState(page, 'open' | 'closed')` — click `#sidebarToggle` only if current state differs
@@ -69,15 +69,15 @@ description: "Task list for feature 011 implementation"
 
 ### Implementation
 
-- [ ] T008 [US1] In `FIRE-Dashboard-Generic.html` around the existing `.header` CSS block (line ~138), add a new `@media (max-width: 1023px)` block per `contracts/header-layout.contract.md` §"768–1023px — two-row". Restructures `grid-template-columns` to `1fr auto`, places `.header__brand` on row 1 (full-span), `.header__status` + `.header__controls` on row 2.
-- [ ] T009 [US1] Add a new `@media (max-width: 767px)` block per `contracts/header-layout.contract.md` §"<768px — three-row stack". Sets `grid-template-columns: 1fr`, stacks all three children in three rows, tightens padding to `16px 20px`, wraps `.header__controls` via flex.
-- [ ] T010 [US1] Within the same `@media (max-width: 1023px)` block, update `.header h1` with: `font-size: clamp(1.2rem, 2.4vw + 0.5rem, 2.35rem); word-break: keep-all; overflow-wrap: normal; hyphens: manual; line-height: 1.2;` per `contracts/header-layout.contract.md` §"Narrow-viewport overrides".
-- [ ] T011 [US1] Within the `@media (max-width: 767px)` block, further adjust `.header h1` with `font-size: clamp(1.15rem, 3vw + 0.2rem, 1.8rem); line-height: 1.25;` per the same contract.
-- [ ] T012 [US1] Audit the second header CSS block around line ~1434 (the "skin" / theme block). Verify no additional media query is needed there — the current `clamp(1.8rem, 2.4vw + 0.5rem, 2.35rem)` at that site must be SUPERSEDED by T010's narrower `clamp` via cascade order. Confirm via Grep that the two blocks don't accidentally conflict. If conflict found, extend T010/T011 to override explicitly.
+- [X] T008 [US1] In `FIRE-Dashboard-Generic.html` around the existing `.header` CSS block (line ~138), add a new `@media (max-width: 1023px)` block per `contracts/header-layout.contract.md` §"768–1023px — two-row". Restructures `grid-template-columns` to `1fr auto`, places `.header__brand` on row 1 (full-span), `.header__status` + `.header__controls` on row 2.
+- [X] T009 [US1] Add a new `@media (max-width: 767px)` block per `contracts/header-layout.contract.md` §"<768px — three-row stack". Sets `grid-template-columns: 1fr`, stacks all three children in three rows, tightens padding to `16px 20px`, wraps `.header__controls` via flex.
+- [X] T010 [US1] Within the same `@media (max-width: 1023px)` block, update `.header h1` with: `font-size: clamp(1.2rem, 2.4vw + 0.5rem, 2.35rem); word-break: keep-all; overflow-wrap: normal; hyphens: manual; line-height: 1.2;` per `contracts/header-layout.contract.md` §"Narrow-viewport overrides".
+- [X] T011 [US1] Within the `@media (max-width: 767px)` block, further adjust `.header h1` with `font-size: clamp(1.15rem, 3vw + 0.2rem, 1.8rem); line-height: 1.25;` per the same contract.
+- [X] T012 [US1] Audit the second header CSS block around line ~1434 (the "skin" / theme block). Verify no additional media query is needed there — the current `clamp(1.8rem, 2.4vw + 0.5rem, 2.35rem)` at that site must be SUPERSEDED by T010's narrower `clamp` via cascade order. Confirm via Grep that the two blocks don't accidentally conflict. If conflict found, extend T010/T011 to override explicitly.
 
 ### Playwright assertions for US1 (within the full matrix — T027)
 
-- [ ] T013 [US1] Ensure the Playwright spec authored in T027 covers US1 invariants at all 12 cells: title ≤ 2 lines (A1), word-per-line check (A2). No standalone test — merged into the matrix authored later.
+- [X] T013 [US1] Ensure the Playwright spec authored in T027 covers US1 invariants at all 12 cells: title ≤ 2 lines (A1), word-per-line check (A2). No standalone test — merged into the matrix authored later.
 
 **Checkpoint**: At each of the three viewport sizes × both languages, the title renders cleanly without word-by-word stacking. Visual verification via browser DevTools device emulator. (Playwright will lock this in T027.)
 
@@ -91,14 +91,14 @@ description: "Task list for feature 011 implementation"
 
 ### Implementation
 
-- [ ] T014 [US2] In `FIRE-Dashboard-Generic.html`, add the `updateHeaderHeight()` function + its `ResizeObserver` IIFE initialiser per `contracts/sidebar-offset.contract.md` §"JS producer". Place near other DOMContentLoaded-initialised helpers (Grep for `DOMContentLoaded` to find the existing cluster).
-- [ ] T015 [US2] In `FIRE-Dashboard-Generic.html` `.sidebar` CSS rule (line ~1289), change `top: 0;` to `top: var(--header-height, 0px);` per `contracts/sidebar-offset.contract.md` §"CSS change". The fallback `0px` preserves pre-011 behaviour if JS fails.
-- [ ] T016 [US2] Verify (no code change) that `switchLanguage()` (Grep for `function switchLanguage`) does NOT need an explicit call to `updateHeaderHeight()` — the ResizeObserver should pick up the title-length change automatically. If browser testing reveals a visible flicker after language toggle, add an explicit `updateHeaderHeight()` call at the end of `switchLanguage()` as a safety net (documented in the contract).
-- [ ] T017 [US2] Verify (no code change) that the existing `.header--compact` transition triggers a ResizeObserver callback. If the transition doesn't change the element's `getBoundingClientRect().height` synchronously (because it uses padding/font-size transitions that may fire only after animation complete), add an explicit `updateHeaderHeight()` call inside the IntersectionObserver callback that applies/removes `.header--compact` (Grep for `header--compact` to find that logic).
+- [X] T014 [US2] In `FIRE-Dashboard-Generic.html`, add the `updateHeaderHeight()` function + its `ResizeObserver` IIFE initialiser per `contracts/sidebar-offset.contract.md` §"JS producer". Place near other DOMContentLoaded-initialised helpers (Grep for `DOMContentLoaded` to find the existing cluster).
+- [X] T015 [US2] In `FIRE-Dashboard-Generic.html` `.sidebar` CSS rule (line ~1289), change `top: 0;` to `top: var(--header-height, 0px);` per `contracts/sidebar-offset.contract.md` §"CSS change". The fallback `0px` preserves pre-011 behaviour if JS fails.
+- [X] T016 [US2] Verify (no code change) that `switchLanguage()` (Grep for `function switchLanguage`) does NOT need an explicit call to `updateHeaderHeight()` — the ResizeObserver should pick up the title-length change automatically. If browser testing reveals a visible flicker after language toggle, add an explicit `updateHeaderHeight()` call at the end of `switchLanguage()` as a safety net (documented in the contract).
+- [X] T017 [US2] Verify (no code change) that the existing `.header--compact` transition triggers a ResizeObserver callback. If the transition doesn't change the element's `getBoundingClientRect().height` synchronously (because it uses padding/font-size transitions that may fire only after animation complete), add an explicit `updateHeaderHeight()` call inside the IntersectionObserver callback that applies/removes `.header--compact` (Grep for `header--compact` to find that logic).
 
 ### Playwright assertions for US2 (within the full matrix — T027)
 
-- [ ] T018 [US2] Ensure T027 covers the background-continuity assertion (A4): sample left and right pixel colors at `header_bottom - 1px`, expect ≤ 2 RGB delta. This is the direct validation of FR-011.
+- [X] T018 [US2] Ensure T027 covers the background-continuity assertion (A4): sample left and right pixel colors at `header_bottom - 1px`, expect ≤ 2 RGB delta. This is the direct validation of FR-011.
 
 **Checkpoint**: Visual verification — toggle sidebar at each viewport, confirm NO seam at the header/sidebar boundary. Scroll to trigger compact-sticky with sidebar open; seam still absent.
 
@@ -112,12 +112,12 @@ description: "Task list for feature 011 implementation"
 
 ### Implementation
 
-- [ ] T019 [US3] Verify (no code change expected) that the existing `.header--compact` CSS block (line ~156) is NOT accidentally overridden by the new `@media` rules from T008–T009. Specifically: media-query `.header` rules must NOT `!important`-override the `padding` or `background` that `.header--compact` changes. If conflict exists, restructure with `:not(.header--compact)` selectors or move the media queries outside.
-- [ ] T020 [US3] Verify (via browser test) that at each viewport size × with sidebar both open and closed, all 4 controls (`#langEN`, `#langZH`, `#themeToggle`, `#sidebarToggle`, Reset button) remain visible and clickable. No code change expected IF T008/T009 are correct; if failures found, adjust the flex/wrap rules on `.header__controls` in T009.
+- [X] T019 [US3] Verify (no code change expected) that the existing `.header--compact` CSS block (line ~156) is NOT accidentally overridden by the new `@media` rules from T008–T009. Specifically: media-query `.header` rules must NOT `!important`-override the `padding` or `background` that `.header--compact` changes. If conflict exists, restructure with `:not(.header--compact)` selectors or move the media queries outside.
+- [X] T020 [US3] Verify (via browser test) that at each viewport size × with sidebar both open and closed, all 4 controls (`#langEN`, `#langZH`, `#themeToggle`, `#sidebarToggle`, Reset button) remain visible and clickable. No code change expected IF T008/T009 are correct; if failures found, adjust the flex/wrap rules on `.header__controls` in T009.
 
 ### Playwright assertions for US3 (within the full matrix — T027)
 
-- [ ] T021 [US3] Ensure T027 covers the control-visibility assertion (A5): each of `#langEN`, `#langZH`, `#themeToggle`, `#sidebarToggle`, and the Reset button are `.toBeVisible()` at every cell. Also add a separate Playwright test (outside the 12-cell matrix) that scrolls past the sentinel, asserts `.header--compact` is applied within 300ms, and confirms the same controls stay visible. Place in `tests/e2e/responsive-header.spec.ts` as `test('compact-sticky preserved across breakpoints', ...)`.
+- [X] T021 [US3] Ensure T027 covers the control-visibility assertion (A5): each of `#langEN`, `#langZH`, `#themeToggle`, `#sidebarToggle`, and the Reset button are `.toBeVisible()` at every cell. Also add a separate Playwright test (outside the 12-cell matrix) that scrolls past the sentinel, asserts `.header--compact` is applied within 300ms, and confirms the same controls stay visible. Place in `tests/e2e/responsive-header.spec.ts` as `test('compact-sticky preserved across breakpoints', ...)`.
 
 **Checkpoint**: Scrolled-compact state looks identical to pre-011 behaviour. No visual or timing regression.
 
@@ -131,12 +131,12 @@ description: "Task list for feature 011 implementation"
 
 ### Implementation
 
-- [ ] T022 [US4] Most of US4 is already delivered by US1's media queries (the pill reflows to row 2 or row 3 naturally via the grid restructure). Audit: no additional CSS rule should be needed. Confirm by Grep that `.fire-status` is NOT styled with `position: absolute` anywhere, and is NOT inside a `overflow: hidden` container that would clip its text.
-- [ ] T023 [US4] Add pill size shrink at <768px per `contracts/header-layout.contract.md` §"Minor pill size adjustment": inside the existing `@media (max-width: 767px)` block from T009, append `.fire-status { font-size: 0.78rem !important; padding: 6px 12px !important; }`. Preserves the existing `!important` convention on the `.fire-status` rule's base styles.
+- [X] T022 [US4] Most of US4 is already delivered by US1's media queries (the pill reflows to row 2 or row 3 naturally via the grid restructure). Audit: no additional CSS rule should be needed. Confirm by Grep that `.fire-status` is NOT styled with `position: absolute` anywhere, and is NOT inside a `overflow: hidden` container that would clip its text.
+- [X] T023 [US4] Add pill size shrink at <768px per `contracts/header-layout.contract.md` §"Minor pill size adjustment": inside the existing `@media (max-width: 767px)` block from T009, append `.fire-status { font-size: 0.78rem !important; padding: 6px 12px !important; }`. Preserves the existing `!important` convention on the `.fire-status` rule's base styles.
 
 ### Playwright assertions for US4 (within the full matrix — T027)
 
-- [ ] T024 [US4] Ensure T027 covers the title/pill non-intersection assertion (A3) at every cell. This is the direct validation of FR-010.
+- [X] T024 [US4] Ensure T027 covers the title/pill non-intersection assertion (A3) at every cell. This is the direct validation of FR-010.
 
 **Checkpoint**: Pill visible and non-overlapping at every viewport × language × sidebar state combination.
 
@@ -150,14 +150,14 @@ description: "Task list for feature 011 implementation"
 
 ### Implementation
 
-- [ ] T025 [US5] Create `tests/e2e/responsive-header.spec.ts` with imports: `@playwright/test`, `path`, and the helpers from `tests/e2e/helpers.ts`. Add the matrix constants from `contracts/playwright-matrix.contract.md` §"Matrix definition": `viewports`, `sidebarStates`, `languages`.
-- [ ] T026 [US5] Implement `setupCell(page, viewport, sidebarState, language)` per `contracts/playwright-matrix.contract.md` §"Test setup per cell". Uses `helpers.ts`' `loadDashboard`, `setLanguage`, `setSidebarState`. Waits 300ms after setup for transitions + ResizeObserver to settle.
-- [ ] T027 [US5] Generate the 12-cell matrix using nested `test.describe` + `test` loops. Each cell:
+- [X] T025 [US5] Create `tests/e2e/responsive-header.spec.ts` with imports: `@playwright/test`, `path`, and the helpers from `tests/e2e/helpers.ts`. Add the matrix constants from `contracts/playwright-matrix.contract.md` §"Matrix definition": `viewports`, `sidebarStates`, `languages`.
+- [X] T026 [US5] Implement `setupCell(page, viewport, sidebarState, language)` per `contracts/playwright-matrix.contract.md` §"Test setup per cell". Uses `helpers.ts`' `loadDashboard`, `setLanguage`, `setSidebarState`. Waits 300ms after setup for transitions + ResizeObserver to settle.
+- [X] T027 [US5] Generate the 12-cell matrix using nested `test.describe` + `test` loops. Each cell:
   1. Calls `setupCell(page, viewport, sidebarState, language)`
   2. Runs all 5 assertions (A1–A5 from `contracts/playwright-matrix.contract.md` §"Per-cell assertions") against the fresh page state.
   3. Names the test descriptively: `${viewport.name}-${sidebarState}-${language}` (e.g., `phone-sidebar-open-zh`).
-- [ ] T028 [US5] Add the separate `test('compact-sticky preserved across breakpoints', ...)` from T021 outside the matrix loops. Programmatically scrolls via `page.evaluate(() => window.scrollTo(0, 500))`, waits 300ms, asserts `page.locator('.header')` has class `header--compact`, asserts each control is visible. Runs at one representative viewport (1440 × 900) to keep the suite fast.
-- [ ] T029 [US5] Run `npx playwright test tests/e2e/responsive-header.spec.ts --reporter=list` and confirm 12 cells + 1 sticky test = 13 passing tests in <60 seconds. If any cell fails, screenshot lands in `tests/e2e/artifacts/responsive-header/` — diagnose, fix the underlying CSS/JS in the relevant US1–US4 task, and re-run.
+- [X] T028 [US5] Add the separate `test('compact-sticky preserved across breakpoints', ...)` from T021 outside the matrix loops. Programmatically scrolls via `page.evaluate(() => window.scrollTo(0, 500))`, waits 300ms, asserts `page.locator('.header')` has class `header--compact`, asserts each control is visible. Runs at one representative viewport (1440 × 900) to keep the suite fast.
+- [X] T029 [US5] Run `npx playwright test tests/e2e/responsive-header.spec.ts --reporter=list` and confirm 12 cells + 1 sticky test = 13 passing tests in <60 seconds. If any cell fails, screenshot lands in `tests/e2e/artifacts/responsive-header/` — diagnose, fix the underlying CSS/JS in the relevant US1–US4 task, and re-run.
 
 **Checkpoint**: 13/13 Playwright tests green. HTML report available for manual review. Test suite runs locally in <60s.
 
@@ -169,30 +169,30 @@ description: "Task list for feature 011 implementation"
 
 ### Constitution gates
 
-- [ ] T030 Grep `FIRE-Dashboard-Generic.html` for any new `[A-Za-z]{4,}` tokens introduced by this feature inside user-visible DOM. All new CSS selector / variable names (e.g., `--header-height`) are implementation details not user-visible. Confirm zero new raw-English user-visible strings (Principle VII vacuously satisfied since no new i18n keys are added per FR-017).
-- [ ] T031 Confirm Principle V carve-out compliance: `npm install` creates `node_modules/` locally; `node_modules/` is gitignored (T003); the dashboard HTML does NOT import from `node_modules` (Grep `FIRE-Dashboard-Generic.html` for `node_modules` — expect 0 hits); Chart.js is still loaded from CDN (unchanged).
-- [ ] T032 Confirm the 161 pre-011 unit tests stay green: `node --test tests/unit/*.test.js 2>&1 | tail -6`. Expected: `# pass 161 # fail 0`. No regression from feature-011 work (should be impossible since we don't touch any calc logic, but verify).
+- [X] T030 Grep `FIRE-Dashboard-Generic.html` for any new `[A-Za-z]{4,}` tokens introduced by this feature inside user-visible DOM. All new CSS selector / variable names (e.g., `--header-height`) are implementation details not user-visible. Confirm zero new raw-English user-visible strings (Principle VII vacuously satisfied since no new i18n keys are added per FR-017).
+- [X] T031 Confirm Principle V carve-out compliance: `npm install` creates `node_modules/` locally; `node_modules/` is gitignored (T003); the dashboard HTML does NOT import from `node_modules` (Grep `FIRE-Dashboard-Generic.html` for `node_modules` — expect 0 hits); Chart.js is still loaded from CDN (unchanged).
+- [X] T032 Confirm the 161 pre-011 unit tests stay green: `node --test tests/unit/*.test.js 2>&1 | tail -6`. Expected: `# pass 161 # fail 0`. No regression from feature-011 work (should be impossible since we don't touch any calc logic, but verify).
 
 ### Documentation
 
-- [ ] T033 [P] Update `FIRE-Dashboard-Roadmap.md` with a feature 011 entry. Place under the same `## ✅ Recently shipped` section where features 009 + 010 live. Include: status (Implemented), branch name, spec link, 1-paragraph summary (what the fix does + test matrix).
-- [ ] T034 [P] Verify `CLAUDE.md`'s SPECKIT block still points at `specs/011-responsive-header-fixes/plan.md` (updated during `/speckit-plan`; sanity check).
+- [X] T033 [P] Update `FIRE-Dashboard-Roadmap.md` with a feature 011 entry. Place under the same `## ✅ Recently shipped` section where features 009 + 010 live. Include: status (Implemented), branch name, spec link, 1-paragraph summary (what the fix does + test matrix).
+- [X] T034 [P] Verify `CLAUDE.md`'s SPECKIT block still points at `specs/011-responsive-header-fixes/plan.md` (updated during `/speckit-plan`; sanity check).
 
 ### Final manual smoke (Manager merge gate per CLAUDE.md Process Lessons)
 
-- [ ] T035 Execute quickstart.md smoke path 1 (desktop, sidebar closed): baseline unchanged.
-- [ ] T036 Execute quickstart.md smoke path 2 (desktop, sidebar open): no seam.
-- [ ] T037 Execute quickstart.md smoke path 3 (tablet, sidebar closed): 2-row layout.
-- [ ] T038 Execute quickstart.md smoke path 4 (tablet, sidebar open): 2-row + no seam.
-- [ ] T039 Execute quickstart.md smoke path 5 (phone, sidebar closed): 3-row stack, title ≤ 2 lines.
-- [ ] T040 Execute quickstart.md smoke path 6 (phone, sidebar open): 3-row + no seam.
-- [ ] T041 Execute quickstart.md smoke path 7 (zh-TW at all viewports): Chinese title renders cleanly.
-- [ ] T042 Execute quickstart.md smoke path 8 (compact-sticky transition): preserved at every viewport × sidebar state.
-- [ ] T043 Execute quickstart.md smoke path 9 (extreme zoom 150 / 175 / 200 %): behaves like narrow viewports.
+- [X] T035 Execute quickstart.md smoke path 1 (desktop, sidebar closed): baseline unchanged.
+- [X] T036 Execute quickstart.md smoke path 2 (desktop, sidebar open): no seam.
+- [X] T037 Execute quickstart.md smoke path 3 (tablet, sidebar closed): 2-row layout.
+- [X] T038 Execute quickstart.md smoke path 4 (tablet, sidebar open): 2-row + no seam.
+- [X] T039 Execute quickstart.md smoke path 5 (phone, sidebar closed): 3-row stack, title ≤ 2 lines.
+- [X] T040 Execute quickstart.md smoke path 6 (phone, sidebar open): 3-row + no seam.
+- [X] T041 Execute quickstart.md smoke path 7 (zh-TW at all viewports): Chinese title renders cleanly.
+- [X] T042 Execute quickstart.md smoke path 8 (compact-sticky transition): preserved at every viewport × sidebar state.
+- [X] T043 Execute quickstart.md smoke path 9 (extreme zoom 150 / 175 / 200 %): behaves like narrow viewports.
 
 ### RR vacuous check
 
-- [ ] T044 Confirm `FIRE-Dashboard.html` is still absent from the repo (not created by this feature). `ls FIRE-Dashboard.html 2>&1` should return "No such file or directory". FR-022 vacuously satisfied.
+- [X] T044 Confirm `FIRE-Dashboard.html` is still absent from the repo (not created by this feature). `ls FIRE-Dashboard.html 2>&1` should return "No such file or directory". FR-022 vacuously satisfied.
 
 ---
 
