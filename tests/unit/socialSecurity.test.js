@@ -129,3 +129,30 @@ test('socialSecurity: claiming at 70 produces a higher benefit than claiming at 
     `claim-at-70 / FRA ratio out of SSA-expected band [1.15, 1.35]: got ${ratio}`,
   );
 });
+
+// ----------------------------------------------------------------------------
+// Feature 009 — Single-person SS combination branch (T015).
+//
+// Mirrors FIRE-Dashboard-Generic.html calcRealisticSSA spousal-PIA branch:
+//   const isSingle = inp.adultCount === 1;
+//   const spousePIA = isSingle ? 0 : Math.max(pia * 0.5, inp.ssSpouseOwn);
+//
+// Ref:
+//   specs/009-single-person-mode/contracts/calc-functions.contract.md §5
+//   specs/009-single-person-mode/research.md §10 item 2
+// ----------------------------------------------------------------------------
+
+import { ssSingleCombinationFixtures } from '../fixtures/single-person-mode.js';
+
+function computeSpousePIA(pia, ssSpouseOwn, adultCount) {
+  const isSingle = (adultCount === 1);
+  return isSingle ? 0 : Math.max(pia * 0.5, ssSpouseOwn);
+}
+
+for (const fx of ssSingleCombinationFixtures) {
+  test(`single-person SS — ${fx.name}`, () => {
+    const spouse = computeSpousePIA(fx.pia, fx.ssSpouseOwn, fx.adultCount);
+    assert.equal(spouse, fx.expectedSpousePIA);
+    assert.equal(fx.pia + spouse, fx.expectedCombined);
+  });
+}

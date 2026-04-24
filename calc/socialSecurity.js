@@ -35,6 +35,10 @@
  *                              at ssAgeStart.
  *   - ssChart renderer       — with-vs-without-SS portfolio curves
  *                              (FIRE-Dashboard{,-Generic}.html).
+ *   - FIRE-Dashboard-Generic.html inline `calcRealisticSSA` — wraps this
+ *     module's PIA output with a spousal add-on when adultCount === 2, and
+ *     suppresses the add-on (spousePIA = 0) when adultCount === 1
+ *     (feature 009, FR-012/FR-013).
  *
  * Invariants:
  *   - `annualBenefitReal` is in real (today-dollar) purchasing power. SSA

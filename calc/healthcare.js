@@ -29,6 +29,11 @@
  *   - scenario card          — shows blended delta between two scenarios
  *                              (FIRE-Dashboard{,-Generic}.html).
  *   - countryChart renderer  — country-comparison chart.
+ *   - FIRE-Dashboard-Generic.html inline — the dashboard's own
+ *     `getHealthcareFamilySizeFactor` / `getHealthcareMonthly` mirror this
+ *     module's `householdSize` semantic: `householdSize = adultCount` for the
+ *     pre-65 adult-share portion, with per-kid scaling layered on top
+ *     (feature 009, FR-014/FR-016).
  *
  * Invariants:
  *   - `annualCostReal > 0` for all supported inputs.
