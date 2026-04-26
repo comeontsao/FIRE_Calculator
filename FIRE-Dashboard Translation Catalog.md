@@ -555,7 +555,6 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | `sec.netWorthPie` (Generic) | Net Worth Breakdown | 淨資產分佈 |
 | `sec.milestones` (Generic) | FIRE Milestone Timeline | FIRE 里程碑時間線 |
 | `sec.expenseDist` (Generic) | Expense Distribution | 支出分佈 |
-| `sec.whatIf` (Generic) | Quick What-If | 快速假設分析 |
 | `sec.countryChart` (Generic) | Years to FIRE by Retirement Location | 各國 FIRE 所需年數 |
 | `sec.snapshots` (Generic) | Snapshot History — Track Your Progress Over Time | 快照紀錄 — 追蹤你的進度 |
 
@@ -650,9 +649,23 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 
 Covers: `ss.earningsRecord`, `ss.earningsDesc`, `ss.year`, `ss.earnings`, `ss.credits`, `ss.addYear`, `ss.creditCount`, `ss.creditTotal`, `ss.spouseOwn` (Generic only), `ss.fireStrategy`, `ss.safe`, `ss.exact`, `ss.dieWithZero`, `ss.bufferUnlock`, `ss.bufferSS`, `ss.terminalBuffer`, `ss.planAge`, `ss.ssaEstimate`, `ss.claimAge`, `ss.age62`, `ss.age67`, `ss.age70`, `ss.threePhase`, `ss.vsSimple`.
 
-**Savings / Expense / What-If / Snapshots / Footer / Badges — Generic parity entries**
+**Feature 012 additions — pre-2020 earnings entry:**
 
-Covers: `savings.ofGross/min/max/coastFire`, `exp.category/monthly/annual/pctIncome/total`, `whatif.income/spend/return/fireLabel`, `snap.desc/date/netWorth/accessible/k401/cash/income/monthlySpend/savingsRate/fireTarget/save/linkCSV/exportCSV/importCSV/clearAll`, `snap.person1Stocks` + `snap.person2Stocks` (Generic only — RR uses Roger/Rebecca variants), `footer.lastUpdated` (new both files), `badge.obj/est`, `mode.safe/exact/dieWithZero`.
+| Key | EN | zh-TW | Placeholders |
+|-----|-----|-------|--------------|
+| `ss.addPriorYear` | `+ Add Prior Year` | `+ 新增先前年份` | — |
+| `ss.earliestYearLabel` | `Earliest year` | `最早年份` | — |
+| `ss.earliestYearSet` | `Set` | `設定` | — |
+| `ss.earliestYearHint` | `Already covered — no change.` | `已涵蓋此年份，未變更。` | — |
+| `ss.duplicateYear` | `{0} already exists in the record.` | `{0} 已存在於紀錄中。` | `{0}` year |
+| `ss.floorReached` | `Earliest supported year is {0}.` | `最早可輸入年份為 {0}。` | `{0}` floor year |
+| `ss.yearAccepted` | `Added {0}.` | `已新增 {0}。` | `{0}` year |
+
+Consumer: `FIRE-Dashboard-Generic.html` SSA Earnings Record card (add-prior-year button, bulk earliest-year input, and status line).
+
+**Savings / Expense / Snapshots / Footer / Badges — Generic parity entries**
+
+Covers: `savings.ofGross/min/max/coastFire`, `exp.category/monthly/annual/pctIncome/total`, `snap.desc/date/netWorth/accessible/k401/cash/income/monthlySpend/savingsRate/fireTarget/save/linkCSV/exportCSV/importCSV/clearAll`, `snap.person1Stocks` + `snap.person2Stocks` (Generic only — RR uses Roger/Rebecca variants), `footer.lastUpdated` (new both files), `badge.obj/est`, `mode.safe/exact/dieWithZero`.
 
 ### Items deliberately skipped (Phase 3 or later)
 
@@ -779,7 +792,7 @@ Toggle labels: `mtg.toggleOff` / `mtg.toggleOn`.
 **Chart legend + tooltip**: `tw.legend.ss/trad/roth/ltcg/cash/effTax`, `tw.tooltip.totalDrawn/taxOwed/ordIncome/rmd/shortfall`, `tw.howToRead`.
 
 ### Category J — SS section
-Prose wired via `ss.introFull` (HTML-carrying, so `data-i18n-html`). JS rendering: `ss.notQualified`, `ss.needMoreCredits`, `ss.recordSummary`, `ss.credits`, `ss.earningsAtFire`, `ss.earningsAtFireSub`, `ss.zerosInTop35`, `ss.aime`, `ss.aimePerMo`, `ss.rogerPia` (RR) / `ss.person1Pia` (Generic), `ss.rebeccaSpousal` (RR) / `ss.person2Spousal` (Generic), `ss.combinedAtFra`, `ss.combinedValue`, `ss.vsEmployerEst`, `ss.realityFire`, `ss.tableAge/Monthly/Annual`, `ss.threePhaseSaves`.
+Prose wired via `ss.introFull` (HTML-carrying, so `data-i18n-html`). JS rendering: `ss.notQualified`, `ss.needMoreCredits`, `ss.recordSummary`, `ss.credits`, `ss.earningsAtFire`, `ss.earningsAtFireSub`, `ss.zerosInTop35`, `ss.aime`, `ss.aimePerMo`, `ss.rogerPia` (RR) / `ss.person1Pia` (Generic), `ss.rebeccaSpousal` (RR) / `ss.person2Spousal` (Generic), `ss.combinedAtFra`, `ss.combinedValue`, `ss.tableAge/Monthly/Annual`, `ss.threePhaseSaves`.
 
 ### Category K — Healthcare section
 `hc.intro`, `hc.baseline`, `hc.autoScale`, `hc.pre65Tip`, `hc.post65Tip`, `hc.placeholderDefault`, `hc.selectScenario`, `hc.pre65Label`, `hc.post65Label`, `hc.overrideSuffix`, `hc.familyOf4`, `hc.coupleMedicare`, `hc.fireImpact`, `hc.fireImpactValue`, `hc.tableCountry/Pre65/Post65`. Plus 11 per-country notes: `hc.note.us`, `hc.note.taiwan`, ..., `hc.note.portugal`.
@@ -983,3 +996,58 @@ All 4 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-Da
 | `geo.customOverride` | (custom) | （自訂） |
 
 Used as a trailing badge on a country card's spend line when `scenarioOverrides[scenario.id]` is set, signalling that the displayed figure is a user override rather than the lifestyle-preset default. Contract: `specs/010-country-budget-scaling/contracts/adjust-annual-spend.contract.md`. Note: `geo.adjustSpend` (💰 Adjust Annual Spend:) and `geo.adjustNote` ((overrides lifestyle preset for this country)) were also added in this phase but live in the main Geography key block above.
+
+## Feature 013 — Tab Navigation (i18n)
+
+21 new key pairs added in lockstep to both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` for the new tabbed navigation (4 tabs + 16 pills + 1 button). Source: `specs/013-tabbed-navigation/contracts/tab-i18n.contract.md`.
+
+### Tab labels (4)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.tab.plan` | Plan | 計畫 |
+| `nav.tab.geography` | Geography | 地理 |
+| `nav.tab.retirement` | Retirement | 退休 |
+| `nav.tab.history` | History | 紀錄 |
+
+### Pill labels — Plan tab (6)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.pill.profile` | Profile | 個人資料 |
+| `nav.pill.assets` | Assets | 資產 |
+| `nav.pill.investment` | Investment | 投資 |
+| `nav.pill.mortgage` | Mortgage | 房貸 |
+| `nav.pill.expenses` | Expenses | 支出 |
+| `nav.pill.summary` | Summary | 總覽 |
+
+### Pill labels — Geography tab (4)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.pill.scenarios` | Scenarios | 情境 |
+| `nav.pill.countryChart` | Country Chart | 國家比較圖 |
+| `nav.pill.healthcare` | Healthcare | 醫療 |
+| `nav.pill.countryDeepDive` | Country Deep-Dive | 國家詳情 |
+
+### Pill labels — Retirement tab (5)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.pill.ss` | Social Security | 社會安全金 |
+| `nav.pill.withdrawal` | Withdrawal Strategy | 提款策略 |
+| `nav.pill.drawdown` | Drawdown | 資產提領 |
+| `nav.pill.lifecycle` | Lifecycle | 完整生命週期 |
+| `nav.pill.milestones` | Milestones | 里程碑 |
+
+### Pill labels — History tab (1)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.pill.snapshots` | Snapshots | 歷史紀錄 |
+
+### Workflow button (1)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.next` | Next → | 下一步 → |

@@ -76,6 +76,16 @@ The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm ins
 
 ---
 
+## What's next
+
+Active design work — not shipped yet:
+
+- **Tabbed dashboard navigation** ([spec](specs/013-tabbed-navigation/spec.md)) — replace the current single-scroll layout with **4 themed tabs** (Plan · Geography · Retirement · History) and sub-tab pill bars, so the dashboard stops trying to show all 18 sections at once. Calc engine, charts, and formulas are untouched — pure frontend reorganization. Plan tab walks through Profile → Assets → Investment → Mortgage → Expenses → Summary like a tax-form wizard, with a `Next →` button on each card. KPI ribbon and the pinned Lifecycle sidebar stay visible across every tab so headline numbers never disappear. State persists in `localStorage` and via URL hash (`#tab=…&pill=…`) for bookmarkable deep links. Quick What-If is removed.
+
+For the full picture of what's done, in-flight, and on the wishlist, see the master planning doc: [FIRE-Dashboard-Roadmap.md](./FIRE-Dashboard-Roadmap.md).
+
+---
+
 ## Privacy — genuinely
 
 Everything runs locally. Your figures live in your browser's `localStorage` and your CSV snapshot file (if you choose to save one). Nothing gets sent to a server. There is no server. No analytics. No third-party scripts beyond Chart.js from CDN for rendering. If you open the file from your filesystem (`file://...`) it still works.

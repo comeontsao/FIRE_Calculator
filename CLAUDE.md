@@ -1,9 +1,13 @@
 <!-- SPECKIT START -->
-No active feature. Run `/speckit-specify` to start a new feature.
+**Active feature**: `013-tabbed-navigation` — Tabbed Dashboard Navigation: 4 themed tabs (Plan · Geography · Retirement · History) with sub-tab pill bars, pure frontend reorganization, calc engine untouched.
+- Spec: [specs/013-tabbed-navigation/spec.md](./specs/013-tabbed-navigation/spec.md)
+- Plan: [specs/013-tabbed-navigation/plan.md](./specs/013-tabbed-navigation/plan.md)
+- Tasks: [specs/013-tabbed-navigation/tasks.md](./specs/013-tabbed-navigation/tasks.md)
+- Status: implemented end-to-end. 195/195 unit tests + 40/40 Playwright tests green. Browser smoke walk (T022) is the remaining Manager-driven gate before merge.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/)
 <!-- SPECKIT END -->
 
 # FIRE Calculator
@@ -305,6 +309,63 @@ touches the HTML boot path or anything `window`-exposed:
 Skip this and you risk feature-004-class failures where the runner is green
 but the dashboard is visibly broken. Treat this as a Manager-executed gate
 BEFORE merging.
+
+### FIRE-mode gates (Safe / Exact / DWZ) MUST evaluate the displayed strategy
+
+The three FIRE modes are **gates** that determine the FIRE age. The earliest
+age that passes the gate is what the dashboard reports as "FIRE in N years".
+Each mode has its own contract:
+
+- **Safe** — every retirement-year `total ≥ buffer × annualSpend` (where buffer
+  is `bufferUnlock` for ages < 59.5, `bufferSS` for ages ≥ 59.5), AND
+  `endBalance ≥ 0` at plan age. Trajectory enforcement across ALL three
+  retirement phases.
+- **Exact** — `endBalance ≥ terminalBuffer × annualSpend` at plan age. No
+  trajectory enforcement; intermediate years can dip arbitrarily.
+- **DieWithZero** — `endBalance ≥ 0` at plan age. Targets exactly $0 surplus.
+
+**The non-negotiable rule:** the gate MUST evaluate the SAME simulated
+lifecycle that the chart renders. The active strategy (feature 008's
+`_lastStrategyResults.winnerId`, or `_previewStrategyId` during hover) is the
+last factor before chart creation. If the gate evaluates a different strategy
+than the chart, the verdict drifts out of sync with what the user sees — e.g.,
+"On Track — FIRE at 48" displayed alongside a chart that visibly depletes to
+$0 at age 70.
+
+**Why:** before the strategy-aware fix, `isFireAgeFeasible` always called
+`projectFullLifecycle(inp, annualSpend, fireAge, true)` with no `options`,
+which silently used the bracket-fill-smoothed default. When feature 008's
+strategy ranking picked a non-default winner (e.g., `tax-optimized-search`),
+the chart rendered the winner's trajectory while the verdict gate kept
+checking bracket-fill. Bracket-fill happened to pass the buffer floor for
+that scenario; the actually-displayed strategy did not.
+
+**How to apply:**
+
+1. Any code that decides the FIRE age (`findFireAgeNumerical`,
+   `isFireAgeFeasible`, future bisection helpers, etc.) MUST consume the same
+   strategy options as `projectFullLifecycle` is called with on the chart side
+   (line 10690 in RR / Generic — `options.strategyOverride`,
+   `options.thetaOverride`).
+2. Use the helper `getActiveChartStrategyOptions()` defined alongside
+   `isFireAgeFeasible`. It mirrors the chart's strategy detection logic in
+   one place and returns `{strategyOverride, thetaOverride}` or `undefined`
+   when the default (`bracket-fill-smoothed`) is active.
+3. When adding a new feasibility helper, audit it against this rule:
+   *"If the chart can render strategy X, can my gate accidentally evaluate
+   strategy Y?"* If yes, thread the strategy options through.
+4. The `signedLifecycleEndBalance` simulator is bracket-fill-only — used for
+   `endBalance` (Exact / DWZ gates) and as the Safe-mode fallback when
+   `projectFullLifecycle` is unavailable. If the chart and the signed sim ever
+   disagree on end-balance sign, that is its own bug (separate from this rule).
+
+**Test for regression:** the project's TEMP debug button at the bottom-right
+of both HTML files (when present) emits a `feasibilityProbe` block that
+records `isFeasible_safe` alongside `defaultChartViolations` and
+`overrideChartViolations`. The invariant: `isFeasible_safe === true` ⇒
+`overrideChartViolations === 0` (i.e., the strategy actually being drawn
+passes the buffer floor everywhere). Any divergence is a regression of this
+rule.
 
 ## Spec-Driven Development
 
