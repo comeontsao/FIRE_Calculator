@@ -49,7 +49,7 @@ async function waitForRouterInit(page: Page): Promise<void> {
       if (!w.tabRouter || typeof w.tabRouter.getState !== 'function') return false;
       const s = w.tabRouter.getState();
       if (!s || !s.tab || !s.pill) return false;
-      return /^#tab=(plan|geography|retirement|history)&pill=[a-z][a-z0-9-]*$/.test(
+      return /^#tab=(plan|geography|retirement|history|audit)&pill=[a-z][a-z0-9-]*$/.test(
         window.location.hash,
       );
     },
@@ -78,7 +78,7 @@ for (const dash of DASHBOARDS) {
         const w = window as any;
         return {
           hasFactory: typeof w.createTabRouter === 'function',
-          hasTabs: Array.isArray(w.TABS) && w.TABS.length === 4,
+          hasTabs: Array.isArray(w.TABS) && w.TABS.length === 5,
           hasRouter: !!w.tabRouter,
           state: w.tabRouter ? w.tabRouter.getState() : null,
         };

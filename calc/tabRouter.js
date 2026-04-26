@@ -110,6 +110,13 @@ const TABS = Object.freeze([
       Object.freeze({ id: 'snapshots', labelKey: 'nav.pill.snapshots' }),
     ]),
   }),
+  Object.freeze({
+    id: 'audit',
+    labelKey: 'nav.tab.audit',
+    pills: Object.freeze([
+      Object.freeze({ id: 'summary', labelKey: 'nav.pill.summary' }),
+    ]),
+  }),
 ]);
 
 /** Storage key for the persisted ActiveView. */

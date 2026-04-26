@@ -1,13 +1,13 @@
 <!-- SPECKIT START -->
-**Active feature**: `013-tabbed-navigation` — Tabbed Dashboard Navigation: 4 themed tabs (Plan · Geography · Retirement · History) with sub-tab pill bars, pure frontend reorganization, calc engine untouched.
-- Spec: [specs/013-tabbed-navigation/spec.md](./specs/013-tabbed-navigation/spec.md)
-- Plan: [specs/013-tabbed-navigation/plan.md](./specs/013-tabbed-navigation/plan.md)
-- Tasks: [specs/013-tabbed-navigation/tasks.md](./specs/013-tabbed-navigation/tasks.md)
-- Status: implemented end-to-end. 195/195 unit tests + 40/40 Playwright tests green. Browser smoke walk (T022) is the remaining Manager-driven gate before merge.
+**Active feature**: `014-calc-audit` — Calculation Audit View: a new 5th tab (Audit) that exposes every step of the lifecycle pipeline (inputs → spending adjustments → gates → FIRE age → strategy ranking → projection) with both per-section charts AND tables, plus a parallel `audit` block in Copy Debug. Pure observability layer — zero calc-engine modifications.
+- Spec: [specs/014-calc-audit/spec.md](./specs/014-calc-audit/spec.md)
+- Plan: [specs/014-calc-audit/plan.md](./specs/014-calc-audit/plan.md)
+- Tasks: [specs/014-calc-audit/tasks.md](./specs/014-calc-audit/tasks.md)
+- Status: implemented end-to-end. 211/211 unit tests + 95/95 Playwright tests green. SC-008 verified (zero diff hunks in 12 named calc functions). Browser smoke walk (T020) + manual quickstart (T030) are the remaining Manager-driven gates before merge.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/), [specs/013-tabbed-navigation/](./specs/013-tabbed-navigation/)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

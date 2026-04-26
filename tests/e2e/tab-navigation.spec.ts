@@ -64,6 +64,7 @@ const TAB_PILLS: Record<string, readonly string[]> = {
   geography:  ['scenarios', 'country-chart', 'healthcare', 'country-deep-dive'],
   retirement: ['ss', 'withdrawal', 'drawdown', 'lifecycle', 'milestones'],
   history:    ['snapshots'],
+  audit:      ['summary'],
 };
 
 // ---------------------------------------------------------------------------
@@ -94,7 +95,7 @@ async function waitForRouterInit(page: Page): Promise<void> {
       const state = w.tabRouter.getState();
       if (!state || !state.tab || !state.pill) return false;
       const hash = window.location.hash;
-      return /^#tab=(plan|geography|retirement|history)&pill=[a-z][a-z0-9-]*$/.test(hash);
+      return /^#tab=(plan|geography|retirement|history|audit)&pill=[a-z][a-z0-9-]*$/.test(hash);
     },
     null,
     { timeout: 10_000 },
@@ -454,7 +455,7 @@ for (const dash of DASHBOARDS) {
           return { flexWrap: cs.flexWrap, overflowX: cs.overflowX };
         }),
       );
-      expect(pillBarStyles.length).toBeGreaterThanOrEqual(4);
+      expect(pillBarStyles.length).toBeGreaterThanOrEqual(5);
       for (const styles of pillBarStyles) {
         expect(styles.flexWrap).toBe('nowrap');
         expect(styles.overflowX).toBe('auto');
@@ -464,11 +465,12 @@ for (const dash of DASHBOARDS) {
     test('b) no .tab or .pill wraps to a second row', async ({ page }) => {
       await loadFresh(page, dash.fileName);
 
-      // Top tabs — all 4 tab buttons share a single baseline.
+      // Top tabs — all 5 tab buttons share a single baseline.
+      // Feature 014 added the Audit tab (5th tab).
       const tabTops = await page.locator('#tabBar .tab').evaluateAll((els) =>
         els.map((el) => Math.round(el.getBoundingClientRect().top)),
       );
-      expect(tabTops.length).toBe(4);
+      expect(tabTops.length).toBe(5);
       const tabBaseline = tabTops[0];
       for (const t of tabTops) {
         expect(Math.abs(t - tabBaseline)).toBeLessThanOrEqual(ROW_TOLERANCE_PX);
@@ -584,15 +586,17 @@ test.describe('T029 lockstep DOM-diff (SC-009)', () => {
       expect(rr.hosts).toEqual(generic.hosts);
       expect(rr.panels).toEqual(generic.panels);
 
-      // Defensive: assert the canonical 4 tabs and 16 pill-hosts to catch
+      // Defensive: assert the canonical 5 tabs and 17 pill-hosts to catch
       // any drift from the spec entity table (`calc/tabRouter.js > TABS`).
-      expect(rr.tabs).toEqual(['plan', 'geography', 'retirement', 'history']);
-      expect(rr.hosts.length).toBe(16);
+      // Feature 014 added the Audit tab (5th tab, +1 pill-host).
+      expect(rr.tabs).toEqual(['plan', 'geography', 'retirement', 'history', 'audit']);
+      expect(rr.hosts.length).toBe(17);
       expect(rr.panels).toEqual([
         'tab-plan',
         'tab-geography',
         'tab-retirement',
         'tab-history',
+        'tab-audit',
       ]);
     } finally {
       await ctxRr.close();

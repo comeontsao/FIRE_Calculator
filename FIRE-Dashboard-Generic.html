@@ -13,6 +13,11 @@
 <link rel="icon" type="image/png" href="fire-dashboard-icon-v2.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="calc/tabRouter.js"></script>
+<script src="calc/calcAudit.js"></script>
+<script>
+  // Feature 014 — capture the assembler reference for later wiring.
+  window._assembleAuditSnapshot = window.assembleAuditSnapshot;
+</script>
 <script>
   // Feature 013 — `calc/tabRouter.js` (classic script, file:// safe) attaches
   // `window.createTabRouter` and `window.TABS` synchronously. Constitution
@@ -2183,6 +2188,218 @@
     .pill { padding: 0.3rem 0.65rem; font-size: 0.9em; }
   }
   /* === End Feature 013 ============================================== */
+
+  /* === Feature 014: Calc Audit ====================================== */
+  /* Top-level wrapper inside the Audit pill-host: vertical flow of cards. */
+  .audit-root {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1rem 0;
+  }
+
+  /* Each audit section is a card with a scroll-anchor target. */
+  .audit-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    scroll-margin-top: 5rem; /* offset for sticky tab bar on click-to-scroll */
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .audit-section h2 {
+    margin: 0 0 1rem 0;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    color: var(--text);
+  }
+
+  /* Flow-diagram section overrides default card padding (no chart/table). */
+  .audit-section--flow {
+    padding: 1.25rem 1.5rem;
+  }
+
+  /* Transient highlight applied for 1.5s after click-to-scroll lands. */
+  .audit-section--highlight {
+    box-shadow: 0 0 0 2px var(--accent), 0 4px 12px rgba(0, 0, 0, 0.18);
+    border-color: var(--accent);
+  }
+
+  /* Horizontal pipeline of 6 stage boxes + 5 arrows, with optional labels. */
+  .audit-flow {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .audit-flow__stage {
+    flex: 1 1 0;
+    min-width: 110px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text);
+    font: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  }
+
+  .audit-flow__stage:hover,
+  .audit-flow__stage:focus-visible {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  .audit-flow__label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin-bottom: 0.25rem;
+  }
+
+  .audit-flow__headline {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+
+  .audit-flow__arrow {
+    align-self: center;
+    color: var(--accent);
+    font-size: 1.1rem;
+    user-select: none;
+    flex: 0 0 auto;
+  }
+
+  .audit-flow__arrow-label {
+    align-self: center;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  /* Detail-section grid: chart on the left, table on the right. */
+  .audit-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  /* Each chart wrapper holds a single Chart.js canvas at audit-section size. */
+  .audit-chart {
+    width: 100%;
+    max-width: 320px;
+    height: 180px;
+    position: relative;
+  }
+
+  .audit-chart canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* Wider variant for the strategy ranking grouped bar chart. */
+  .audit-chart--wide {
+    max-width: 600px;
+    height: 220px;
+  }
+
+  /* Table wrapper — padding only at desktop, no extra borders. */
+  .audit-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  /* Lifecycle per-year table is long — clamp height and scroll vertically. */
+  .audit-table-wrap--scroll {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* Each gate group: verdict line, mini chart, optional violations table. */
+  .audit-gate {
+    border-top: 1px solid var(--border);
+    padding: 1rem 0;
+  }
+
+  .audit-gate:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .audit-gate--active {
+    background: var(--accent-soft);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 0.5rem 0;
+  }
+
+  .audit-gate__verdict {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: var(--text);
+  }
+
+  /* One row per cross-validation warning: dual-bar chart + delta text. */
+  .audit-crossval-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-left: 3px solid var(--accent);
+    background: var(--bg);
+    border-radius: 0.4rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+    font-size: 0.92rem;
+  }
+
+  /* Expected divergences are styled neutrally rather than as warnings. */
+  .audit-crossval-row--expected {
+    border-left-color: var(--border);
+    color: var(--text-dim);
+  }
+
+  /* Mobile responsive — stages stack, chart/table single column. */
+  @media (max-width: 767px) {
+    .audit-section { padding: 1rem; }
+    .audit-flow {
+      flex-direction: column;
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+    .audit-flow__stage { min-width: 0; width: 100%; }
+    .audit-flow__arrow { transform: rotate(90deg); }
+    .audit-grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .audit-chart {
+      max-width: 280px;
+      height: 160px;
+    }
+    .audit-chart--wide {
+      max-width: 100%;
+    }
+    .audit-table-wrap { overflow-x: auto; }
+  }
+  /* === End Feature 014 ============================================== */
 </style>
 </head>
 <body>
@@ -2260,6 +2477,7 @@
     <button id="tabBtn-geography"  class="tab"        data-tab="geography"  role="tab" aria-controls="tab-geography"  aria-selected="false" data-i18n="nav.tab.geography">Geography</button>
     <button id="tabBtn-retirement" class="tab"        data-tab="retirement" role="tab" aria-controls="tab-retirement" aria-selected="false" data-i18n="nav.tab.retirement">Retirement</button>
     <button id="tabBtn-history"    class="tab"        data-tab="history"    role="tab" aria-controls="tab-history"    aria-selected="false" data-i18n="nav.tab.history">History</button>
+    <button id="tabBtn-audit"      class="tab"        data-tab="audit"      role="tab" aria-controls="tab-audit"      aria-selected="false" data-i18n="nav.tab.audit">Audit</button>
   </nav>
 
   <div id="tabContainer" class="tab-container">
@@ -3296,6 +3514,138 @@
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next" disabled>Next →</button>
       </div>
     </section>
+
+    <!-- ==================== Feature 014 — Audit tab ==================== -->
+    <section id="tab-audit" class="tab-panel" data-tab="audit" hidden role="tabpanel" aria-labelledby="tabBtn-audit">
+      <div class="tab-scroll-sentinel" aria-hidden="true"></div>
+      <nav class="pill-bar" role="tablist" aria-label="Audit sections">
+        <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
+      </nav>
+      <div class="pill-host" data-tab="audit" data-pill="summary">
+        <div class="audit-root">
+
+          <!-- Section 1: Calculation Flow Diagram -->
+          <section id="audit-flow-diagram" class="audit-section audit-section--flow">
+            <h2 data-i18n="audit.section.flow.title">Calculation Flow</h2>
+            <div class="audit-flow">
+              <button class="audit-flow__stage" data-target="audit-section-inputs">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.inputs">Inputs</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-inputs"></div>
+              </button>
+              <span class="audit-flow__arrow" aria-hidden="true">▶</span>
+              <span class="audit-flow__arrow-label" id="audit-flow-arrow-inputs-spending"></span>
+
+              <button class="audit-flow__stage" data-target="audit-section-spending">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.spending">Spending Adjustments</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-spending"></div>
+              </button>
+              <span class="audit-flow__arrow" aria-hidden="true">▶</span>
+              <span class="audit-flow__arrow-label" id="audit-flow-arrow-spending-gates"></span>
+
+              <button class="audit-flow__stage" data-target="audit-section-gates">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.gates">Gate Evaluations</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-gates"></div>
+              </button>
+              <span class="audit-flow__arrow" aria-hidden="true">▶</span>
+              <span class="audit-flow__arrow-label" id="audit-flow-arrow-gates-fireAge"></span>
+
+              <button class="audit-flow__stage" data-target="audit-section-fireage">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.fireAge">FIRE Age</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-fireAge"></div>
+              </button>
+              <span class="audit-flow__arrow" aria-hidden="true">▶</span>
+              <span class="audit-flow__arrow-label" id="audit-flow-arrow-fireAge-strategy"></span>
+
+              <button class="audit-flow__stage" data-target="audit-section-strategy">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.strategy">Strategy Ranking</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-strategy"></div>
+              </button>
+              <span class="audit-flow__arrow" aria-hidden="true">▶</span>
+              <span class="audit-flow__arrow-label" id="audit-flow-arrow-strategy-lifecycle"></span>
+
+              <button class="audit-flow__stage" data-target="audit-section-lifecycle">
+                <div class="audit-flow__label" data-i18n="audit.flow.stage.lifecycle">Lifecycle</div>
+                <div class="audit-flow__headline" id="audit-flow-headline-lifecycle"></div>
+              </button>
+            </div>
+          </section>
+
+          <!-- Section 2: Resolved Inputs -->
+          <section id="audit-section-inputs" class="audit-section">
+            <h2 data-i18n="audit.section.inputs.title">Resolved Inputs</h2>
+            <div class="audit-grid">
+              <div class="audit-chart"><canvas id="audit-chart-inputs-pie"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-inputs"></div>
+            </div>
+          </section>
+
+          <!-- Section 3: Spending Adjustments -->
+          <section id="audit-section-spending" class="audit-section">
+            <h2 data-i18n="audit.section.spending.title">Spending Adjustments</h2>
+            <div class="audit-grid">
+              <div class="audit-chart"><canvas id="audit-chart-spending-curve"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-spending"></div>
+            </div>
+          </section>
+
+          <!-- Section 4: Gate Evaluations -->
+          <section id="audit-section-gates" class="audit-section">
+            <h2 data-i18n="audit.section.gates.title">Gate Evaluations</h2>
+            <div class="audit-gate" data-gate="safe">
+              <div class="audit-gate__verdict" id="audit-gate-safe-verdict"></div>
+              <div class="audit-chart"><canvas id="audit-chart-gate-safe"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-gate-safe-violations"></div>
+            </div>
+            <div class="audit-gate" data-gate="exact">
+              <div class="audit-gate__verdict" id="audit-gate-exact-verdict"></div>
+              <div class="audit-chart"><canvas id="audit-chart-gate-exact"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-gate-exact-violations"></div>
+            </div>
+            <div class="audit-gate" data-gate="dieWithZero">
+              <div class="audit-gate__verdict" id="audit-gate-dieWithZero-verdict"></div>
+              <div class="audit-chart"><canvas id="audit-chart-gate-dieWithZero"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-gate-dieWithZero-violations"></div>
+            </div>
+          </section>
+
+          <!-- Section 5: FIRE Age Resolution -->
+          <section id="audit-section-fireage" class="audit-section">
+            <h2 data-i18n="audit.section.fireage.title">FIRE Age Resolution</h2>
+            <div class="audit-grid">
+              <div class="audit-chart"><canvas id="audit-chart-fireage-scatter"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-fireage"></div>
+            </div>
+          </section>
+
+          <!-- Section 6: Strategy Ranking -->
+          <section id="audit-section-strategy" class="audit-section">
+            <h2 data-i18n="audit.section.strategy.title">Strategy Ranking</h2>
+            <div class="audit-grid">
+              <div class="audit-chart audit-chart--wide"><canvas id="audit-chart-strategy-bars"></canvas></div>
+              <div class="audit-table-wrap" id="audit-table-strategy"></div>
+            </div>
+          </section>
+
+          <!-- Section 7: Lifecycle Projection -->
+          <section id="audit-section-lifecycle" class="audit-section">
+            <h2 data-i18n="audit.section.lifecycle.title">Lifecycle Projection</h2>
+            <div class="audit-grid">
+              <div class="audit-chart"><canvas id="audit-chart-lifecycle-thumb"></canvas></div>
+              <div class="audit-table-wrap audit-table-wrap--scroll" id="audit-table-lifecycle"></div>
+            </div>
+          </section>
+
+          <!-- Section 8: Cross-Validation Warnings -->
+          <section id="audit-section-crossval" class="audit-section">
+            <h2 data-i18n="audit.section.crossval.title">Cross-Validation</h2>
+            <div id="audit-crossval-list"></div>
+          </section>
+
+        </div>
+        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next" disabled>Next →</button>
+      </div>
+    </section>
+    <!-- ==================== /Feature 014 ==================== -->
   </div>
   <!-- ==================== /Feature 013 ==================== -->
 
@@ -5436,6 +5786,51 @@ const TRANSLATIONS = {
     'nav.pill.milestones':     'Milestones',
     'nav.pill.snapshots':      'Snapshots',
     'nav.next':                'Next →',
+    // === Feature 014: Calc Audit ===
+    'nav.tab.audit':                            'Audit',
+    'audit.section.flow.title':                 'Calculation Flow',
+    'audit.section.inputs.title':               'Resolved Inputs',
+    'audit.section.spending.title':             'Spending Adjustments',
+    'audit.section.gates.title':                'Gate Evaluations',
+    'audit.section.fireage.title':              'FIRE Age Resolution',
+    'audit.section.strategy.title':             'Strategy Ranking',
+    'audit.section.lifecycle.title':            'Lifecycle Projection',
+    'audit.section.crossval.title':             'Cross-Validation',
+    'audit.flow.stage.inputs':                  'Inputs',
+    'audit.flow.stage.spending':                'Spending Adjustments',
+    'audit.flow.stage.gates':                   'Gate Evaluations',
+    'audit.flow.stage.fireAge':                 'FIRE Age Resolution',
+    'audit.flow.stage.strategy':                'Strategy Ranking',
+    'audit.flow.stage.lifecycle':               'Lifecycle Projection',
+    'audit.gate.safe.verdict.feasible':         'Safe: every retirement-year total ≥ ${0}. End balance ${1}. Verdict: feasible.',
+    'audit.gate.safe.verdict.infeasible':       'Safe: every retirement-year total ≥ ${0}. First violation at age {1} (total ${2}). Verdict: infeasible.',
+    'audit.gate.exact.verdict.feasible':        'Exact: end balance ${0} ≥ required ${1}. Verdict: feasible.',
+    'audit.gate.exact.verdict.infeasible':      'Exact: end balance ${0} < required ${1}. Verdict: infeasible.',
+    'audit.gate.dieWithZero.verdict.feasible':  'DWZ: every retirement-year total ≥ ${0} AND end balance ${1} ≥ 0. Verdict: feasible.',
+    'audit.gate.dieWithZero.verdict.infeasible':'DWZ: {0}. Verdict: infeasible.',
+    'audit.gate.activeMarker':                  '(active)',
+    'audit.col.age':                            'Age',
+    'audit.col.phase':                          'Phase',
+    'audit.col.total':                          'Total',
+    'audit.col.endBalance':                     'End Balance',
+    'audit.col.lifetimeTax':                    'Lifetime Tax',
+    'audit.col.violations':                     'Floor Violations',
+    'audit.col.firstViolationAge':              'First Violation Age',
+    'audit.col.shortfall':                      'Shortfall Years',
+    'audit.col.firstShortfallAge':              'First Shortfall Age',
+    'audit.col.feasible':                       'Feasible',
+    'audit.crossval.allPassed':                 'All cross-checks passed.',
+    'audit.crossval.kind.endBalance':           'End balance mismatch',
+    'audit.crossval.kind.feasibility':          'Feasibility verdict mismatch',
+    'audit.crossval.kind.fireAge':              'FIRE age mismatch',
+    'audit.crossval.kind.violationCount':       'Floor violation count mismatch',
+    'audit.crossval.expectedAnnotation':        '(expected — different sim contracts)',
+    'audit.crossval.delta':                     'Δ ${0} ({1}%)',
+    'audit.crossval.kindLabel.signed':          'signed-sim',
+    'audit.crossval.kindLabel.chart':           'chart-sim',
+    'audit.empty.noRecalc':                     'No calculation results yet — change any input or click Reset.',
+    'audit.empty.strategyPending':              'Strategy ranking pending — please wait for the next recalc.',
+    'audit.label.winnerBadge':                  'winner',
   },
   zh: {
     'header.title': 'FIRE 指揮中心 — 通用模板',
@@ -6298,6 +6693,51 @@ const TRANSLATIONS = {
     'nav.pill.milestones':     '里程碑',
     'nav.pill.snapshots':      '歷史紀錄',
     'nav.next':                '下一步 →',
+    // === Feature 014: Calc Audit ===
+    'nav.tab.audit':                            '計算審查',
+    'audit.section.flow.title':                 '計算流程',
+    'audit.section.inputs.title':               '解析後輸入',
+    'audit.section.spending.title':             '支出調整',
+    'audit.section.gates.title':                '門檻判定',
+    'audit.section.fireage.title':              'FIRE 年齡解析',
+    'audit.section.strategy.title':             '策略排名',
+    'audit.section.lifecycle.title':            '生命週期預測',
+    'audit.section.crossval.title':             '交叉驗證',
+    'audit.flow.stage.inputs':                  '輸入',
+    'audit.flow.stage.spending':                '支出調整',
+    'audit.flow.stage.gates':                   '門檻判定',
+    'audit.flow.stage.fireAge':                 'FIRE 年齡',
+    'audit.flow.stage.strategy':                '策略排名',
+    'audit.flow.stage.lifecycle':               '生命週期',
+    'audit.gate.safe.verdict.feasible':         '安全：每年退休後總額 ≥ ${0}。期末餘額 ${1}。判定：可行。',
+    'audit.gate.safe.verdict.infeasible':       '安全：每年退休後總額 ≥ ${0}。首次違反於 {1} 歲（總額 ${2}）。判定：不可行。',
+    'audit.gate.exact.verdict.feasible':        '精確：期末餘額 ${0} ≥ 所需 ${1}。判定：可行。',
+    'audit.gate.exact.verdict.infeasible':      '精確：期末餘額 ${0} < 所需 ${1}。判定：不可行。',
+    'audit.gate.dieWithZero.verdict.feasible':  '歸零：每年退休後總額 ≥ ${0} 且期末餘額 ${1} ≥ 0。判定：可行。',
+    'audit.gate.dieWithZero.verdict.infeasible':'歸零：${0}。判定：不可行。',
+    'audit.gate.activeMarker':                  '（目前模式）',
+    'audit.col.age':                            '年齡',
+    'audit.col.phase':                          '階段',
+    'audit.col.total':                          '總額',
+    'audit.col.endBalance':                     '期末餘額',
+    'audit.col.lifetimeTax':                    '一生稅務',
+    'audit.col.violations':                     '違反次數',
+    'audit.col.firstViolationAge':              '首次違反年齡',
+    'audit.col.shortfall':                      '短缺年數',
+    'audit.col.firstShortfallAge':              '首次短缺年齡',
+    'audit.col.feasible':                       '可行',
+    'audit.crossval.allPassed':                 '所有交叉檢查通過。',
+    'audit.crossval.kind.endBalance':           '期末餘額不一致',
+    'audit.crossval.kind.feasibility':          '可行性判定不一致',
+    'audit.crossval.kind.fireAge':              'FIRE 年齡不一致',
+    'audit.crossval.kind.violationCount':       '違反次數不一致',
+    'audit.crossval.expectedAnnotation':        '（預期 — 模擬合約不同）',
+    'audit.crossval.delta':                     'Δ ${0}（{1}%）',
+    'audit.crossval.kindLabel.signed':          '帶符號模擬',
+    'audit.crossval.kindLabel.chart':           '圖表模擬',
+    'audit.empty.noRecalc':                     '尚未進行計算 — 請變更輸入或點選重設。',
+    'audit.empty.strategyPending':              '策略排名計算中 — 請等待下次重新計算。',
+    'audit.label.winnerBadge':                  '勝出',
   }
 };
 
@@ -10452,6 +10892,45 @@ function recalcAll() {
   if (_lastUpdateEl) {
     _lastUpdateEl.textContent = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
+
+  // Feature 014 (T016) — assemble the audit snapshot AFTER strategy ranking
+  // so all downstream sections see the latest state. Errors are caught and
+  // logged with the [audit] prefix so they NEVER block the dashboard's
+  // existing render path.
+  try {
+    if (typeof window._assembleAuditSnapshot === 'function') {
+      const _auditFireAgeCandidates = []; // Optional — leave empty; calcAudit
+                                          // tolerates an empty candidate list
+                                          // and falls back to a coarse sweep.
+      window._lastAuditSnapshot = window._assembleAuditSnapshot({
+        inputs: inp,
+        fireAge: fireAge,
+        fireMode: fireMode,
+        annualSpend: effectiveSpend,
+        rawAnnualSpend: (inp && typeof inp.annualSpend === 'number') ? inp.annualSpend : effectiveSpend,
+        effectiveSpendByYear: [], // Optional — calcAudit derives a curve from
+                                  // mortgage/college/home2 data when missing.
+        lastStrategyResults: _lastStrategyResults,
+        fireAgeCandidates: _auditFireAgeCandidates,
+        projectFullLifecycle: projectFullLifecycle,
+        signedLifecycleEndBalance: signedLifecycleEndBalance,
+        isFireAgeFeasible: isFireAgeFeasible,
+        getActiveChartStrategyOptions: getActiveChartStrategyOptions,
+        t: t,
+        doc: document,
+      });
+      // If the Audit tab is currently active, re-render with the new snapshot.
+      if (window.tabRouter && typeof window.tabRouter.getState === 'function'
+          && window.tabRouter.getState().tab === 'audit'
+          && typeof window._renderAuditUI === 'function') {
+        window._renderAuditUI(window._lastAuditSnapshot);
+      }
+    }
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[audit] assembleAuditSnapshot threw:', _e);
+    }
+  }
 }
 
 // ==================== HEALTHCARE CARD ====================
@@ -13344,6 +13823,416 @@ window._rebindStickyHeaderObserver = function _rebindStickyHeaderObserver(tabId)
 // harmless.
 window._rebindStickyHeaderObserver();
 
+// =============================================================================
+// Feature 014 (T015 + T018) — Audit-tab UI controller.
+//
+// Pure renderer: reads `window._lastAuditSnapshot` (assembled by calc/calcAudit)
+// and writes flow-diagram headlines + per-section tables + Chart.js instances.
+// No calc-engine code lives here. Idempotent — safe to call repeatedly on
+// recalc; charts are built once and updated thereafter.
+// =============================================================================
+(function _wireAuditController() {
+  /** Chart.js instances keyed by canvas ID. */
+  const _auditCharts = {};
+  let _auditChartsBuilt = false;
+
+  function _$id(id) { return document.getElementById(id); }
+
+  function _esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function _fmtMoney(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return '—';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (Math.abs(n) >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  function _fmtNum(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return '—';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    return String(Math.round(n));
+  }
+
+  function _safeT(key, fallback) {
+    if (typeof t === 'function') {
+      try { return t(key); } catch (_e) { /* fall through */ }
+    }
+    return fallback;
+  }
+
+  function _xyToPair(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter(function (p) { return p && Number.isFinite(p.x) && Number.isFinite(p.y); })
+      .map(function (p) { return { x: Number(p.x), y: Number(p.y) }; });
+  }
+
+  // ---------- Chart construction ----------
+
+  function _makeChart(canvasId, config) {
+    const cv = _$id(canvasId);
+    if (!cv || typeof Chart === 'undefined') return null;
+    try {
+      return new Chart(cv, config);
+    } catch (err) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[audit] chart construction failed for ' + canvasId + ':', err);
+      }
+      return null;
+    }
+  }
+
+  function _inputsPieConfig(snapshot) {
+    const c = (snapshot.resolvedInputs && snapshot.resolvedInputs.composition) || {};
+    return {
+      type: 'doughnut',
+      data: {
+        labels: ['Accessible Stocks', 'Cash', '401k Trad', '401k Roth'],
+        datasets: [{
+          data: [
+            Number(c.accessibleStocks) || 0,
+            Number(c.cash) || 0,
+            Number(c.locked401kTrad) || 0,
+            Number(c.locked401kRoth) || 0,
+          ],
+          backgroundColor: ['#4f9cf9', '#22c55e', '#f59e0b', '#a855f7'],
+        }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } },
+    };
+  }
+
+  function _spendingCurveConfig(snapshot) {
+    const series = _xyToPair(snapshot.spendingAdjustments && snapshot.spendingAdjustments.effectiveSpendByYear);
+    return {
+      type: 'line',
+      data: { datasets: [{ label: 'Effective Spend', data: series, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.15)', fill: true, tension: 0.2, pointRadius: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear', title: { display: false } }, y: { ticks: { callback: function (v) { return _fmtMoney(v); } } } }, plugins: { legend: { display: false } } },
+    };
+  }
+
+  function _gateChartConfig(gate) {
+    const traj = _xyToPair(gate && gate.trajectorySeries);
+    const floor = _xyToPair(gate && gate.floorSeries);
+    return {
+      type: 'line',
+      data: {
+        datasets: [
+          { label: 'Trajectory', data: traj, borderColor: '#4f9cf9', fill: false, tension: 0.2, pointRadius: 0 },
+          { label: 'Floor', data: floor, borderColor: '#ef4444', borderDash: [4, 4], fill: false, pointRadius: 0 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear' }, y: { ticks: { callback: function (v) { return _fmtMoney(v); } } } }, plugins: { legend: { display: false } } },
+    };
+  }
+
+  function _fireAgeScatterConfig(snapshot) {
+    const cands = (snapshot.fireAgeResolution && Array.isArray(snapshot.fireAgeResolution.candidates))
+      ? snapshot.fireAgeResolution.candidates : [];
+    const okPts = []; const failPts = [];
+    for (const c of cands) {
+      if (!c || !Number.isFinite(c.age) || !Number.isFinite(c.signedEndBalance)) continue;
+      const pt = { x: Number(c.age), y: Number(c.signedEndBalance) };
+      if (c.feasibleUnderActiveMode) okPts.push(pt); else failPts.push(pt);
+    }
+    return {
+      type: 'scatter',
+      data: { datasets: [
+        { label: 'Feasible', data: okPts, backgroundColor: '#22c55e' },
+        { label: 'Infeasible', data: failPts, backgroundColor: '#ef4444' },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear', title: { display: true, text: 'Age' } }, y: { ticks: { callback: function (v) { return _fmtMoney(v); } } } }, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } },
+    };
+  }
+
+  function _strategyBarsConfig(snapshot) {
+    const series = (snapshot.strategyRanking && snapshot.strategyRanking.barChartSeries) || { labels: [], datasets: [] };
+    const colors = ['#4f9cf9', '#f59e0b', '#a855f7'];
+    const datasets = (series.datasets || []).map(function (ds, i) {
+      return { label: ds.label, data: Array.isArray(ds.data) ? ds.data.slice() : [], backgroundColor: colors[i % colors.length] };
+    });
+    return {
+      type: 'bar',
+      data: { labels: (series.labels || []).slice(), datasets: datasets },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } },
+    };
+  }
+
+  function _lifecycleThumbConfig(snapshot) {
+    const series = _xyToPair(snapshot.lifecycleProjection && snapshot.lifecycleProjection.thumbnailSeries);
+    return {
+      type: 'line',
+      data: { datasets: [{ label: 'Total', data: series, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', fill: true, tension: 0.2, pointRadius: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear' }, y: { ticks: { callback: function (v) { return _fmtMoney(v); } } } }, plugins: { legend: { display: false } } },
+    };
+  }
+
+  function buildAuditCharts(snapshot) {
+    if (typeof Chart === 'undefined') {
+      _auditChartsBuilt = true; // avoid retry-loop if Chart never loaded
+      return;
+    }
+    _auditCharts.inputsPie       = _makeChart('audit-chart-inputs-pie',       _inputsPieConfig(snapshot));
+    _auditCharts.spendingCurve   = _makeChart('audit-chart-spending-curve',   _spendingCurveConfig(snapshot));
+    const gates = Array.isArray(snapshot.gates) ? snapshot.gates : [];
+    for (const g of gates) {
+      _auditCharts['gate_' + g.mode] = _makeChart('audit-chart-gate-' + g.mode, _gateChartConfig(g));
+    }
+    _auditCharts.fireAgeScatter  = _makeChart('audit-chart-fireage-scatter', _fireAgeScatterConfig(snapshot));
+    _auditCharts.strategyBars    = _makeChart('audit-chart-strategy-bars',   _strategyBarsConfig(snapshot));
+    _auditCharts.lifecycleThumb  = _makeChart('audit-chart-lifecycle-thumb', _lifecycleThumbConfig(snapshot));
+    _auditChartsBuilt = true;
+  }
+
+  function _replaceChartData(chart, newCfg) {
+    if (!chart || !newCfg || !newCfg.data) return;
+    chart.data = newCfg.data;
+    try { chart.update('none'); } catch (_e) { /* ignore — chart may be torn down */ }
+  }
+
+  function updateAuditCharts(snapshot) {
+    _replaceChartData(_auditCharts.inputsPie,      _inputsPieConfig(snapshot));
+    _replaceChartData(_auditCharts.spendingCurve,  _spendingCurveConfig(snapshot));
+    const gates = Array.isArray(snapshot.gates) ? snapshot.gates : [];
+    for (const g of gates) {
+      _replaceChartData(_auditCharts['gate_' + g.mode], _gateChartConfig(g));
+    }
+    _replaceChartData(_auditCharts.fireAgeScatter, _fireAgeScatterConfig(snapshot));
+    _replaceChartData(_auditCharts.strategyBars,   _strategyBarsConfig(snapshot));
+    _replaceChartData(_auditCharts.lifecycleThumb, _lifecycleThumbConfig(snapshot));
+  }
+
+  // ---------- Flow diagram ----------
+
+  function renderFlowDiagram(flow) {
+    if (!flow || !Array.isArray(flow.stages)) return;
+    for (let i = 0; i < flow.stages.length; i += 1) {
+      const stg = flow.stages[i];
+      if (!stg) continue;
+      const headlineEl = _$id('audit-flow-headline-' + stg.stageId);
+      if (headlineEl) headlineEl.textContent = stg.headlineOutput || '';
+    }
+    // Arrow labels — pair each stage's downstreamArrowLabel with the
+    // corresponding `audit-flow-arrow-{from}-{to}` span. Stage IDs in the
+    // contract: inputs, spending, gates, fireAge, strategy, lifecycle.
+    const pairs = [
+      ['inputs', 'spending'],
+      ['spending', 'gates'],
+      ['gates', 'fireAge'],
+      ['fireAge', 'strategy'],
+      ['strategy', 'lifecycle'],
+    ];
+    const stageById = {};
+    for (const s of flow.stages) { if (s && s.stageId) stageById[s.stageId] = s; }
+    for (const pr of pairs) {
+      const from = stageById[pr[0]];
+      const arrowEl = _$id('audit-flow-arrow-' + pr[0] + '-' + pr[1]);
+      if (arrowEl && from) arrowEl.textContent = from.downstreamArrowLabel || '';
+    }
+  }
+
+  // ---------- Tables ----------
+
+  function _renderInputsTable(snapshot) {
+    const wrap = _$id('audit-table-inputs');
+    if (!wrap) return;
+    const ri = snapshot.resolvedInputs || {};
+    const raw = ri.raw || {};
+    const derivedMap = {};
+    if (Array.isArray(ri.derivedFrom)) {
+      for (const d of ri.derivedFrom) { if (d && d.key) derivedMap[d.key] = d.source; }
+    }
+    const keys = Object.keys(raw).sort();
+    const rows = keys.map(function (k) {
+      const v = raw[k];
+      const src = derivedMap[k] || '';
+      const display = (typeof v === 'number') ? _fmtNum(v) : _esc(String(v));
+      return '<tr><td>' + _esc(k) + '</td><td>' + display + '</td><td>' + _esc(src) + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Key</th><th>Value</th><th>Source</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function _renderSpendingTable(snapshot) {
+    const wrap = _$id('audit-table-spending');
+    if (!wrap) return;
+    const sa = snapshot.spendingAdjustments || {};
+    const colleges = Array.isArray(sa.collegeYears) ? sa.collegeYears : [];
+    const collegeRows = colleges.map(function (c) {
+      return '<tr><td>' + _esc(c.kid || '') + '</td><td>' + _fmtNum(c.ageStart) + '–' + _fmtNum(c.ageEnd) + '</td><td>' + _fmtMoney(c.annualCost) + '</td></tr>';
+    }).join('');
+    const home2 = sa.home2 || {};
+    const home2Row = (home2.buyAge || home2.annualCarry)
+      ? '<tr><td>Home 2 carry</td><td>buy ' + _fmtNum(home2.buyAge) + (home2.sellAge ? ', sell ' + _fmtNum(home2.sellAge) : '') + '</td><td>' + _fmtMoney(home2.annualCarry) + '/yr</td></tr>'
+      : '';
+    const summary =
+      '<tr><td>Raw annual spend</td><td>—</td><td>' + _fmtMoney(sa.rawAnnualSpend) + '</td></tr>' +
+      '<tr><td>Mortgage-adjusted</td><td>delta ' + _fmtMoney(sa.mortgageDelta) + '</td><td>' + _fmtMoney(sa.mortgageAdjustedAnnualSpend) + '</td></tr>';
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Item</th><th>Window</th><th>Amount</th></tr></thead><tbody>'
+      + summary + home2Row + collegeRows + '</tbody></table>';
+  }
+
+  function _renderGateTable(gate) {
+    const wrap = _$id('audit-table-gate-' + gate.mode + '-violations');
+    if (!wrap) return;
+    const vs = Array.isArray(gate.violations) ? gate.violations : [];
+    if (vs.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">No floor violations.</p>';
+      return;
+    }
+    const rows = vs.map(function (v) {
+      return '<tr><td>' + _fmtNum(v.age) + '</td><td>' + _fmtMoney(v.total) + '</td><td>' + _fmtMoney(v.floor) + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Floor</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function _renderFireAgeTable(snapshot) {
+    const wrap = _$id('audit-table-fireage');
+    if (!wrap) return;
+    const fr = snapshot.fireAgeResolution || {};
+    const cands = Array.isArray(fr.candidates) ? fr.candidates : [];
+    if (cands.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">FIRE age = ' + _fmtNum(fr.displayedFireAge) + ' (search method: ' + _esc(fr.searchMethod || '') + ')</p>';
+      return;
+    }
+    const rows = cands.map(function (c) {
+      const cls = (c.age === fr.displayedFireAge) ? ' class="audit-row--highlight"' : '';
+      return '<tr' + cls + '><td>' + _fmtNum(c.age) + '</td><td>' + _fmtMoney(c.signedEndBalance) + '</td><td>' + (c.feasibleUnderActiveMode ? '✓' : '✗') + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function _renderStrategyTable(snapshot) {
+    const wrap = _$id('audit-table-strategy');
+    if (!wrap) return;
+    const sr = snapshot.strategyRanking || {};
+    const rs = Array.isArray(sr.rows) ? sr.rows : [];
+    if (rs.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">' + _safeT('audit.empty.strategyPending', 'Strategy ranking pending — please wait for the next recalc.') + '</p>';
+      return;
+    }
+    const winnerLabel = _safeT('audit.label.winnerBadge', 'winner');
+    const rows = rs.map(function (r) {
+      const cls = r.isWinner ? ' class="audit-row--winner"' : '';
+      const winnerBadge = r.isWinner ? ' <span class="audit-winner-badge">' + _esc(winnerLabel) + '</span>' : '';
+      return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(r.endBalance) + '</td><td>' + _fmtMoney(r.lifetimeFederalTax) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function _renderLifecycleTable(snapshot) {
+    const wrap = _$id('audit-table-lifecycle');
+    if (!wrap) return;
+    const lp = snapshot.lifecycleProjection || {};
+    const rs = Array.isArray(lp.rows) ? lp.rows : [];
+    if (rs.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">No lifecycle rows.</p>';
+      return;
+    }
+    const fireIdx = (typeof lp.fireAgeRowIndex === 'number') ? lp.fireAgeRowIndex : -1;
+    const rows = rs.map(function (r, i) {
+      const cls = (i === fireIdx) ? ' class="audit-row--fireage"' : '';
+      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(r.total) + '</td><td>' + _fmtMoney(r.withdrawals) + '</td><td>' + _fmtMoney(r.ssIncome) + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function _renderCrossValRows(snapshot) {
+    const list = _$id('audit-crossval-list');
+    if (!list) return;
+    const ws = Array.isArray(snapshot.crossValidationWarnings) ? snapshot.crossValidationWarnings : [];
+    if (ws.length === 0) {
+      list.innerHTML = '<p class="audit-empty">' + _safeT('audit.crossval.allPassed', 'All cross-checks passed.') + '</p>';
+      return;
+    }
+    const rows = ws.map(function (w) {
+      const cls = w.expected ? ' audit-crossval-row--expected' : '';
+      const expectedNote = w.expected ? ' ' + _safeT('audit.crossval.expectedAnnotation', '(expected — different sim contracts)') : '';
+      return '<div class="audit-crossval-row' + cls + '">'
+        + '<div class="audit-crossval-row__kind">' + _esc(w.kind || '') + expectedNote + '</div>'
+        + '<div class="audit-crossval-row__values">A=' + _fmtMoney(w.valueA) + ' · B=' + _fmtMoney(w.valueB) + ' · Δ=' + _fmtMoney(w.delta) + '</div>'
+        + '<div class="audit-crossval-row__reason">' + _esc(w.reason || '') + '</div>'
+        + '</div>';
+    }).join('');
+    list.innerHTML = rows;
+  }
+
+  function renderAuditTables(snapshot) {
+    _renderInputsTable(snapshot);
+    _renderSpendingTable(snapshot);
+    const gates = Array.isArray(snapshot.gates) ? snapshot.gates : [];
+    for (const g of gates) _renderGateTable(g);
+    _renderFireAgeTable(snapshot);
+    _renderStrategyTable(snapshot);
+    _renderLifecycleTable(snapshot);
+    _renderCrossValRows(snapshot);
+  }
+
+  function renderAuditGateVerdict(gate, gateContainerEl) {
+    if (!gate) return;
+    const verdictEl = _$id('audit-gate-' + gate.mode + '-verdict');
+    if (verdictEl) {
+      const text = gate.formulaPlainEnglish || (gate.verdict ? '✓ feasible' : '✗ infeasible');
+      verdictEl.textContent = text;
+    }
+  }
+
+  function renderAuditUI(snapshot) {
+    if (!snapshot) return;
+    try {
+      renderFlowDiagram(snapshot.flowDiagram);
+      renderAuditTables(snapshot);
+      const gates = Array.isArray(snapshot.gates) ? snapshot.gates : [];
+      for (const gate of gates) {
+        const el = document.querySelector('.audit-gate[data-gate="' + gate.mode + '"]');
+        if (el) {
+          if (gate.isActiveMode) el.classList.add('audit-gate--active');
+          else el.classList.remove('audit-gate--active');
+        }
+        renderAuditGateVerdict(gate, el);
+      }
+      if (!_auditChartsBuilt) {
+        buildAuditCharts(snapshot);
+      } else {
+        updateAuditCharts(snapshot);
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[audit] renderAuditUI threw:', err);
+      }
+    }
+  }
+
+  // T018 — click-to-scroll wiring on the flow diagram. Single delegated
+  // listener; binds at parse time because the markup is static.
+  (function _wireAuditFlowClicks() {
+    const audit = document.querySelector('#audit-flow-diagram .audit-flow');
+    if (!audit) return;
+    audit.addEventListener('click', function (ev) {
+      const stage = ev.target && ev.target.closest && ev.target.closest('.audit-flow__stage[data-target]');
+      if (!stage) return;
+      const targetId = stage.dataset.target;
+      const targetEl = document.getElementById(targetId);
+      if (!targetEl) return;
+      try { targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { /* older browsers */ }
+      targetEl.classList.add('audit-section--highlight');
+      setTimeout(function () { targetEl.classList.remove('audit-section--highlight'); }, 1500);
+    });
+  })();
+
+  // Expose the renderer so recalcAll + tabRouter onAfterActivate can call it,
+  // and so the Playwright tests can drive planted-divergence scenarios.
+  window._renderAuditUI = renderAuditUI;
+  window._auditChartsRegistry = _auditCharts;
+})();
+
 // Feature 013 (T017) — initialize tab navigation after every chart has been
 // instantiated by the recalc that ran during restoreState() above. We wait for
 // DOMContentLoaded because the deferred <script type="module"> that creates
@@ -13361,6 +14250,7 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
       geography:  document.querySelector('#tab-geography  > .pill-bar'),
       retirement: document.querySelector('#tab-retirement > .pill-bar'),
       history:    document.querySelector('#tab-history    > .pill-bar'),
+      audit:      document.querySelector('#tab-audit      > .pill-bar'),
     },
     getTabButton:  function (tabId) { return document.querySelector('#tabBar [data-tab="' + tabId + '"]'); },
     getPillButton: function (tabId, pillId) { return document.querySelector('.pill[data-tab="' + tabId + '"][data-pill="' + pillId + '"]'); },
@@ -13371,6 +14261,11 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
     onAfterActivate: function (state) {
       if (typeof window._rebindStickyHeaderObserver === 'function') {
         window._rebindStickyHeaderObserver(state.tab);
+      }
+      // Feature 014 (T017) — render the Audit when the Audit tab activates.
+      if (state.tab === 'audit' && window._lastAuditSnapshot
+          && typeof window._renderAuditUI === 'function') {
+        window._renderAuditUI(window._lastAuditSnapshot);
       }
     },
   });
@@ -14296,6 +15191,7 @@ function copyDebugInfo() {
       bufferSS_yrs: bufSS,
       summary,
       feasibilityProbe,
+      audit: window._lastAuditSnapshot ?? null,
       lifecycleSamples: samples,
       inputs,
     };
