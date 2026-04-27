@@ -38,6 +38,8 @@
  *     fireAgeResolution: { displayedFireAge, searchMethod, candidates, ... },
  *     strategyRanking: { winnerId, rows, barChartSeries },
  *     lifecycleProjection: { rows, thumbnailSeries, fireAgeRowIndex },
+ *       — rows[*].hasShortfall: boolean (Feature 015 US1, FR-004) flags years
+ *         where the active strategy could not fund spending from any pool.
  *     crossValidationWarnings: CrossValidationWarning[],
  *   }
  *
@@ -476,8 +478,14 @@ function _buildLifecycleProjection(chart, fireAge) {
     pCash: _round(r.pCash),
     pRoth: _round(r.pRoth),
     ssIncome: _round(r.ssIncome),
-    withdrawals: _round(r.withdrawals),
+    // Feature 015 follow-up — the simulator emits `withdrawal` (singular);
+    // earlier audit code read `withdrawals` (plural) and so always serialized 0.
+    // Read both names with the singular taking precedence.
+    withdrawals: _round(typeof r.withdrawal === 'number' ? r.withdrawal : r.withdrawals),
     syntheticConversion: _round(r.syntheticConversion),
+    // Feature 015 US1 (FR-004) — per-row shortfall flag. Defensive fallback to
+    // false so legacy snapshots that pre-date the field still serialize cleanly.
+    hasShortfall: r.hasShortfall === true,
   }));
   const thumbnailSeries = rows.map((r) => ({ x: r.age, y: r.total }));
   const fireAgeRowIndex = rows.findIndex((r) => r.age === fireAge);
@@ -506,14 +514,98 @@ function _buildFlowDiagram(options, ctx) {
     ? `end balance $${_round(ctx.lastTotal)} at age ${inputs.endAge || '?'}`
     : 'pending';
 
+  // Feature 015 follow-up — `subSteps` enumerates the ORDERED sub-operations
+  // the calc engine performs within each stage. The audit UI renders them
+  // as a numbered list below each stage's headline so the user can see the
+  // actual flow of computation, not just an opaque "stage" label.
   return {
     stages: [
-      { stageId: 'inputs',    label: 'Inputs',                headlineOutput: inputsHeadline,    downstreamArrowLabel: 'inputs' },
-      { stageId: 'spending',  label: 'Spending Adjustments',  headlineOutput: spendingHeadline,  downstreamArrowLabel: 'effectiveSpend' },
-      { stageId: 'gates',     label: 'Gate Evaluations',      headlineOutput: gatesHeadline,     downstreamArrowLabel: 'verdict + active strategy' },
-      { stageId: 'fireAge',   label: 'FIRE Age Resolution',   headlineOutput: fireAgeHeadline,   downstreamArrowLabel: `fireAge = ${fireAge}` },
-      { stageId: 'strategy',  label: 'Strategy Ranking',      headlineOutput: strategyHeadline,  downstreamArrowLabel: 'strategy + θ' },
-      { stageId: 'lifecycle', label: 'Lifecycle Projection',  headlineOutput: lifecycleHeadline, downstreamArrowLabel: '(end of pipeline)' },
+      {
+        stageId: 'inputs',
+        label: 'Inputs',
+        headlineOutput: inputsHeadline,
+        downstreamArrowLabel: 'inputs',
+        subSteps: [
+          'Read 50+ DOM inputs via getInputs()',
+          'Resolve scenario selection (geo-arbitrage country)',
+          'Resolve fire mode (Safe / Exact / DWZ)',
+          'Resolve objective (Preserve / Minimize Tax)',
+          'Apply FIRE-age override (if drag-confirmed)',
+        ],
+      },
+      {
+        stageId: 'spending',
+        label: 'Spending Adjustments',
+        headlineOutput: spendingHeadline,
+        downstreamArrowLabel: 'effectiveSpend',
+        subSteps: [
+          'Start with base annualSpend',
+          'Apply mortgage P&I + tax + insurance + HOA delta',
+          'Add college tuition + loan-repayment overlay (per-year)',
+          'Add healthcare delta (pre-65 vs post-65)',
+          'Add Home #2 annual carry (P&I + tax + other − rental)',
+          'Subtract Social Security income (when ssActive)',
+        ],
+      },
+      {
+        stageId: 'gates',
+        label: 'Gate Evaluations',
+        headlineOutput: gatesHeadline,
+        downstreamArrowLabel: 'verdict + active strategy',
+        subSteps: [
+          'Safe: every retirement-year total ≥ buffer × spend AND endBalance ≥ 0',
+          'Exact: endBalance ≥ terminalBuffer × annualSpend',
+          'DWZ: endBalance ≈ $0 at plan age',
+          'All three use signedLifecycleEndBalance (bracket-fill default)',
+        ],
+      },
+      {
+        stageId: 'fireAge',
+        label: 'FIRE Age Resolution',
+        headlineOutput: fireAgeHeadline,
+        downstreamArrowLabel: `fireAge = ${fireAge}`,
+        subSteps: [
+          'Linear scan from currentAge to endAge − 1',
+          'For each candidate: signedLifecycleEndBalance simulation',
+          'Apply isFireAgeFeasible(active mode) filter',
+          'Return earliest passing age (Architecture B: single global age)',
+          'Per-strategy ages computed via findPerStrategyFireAge (audit display only)',
+        ],
+      },
+      {
+        stageId: 'strategy',
+        label: 'Strategy Ranking',
+        headlineOutput: strategyHeadline,
+        downstreamArrowLabel: 'strategy + θ',
+        subSteps: [
+          'Simulate all 7 strategies via _simulateStrategyLifetime',
+          'tax-optimized-search: 3-pass θ-sweep (simulate 11 θ → filter feasibility → rank by tax)',
+          'Spending-floor pass when Trad available but other pools depleted',
+          'Compute residualArea + cumulativeFederalTax per strategy',
+          'Resolve sort key via getActiveSortKey({mode, objective})',
+          'Sort: primary → tie-breakers → strategyId alphabetical',
+          'Pick winner (rankIndex 0); apply objective’s sort-key chain',
+        ],
+      },
+      {
+        stageId: 'lifecycle',
+        label: 'Lifecycle Projection',
+        headlineOutput: lifecycleHeadline,
+        downstreamArrowLabel: '(end of pipeline)',
+        subSteps: [
+          'Call projectFullLifecycle(inp, spend, fireAge, true, options)',
+          'Thread winner strategy + chosenTheta through options',
+          'Per-year retirement loop calls taxOptimizedWithdrawal:',
+          '  Step 1 — RMD floor (age 73+)',
+          '  Step 2 — Bracket-fill smoothing (pTrad / yearsRemaining cap)',
+          '  Step 3-6 — Compute mix (Trad → Roth → Stocks → Cash)',
+          '  Step 7 — IRMAA cap (age 63+, may reduce Trad)',
+          '  Step 7.5 — Spending-floor pass (Feature 015 — fund spending if Trad available)',
+          '  Step 8 — Synthetic conversion (excess net into stocks)',
+          'Mark hasShortfall on per-year rows when residual unfunded > 0',
+          'Return per-year rows for chart + audit consumption',
+        ],
+      },
     ],
   };
 }

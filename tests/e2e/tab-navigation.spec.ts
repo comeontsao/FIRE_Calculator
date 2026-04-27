@@ -59,9 +59,12 @@ const ROW_TOLERANCE_PX = 2;
  * Pill-traversal order per `calc/tabRouter.js` `TABS`. Must mirror the
  * frozen entity table — drift here would falsely pass T026.
  */
+// Feature 015 follow-up (2026-04-27) — `country-deep-dive` removed from
+// geography; #scenarioInsight now renders inline under the country grid in
+// the Scenarios pill-host instead of jumping to a separate pill.
 const TAB_PILLS: Record<string, readonly string[]> = {
   plan:       ['profile', 'assets', 'investment', 'mortgage', 'expenses', 'summary'],
-  geography:  ['scenarios', 'country-chart', 'healthcare', 'country-deep-dive'],
+  geography:  ['scenarios', 'country-chart', 'healthcare'],
   retirement: ['ss', 'withdrawal', 'drawdown', 'lifecycle', 'milestones'],
   history:    ['snapshots'],
   audit:      ['summary'],
@@ -383,7 +386,7 @@ for (const dash of DASHBOARDS) {
       await expectActive(page, 'plan', 'summary');
     });
 
-    test('c) Geography walkthrough ends with Country Deep-Dive disabled', async ({ page }) => {
+    test('c) Geography walkthrough ends with Healthcare disabled', async ({ page }) => {
       await loadWithHash(page, dash.fileName, '#tab=geography&pill=scenarios');
       await expectActive(page, 'geography', 'scenarios');
 
@@ -392,8 +395,9 @@ for (const dash of DASHBOARDS) {
         await clickNextInActivePill(page, 'geography', order[i]);
         await expectActive(page, 'geography', order[i + 1]);
       }
-      // Final pill is country-deep-dive; its Next must be disabled.
-      await expectNextDisabled(page, 'geography', 'country-deep-dive');
+      // Feature 015 follow-up — country-deep-dive pill removed; Healthcare is
+      // now the final pill and its Next button must be disabled.
+      await expectNextDisabled(page, 'geography', 'healthcare');
     });
 
     test('d) Retirement walkthrough ends with Milestones disabled', async ({ page }) => {
@@ -691,44 +695,44 @@ for (const dash of DASHBOARDS) {
 }
 
 /**
- * FR-029 — "Clicking a country card in Geography → Scenarios MUST switch
- * the active pill to Geography → Country Deep-Dive."
- *
- * Verifies the cross-pill click rewire from Wave 2B (T020). The country
- * cards live inside Geography → Scenarios; clicking one populates the
- * deep-dive panel AND must auto-switch the active pill via
- * `tabRouter.activate('geography', 'country-deep-dive', 'click')`.
+ * FR-029 (revised, Feature 015 follow-up 2026-04-27) — Clicking a country
+ * card in Geography → Scenarios MUST populate the inline #scenarioInsight
+ * panel beneath the country grid (within the Scenarios pill-host) and MUST
+ * NOT change the active pill. The original FR-029 jumped to a separate
+ * "Country Deep-Dive" pill; that pill was retired and the deep-dive content
+ * moved inline so the user sees details on the same page.
  */
 for (const dash of DASHBOARDS) {
-  test.describe(`FR-029 country card → deep-dive [${dash.key}]`, () => {
-    test('clicking a country card switches the active pill to Country Deep-Dive', async ({ page }) => {
+  test.describe(`FR-029 country card → inline deep-dive [${dash.key}]`, () => {
+    test('clicking a country card populates #scenarioInsight inline (no pill switch)', async ({ page }) => {
       await loadFresh(page, dash.fileName);
       await clickTab(page, 'geography');
       await page.waitForTimeout(SETTLE_MS / 2);
       await expectActive(page, 'geography', 'scenarios');
 
-      // The Scenarios pill renders a grid of country cards. We don't pin to
-      // a specific country (cards are filterable / re-orderable per Feature
-      // 010), so click the FIRST visible one inside the Scenarios pill-host.
       const firstCountryCard = page
         .locator('.pill-host[data-tab="geography"][data-pill="scenarios"]')
-        .locator('[onclick*="renderCountryDeepDive"], [data-country], .country-card, .scenario-card')
+        .locator('.scenario-card, [data-country]')
         .first();
 
-      // Some dashboards may not match the speculative selectors above. Fall
-      // back to any clickable child whose click handler invokes tabRouter.
-      // We test the documented invariant: clicking any country card switches
-      // the active pill. If no countries render, skip with a clear message.
       const cardCount = await firstCountryCard.count();
       test.skip(cardCount === 0, 'No country card matched the selector — markup may have changed.');
 
       await firstCountryCard.click({ trial: false });
       await page.waitForTimeout(SETTLE_MS);
 
+      // Active pill MUST stay on `scenarios` (no jump to a separate pill).
       const state = await getRouterState(page);
-      expect(state).toEqual({ tab: 'geography', pill: 'country-deep-dive' });
-      await expectActive(page, 'geography', 'country-deep-dive');
-      await expectPillHostVisible(page, 'geography', 'country-deep-dive');
+      expect(state).toEqual({ tab: 'geography', pill: 'scenarios' });
+      await expectActive(page, 'geography', 'scenarios');
+
+      // #scenarioInsight MUST be populated and visible inside the Scenarios
+      // pill-host (lives inline beneath the country grid post-feature-015).
+      const insight = page
+        .locator('.pill-host[data-tab="geography"][data-pill="scenarios"]')
+        .locator('#scenarioInsight');
+      await expect(insight).toBeVisible();
+      await expect(insight).toHaveClass(/is-open/);
     });
   });
 }

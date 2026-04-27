@@ -350,3 +350,50 @@ A pragmatic order: 002 (quick wins first), 003 (unblock), 004 (big one), then pi
 - **B2 (~~Silent shortfall absorption~~)** — Closed 2026-04-20 via independent audit. Investigated, no fix required. Original §C.2 claim contradicted by line-level evidence (Verdict B, 9/10 confidence): signed balances ARE the feasibility signal by design. Record preserved in `specs/audits/B2-silent-shortfall.md`. Noted pattern: this is the third §C misdiagnosis in a row (B1 + B3 + B2 all reclassified on line-level re-audit).
 - **F1 + T1 + T6 (~~Browser smoke harness + CI~~)** — Closed in feature `003-browser-smoke-harness` (2026-04-20). Shipped: `tests/baseline/browser-smoke.test.js` (RR + Generic + parity smokes), frozen defaults snapshots (`tests/baseline/rr-defaults.mjs`, `generic-defaults.mjs`), and `.github/workflows/tests.yml` (Node 20, ubuntu-latest, runs `bash tests/runner.sh` on every push + PR). First CI run caught a Node 20 glob-expansion bug on the runner script; fixed in `842464e`. Runner count: 77 → 80.
 - **F2 (HTML canonical swap) — FEATURE 004 ATTEMPTED AND ABANDONED 2026-04-20.** Smoke/CI gate passed, but in-browser the dashboard showed NaN values, empty charts, and nonsensical FIRE numbers — every one of those symptoms proved a shim's `try/catch` caught a canonical throw and returned its safe fallback. The class-of-failure the smoke harness was supposed to catch STILL slipped through because the smoke tests the adapter against a hardcoded snapshot, not against shim-layer behavior with live DOM `getInputs()`. Branch `004-html-canonical-swap` deleted; full abandonment record and lessons preserved at `specs/004-html-canonical-swap/ABANDONED.md`. Retry lives in feature 005 (shim extraction + Node-testable shim-layer first).
+
+---
+
+## Done in feature 015 — Calc-Engine Debt Cleanup (2026-04-27)
+
+- **US1 Shortfall visibility on lifecycle chart**: red overlay + bilingual caption + audit row class + Copy Debug `hasShortfall` field. Closed.
+- **US2 `tax-optimized-search` θ-sweep filters feasibility BEFORE ranking by tax**: 3-pass refactor (simulate → filter → rank). Closed.
+- **US3 Per-strategy FIRE age finder + drag-skip guard**: shipped as Wave B. Per-strategy ages + drag-skip flag wired. Deeper recalc-orchestration restructure (use winner's per-strategy age as displayed) tracked as follow-up.
+- **US4 Mode/Objective orthogonality** (silent DWZ override removed): `rankByObjective` rewritten — DWZ + Preserve uses `residualArea` desc, DWZ + Minimize Tax uses `cumulativeFederalTax` asc. Audit Strategy Ranking section displays the active sort-key chain in plain bilingual text. Closed.
+- **US5 Objective label verification**: visible label was already accurate (`Pay less lifetime tax` / `繳最少終身稅`). No rename needed. Closed.
+- **US6 Unified simulator (Step 1)**: `calc/simulateLifecycle.js` shipped with `noiseModel` reservation that throws on non-null. Future Monte Carlo can extend without re-touching the signature. Migration Steps 2-4 (parity-test, flip 4 call sites, delete 3 retired sims) tracked as follow-up.
+
+## New backlog items from feature 015 follow-up
+
+### B-015-6. ✅ DONE — Spending-floor pass in `taxOptimizedWithdrawal` (2026-04-27 evening)
+
+The bracket-fill-smoothed strategy was treating spending as a budget cap rather than a floor. Pre-fix: when only Trad 401k remained pre-SS, strategy drew only ~$9k/year (smoothed cap) leaving ~$50k/year shortfall. Fix: Step 7.5 spending-floor pass draws additional Trad to fund spending. 17 new tests pin the behavior; 5 of 7 strategies were already correct (use `_drawByPoolOrder` fixed-point iteration), only the 2 going through `taxOptimizedWithdrawal` (bracket-fill default + tax-opt-search) needed the fix. Closed.
+
+### B-015-1. US6 migration Steps 2-4 — retire `signedLifecycleEndBalance`, `projectFullLifecycle`, `_simulateStrategyLifetime`
+
+Per `specs/015-calc-debt-cleanup/contracts/unified-simulator.contract.md` §2:
+1. Parity-test every existing fixture against `simulateLifecycle()` — assert byte-equivalent outputs.
+2. Flip chart renderer call site → run full suite.
+3. Flip audit assembler call site → run full suite.
+4. Flip strategy ranker call site → run full suite.
+5. Flip per-strategy finder call site → run full suite.
+6. Delete the three retired simulators only when all 4 call sites are flipped AND parity tests stay green AND audit cross-validation emits zero "different sim contracts" warnings.
+
+### B-015-2. US3 deeper integration — winner's per-strategy FIRE age becomes displayed FIRE age
+
+Today the displayed FIRE age is still produced by the Architecture-B `findFireAgeNumerical`. The audit shows per-strategy ages but the chart pipeline still uses the global age. Follow-up: restructure recalc to call `findPerStrategyFireAge` per strategy, then use winner's age as the displayed/chart age. Requires budget measurement (250ms recalc budget) — fall back to Option A (iterate-to-convergence) if budget breached.
+
+### B-015-3. Playwright E2E specs for feature 015 user-facing behaviors
+
+Spec'd in `specs/015-calc-debt-cleanup/contracts/*` and `quickstart.md` but not authored. Targets:
+- `tests/e2e/shortfall-overlay.spec.ts` — pixel-sample chart canvas; verify caption bilingual toggle.
+- `tests/e2e/strategy-orthogonality.spec.ts` — DWZ + Preserve vs DWZ + Tax produces ≥ $100 trajectory diff per row.
+- `tests/e2e/recalc-convergence.spec.ts` — 2 consecutive recalcs produce byte-identical Copy Debug.
+- `tests/e2e/objective-label-verification.spec.ts` — 3×3 cell verification fixture for US5 (preserved as a regression watchdog).
+
+### B-015-4. Monte Carlo activation referencing `noiseModel` hook
+
+When ready, extend `calc/simulateLifecycle.js` to interpret a non-null `noiseModel` per the JSDoc-documented planned shape: `{ returns: {distribution, mean, std}, inflation: {...}, lifespan: {...}, samples, seed? }`. Run `samples` trials, return percentile aggregates (p10/p50/p90).
+
+### B-015-5. Manager-driven browser smoke walks on both HTML files
+
+Remaining manual gate: open both files in a real browser, run the 5-step smoke per `CLAUDE.md > Browser smoke before claiming a feature "done"`, plus the wave-specific checks in `specs/015-calc-debt-cleanup/quickstart.md`. Cannot be automated.

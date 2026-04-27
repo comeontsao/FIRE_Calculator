@@ -405,3 +405,60 @@ Sources:
 ## 🔗 Related notes
 - [[FIRE Planning - Roger & Rebecca]]
 - [[FIRE-Dashboard Translation Catalog]]
+
+---
+
+## Feature 015 — Calc-Engine Debt Cleanup (shipped 2026-04-27)
+
+Status: end-to-end implementation across all 6 user stories. 213 baseline tests + 40 new unit tests passing (253/255 total — the 1 inherited failure is the pre-existing `module-boundaries` meta-test on feature-014 `window` references, not introduced by 015).
+
+### Wave A (P1) — User trust + optimizer correctness
+- **US1 Shortfall visibility**: red-tinted overlay on Full Portfolio Lifecycle chart paints over years where the active strategy cannot fund spending. Bilingual caption + matching audit table row class with `⚠` glyph + new `hasShortfall` boolean in Copy Debug `audit.lifecycleProjection.rows[*]`. Inline custom Chart.js plugin (no CDN dependency, Constitution V).
+- **US2 θ-sweep feasibility-first**: `tax-optimized-search` rewritten to 3-pass form (simulate all 11 → filter feasibility → rank by tax). Diagnostic fields `lowestTaxOverallTheta` + `shortfallYearsAtLowestTax` for the all-infeasible case. Closes the "θ=0 wins because zero withdrawals → zero tax" pathology.
+
+### Wave B (P2) — Architecture cleanup
+- **US3 Per-strategy FIRE age**: `findPerStrategyFireAge` finder ships alongside `findFireAgeNumerical`. Drag-skip guard (`globalThis._userDraggedFireAge` + 500ms idle clearOnIdle) wired into the FIRE-marker drag handler. Full chart-restructuring (use winner's per-strategy age as displayed FIRE age) is a follow-up.
+- **US4 Mode/Objective orthogonality** (the user's key insight from clarification 2026-04-27): the silent DWZ override is REMOVED. `rankByObjective` now composes (Mode × Objective) into the right sort-key chain — `residualArea` desc for DWZ + Preserve, `cumulativeFederalTax` asc for Minimize Tax under any mode. Audit Strategy Ranking section displays the active sort-key chain in plain bilingual text (Mode constraint, Objective, Primary sort, Tie-breakers). 14 new i18n keys.
+
+### Wave C (P3) — Cleanup + future-proofing
+- **US5 Label verification**: confirmed the visible objective label is already "Pay less lifetime tax" / "繳最少終身稅" — accurately describes behavior, no rename required.
+- **US6 Unified simulator (Step 1 of migration)**: new pure module `calc/simulateLifecycle.js` provides the single entry point future Monte Carlo will extend. The `noiseModel` parameter is reserved (throws on non-null). Wave C Step 1 = "build alongside" per research R11. Steps 2-4 (parity-test all fixtures, flip the four call sites one-at-a-time, delete the three retired simulators) are tracked as follow-up.
+
+### Files changed
+- `FIRE-Dashboard.html` + `FIRE-Dashboard-Generic.html` (lockstep, Constitution I): inline shortfall plugin, audit caption div, US2 3-pass refactor, `findPerStrategyFireAge`, drag-skip guard, US4 sort-key dispatch, audit active-sort-key header, 19 new bilingual i18n keys.
+- `calc/simulateLifecycle.js` (NEW): unified entry point with reserved `noiseModel` hook.
+- `calc/strategyRanker.js` (NEW): pure helpers `computeCumulativeFederalTax`, `computeResidualArea`.
+- `calc/calcAudit.js`: `hasShortfall` field propagated to audit `lifecycleProjection.rows`.
+- `tests/fixtures/feature-015/scenarios.js` (NEW): canonical scenarios `youngSaver`, `midCareer`, `preRetirement`, `thetaZeroShortfall`.
+- 5 new unit-test files: `sortKeyHelpers.test.js`, `shortfallVisibility.test.js`, `thetaSweepFeasibility.test.js`, `modeObjectiveOrthogonality.test.js`, `perStrategyFireAge.test.js`, `unifiedSimulator.test.js` (40 tests total).
+- `FIRE-Dashboard Translation Catalog.md`: 19 new bilingual keys.
+
+### Follow-up backlog
+- Restructure recalc orchestration to use winner's `perStrategyFireAge` as displayed FIRE age (US3 deeper integration; ~250ms budget validation needed).
+- US6 migration Steps 2-4: parity-test every existing fixture against `simulateLifecycle()`, flip chart/audit/ranker/finder call sites one at a time, delete `signedLifecycleEndBalance` + `projectFullLifecycle` + `_simulateStrategyLifetime`.
+- Author Playwright E2E specs for the unit-tested behaviors (T012/T013/T040-T042/T056-T057/T070/T078-T079).
+- Manager-driven browser smoke walks on both HTML files (T037/T069/T092 — manual gates).
+- Activate Monte Carlo by extending `simulateLifecycle()` to interpret the reserved `noiseModel` parameter.
+
+---
+
+## Feature 015 follow-up — Spending-floor pass + UX polish (shipped 2026-04-27, evening)
+
+### Calc fix (B-015-6) — Spending floor in `taxOptimizedWithdrawal`
+
+The bracket-fill-smoothed strategy (and tax-optimized-search via the same code path) was treating the user's spending need as a *budget cap* rather than a *floor*. When stocks/cash/Roth depleted and only Trad 401k remained pre-SS, the strategy capped Trad draw at `pTrad / yearsRemaining` (~$9k/year for typical balances) rather than drawing what was needed to fund spending (~$60k/year). User saw zero/tiny withdrawal bars at ages 60–69 in the chart.
+
+Fix: added a "Step 7.5: Spending-floor pass" after the IRMAA cap. If after all prior steps `stillNeeded > 0` AND there's untapped pTrad AND user can access 401k, draw additional Trad with a 1.30x gross-up to cover the spending gap. Iterates up to 5 times to converge. Honors the principle "funding spending takes priority over IRMAA — not eating outranks Medicare premium hike."
+
+7 unit tests (`tests/unit/spendingFloorPass.test.js`) pin: bug-locus fix, pTrad ceiling respected, idempotency on already-funded scenarios, pre-unlock unchanged, SS-active scenarios, Roth-available paths, edge cases. Plus 10 integration tests (`tests/unit/fullCalcEvaluation.test.js`) walk the user's exact RR scenario through `projectFullLifecycle` end-to-end and confirm: no NaN, no negatives, no false-positive shortfalls when Trad is plentiful, conservation invariants hold.
+
+**Important user-facing implication**: the fix exposes that the user's RR scenario (FIRE at 48, $60.1k/yr spend on $614k portfolio) was actually *truly infeasible* — the pre-fix dashboard's "On Track — FIRE in 6 years" status was generated by the bug. The chart's pre-fix `+$65k end balance at age 100` was a clamp-to-zero artifact (signed sim showed `-$2.1M` for the same scenario, per `feasibilityProbe.signedEndBalance`). After reload, the dashboard will show pools depleting earlier and likely flag the scenario as infeasible at the active FIRE age. User should drag the FIRE marker later (e.g., 52–55) or reduce spend to find a feasible point.
+
+### UX fixes
+- Sticky stack now composes correctly: header → gateSelector (with Withdraw Strategy buttons inline) → tab-bar (Plan/Geography/...) → pill-bar (Social Security/Withdrawal Strategy/...). All four bands stack tight with no gap; `--gate-bottom` and `--tabbar-bottom` CSS vars are live-tracked by the existing `ResizeObserver`.
+- Compact-header inline KPIs: Net Worth + FIRE Number now appear inline under the title when `.header--compact` is active.
+- Audit `withdrawals` field-name bug fixed (`r.withdrawal` singular vs `r.withdrawals` plural mismatch was causing every Copy Debug row to serialize 0).
+- Withdraw Strategy buttons now mirror the in-card pair on the same row as Safe/Exact/DWZ; both pairs share `setWithdrawalObjective(id)`.
+
+### Test totals
+- 213 baseline + 57 feature-015 + 17 follow-up = 270 passing (272 total, 1 inherited baseline failure on `module-boundaries`, 1 skipped).

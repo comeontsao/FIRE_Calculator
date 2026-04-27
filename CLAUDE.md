@@ -1,13 +1,15 @@
 <!-- SPECKIT START -->
-**Active feature**: `014-calc-audit` — Calculation Audit View: a new 5th tab (Audit) that exposes every step of the lifecycle pipeline (inputs → spending adjustments → gates → FIRE age → strategy ranking → projection) with both per-section charts AND tables, plus a parallel `audit` block in Copy Debug. Pure observability layer — zero calc-engine modifications.
-- Spec: [specs/014-calc-audit/spec.md](./specs/014-calc-audit/spec.md)
-- Plan: [specs/014-calc-audit/plan.md](./specs/014-calc-audit/plan.md)
-- Tasks: [specs/014-calc-audit/tasks.md](./specs/014-calc-audit/tasks.md)
-- Status: implemented end-to-end. 211/211 unit tests + 95/95 Playwright tests green. SC-008 verified (zero diff hunks in 12 named calc functions). Browser smoke walk (T020) + manual quickstart (T030) are the remaining Manager-driven gates before merge.
+**Active feature**: `015-calc-debt-cleanup` — Calc-Engine Debt Cleanup: six structural fixes implemented end-to-end on 2026-04-27. 213 baseline + 40 new unit tests passing (253/255; 1 inherited baseline failure). Wave A (P1) US1+US2 + Wave B (P2) US3+US4 + Wave C (P3) US5+US6 Step 1 all shipped. Five follow-up items tracked in BACKLOG.md (B-015-1 through B-015-5).
+- Spec: [specs/015-calc-debt-cleanup/spec.md](./specs/015-calc-debt-cleanup/spec.md)
+- Plan: [specs/015-calc-debt-cleanup/plan.md](./specs/015-calc-debt-cleanup/plan.md)
+- Tasks: [specs/015-calc-debt-cleanup/tasks.md](./specs/015-calc-debt-cleanup/tasks.md)
+- Status: implementation complete. Remaining gates: Manager-driven browser smoke walks on both HTML files (T037/T069/T092 — manual), Playwright E2E specs (B-015-3), and US6 migration Steps 2-4 (B-015-1).
+
+Predecessor (just shipped): `014-calc-audit` — Calculation Audit View tab, the diagnostic surface this feature uses to verify every fix. 211/211 unit + 95/95 Playwright tests green.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/), [specs/013-tabbed-navigation/](./specs/013-tabbed-navigation/)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/), [specs/013-tabbed-navigation/](./specs/013-tabbed-navigation/), [specs/014-calc-audit/](./specs/014-calc-audit/)
 <!-- SPECKIT END -->
 
 # FIRE Calculator

@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeInflation } from '../../calc/inflation.js';
+import { createRequire } from 'node:module';
 import fixtures from '../fixtures/inflation.js';
+// Feature 015 follow-up — inflation.js converted to UMD classic script.
+const require = createRequire(import.meta.url);
+const { makeInflation } = require('../../calc/inflation.js');
 
 test('inflation: identity at base year', () => {
   const inf = makeInflation(fixtures.inputs.inflationRate, fixtures.inputs.baseYear);

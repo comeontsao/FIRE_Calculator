@@ -1028,7 +1028,8 @@ Used as a trailing badge on a country card's spend line when `scenarioOverrides[
 | `nav.pill.scenarios` | Scenarios | 情境 |
 | `nav.pill.countryChart` | Country Chart | 國家比較圖 |
 | `nav.pill.healthcare` | Healthcare | 醫療 |
-| `nav.pill.countryDeepDive` | Country Deep-Dive | 國家詳情 |
+<!-- `nav.pill.countryDeepDive` removed in feature 015 follow-up (2026-04-27) — the deep-dive pill was retired and the content moved inline under the country grid in the Scenarios pill-host. -->
+
 
 ### Pill labels — Retirement tab (5)
 
@@ -1137,3 +1138,42 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | `audit.empty.strategyPending` | Strategy ranking pending — please wait for the next recalc. | 策略排名計算中 — 請等待下次重新計算。 |
 | `audit.label.winnerBadge` | winner | 勝出 |
 
+
+## Feature 015 — Calc-Engine Debt Cleanup (Wave A US1 — shortfall visibility)
+
+### Lifecycle chart shortfall caption + audit table column (5)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `lifecycle.shortfall.caption` | Red-shaded years: active strategy cannot fund spending from any allowed pool. | 紅色標示年份：當前策略無法從任何允許的資金池支應該年度支出。 |
+| `lifecycle.shortfall.tooltipPrefix` | Shortfall — strategy could not fund spending | 資金缺口 — 策略無法支應支出 |
+| `audit.lifecycle.shortfallColumn.title` | Shortfall | 資金缺口 |
+| `audit.lifecycle.shortfallColumn.value.true` | Yes | 是 |
+| `audit.lifecycle.shortfallColumn.value.false` | — | — |
+
+## Feature 015 — Calc-Engine Debt Cleanup (Wave B US4 — Mode/Objective orthogonality)
+
+### Audit Strategy Ranking active sort-key display (14)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `audit.mode.safe.constraint` | Safe — every retirement-year total ≥ buffer × annual spend AND end balance ≥ 0 | 安全 — 每年退休後總額 ≥ 緩衝倍數 × 年度支出，且期末餘額 ≥ 0 |
+| `audit.mode.exact.constraint` | Exact — end balance ≥ terminal buffer × annual spend | 精確 — 期末餘額 ≥ 期末緩衝倍數 × 年度支出 |
+| `audit.mode.dwz.constraint` | Die With Zero — end balance ≈ $0 at plan age | Die With Zero — 預定壽命年齡時期末餘額 ≈ $0 |
+| `audit.objective.preserve.label` | Preserve estate | 保留遺產 |
+| `audit.objective.minimizeTax.label` | Minimize lifetime tax | 終身稅額最小化 |
+| `audit.sortKey.residualArea.desc` | residualArea ↓ (sum of yearly totals from FIRE age to plan age) | residualArea ↓（FIRE 年齡至預定壽命年齡的年度總額累加） |
+| `audit.sortKey.cumulativeFederalTax.asc` | cumulativeFederalTax ↑ (sum of yearly federal tax from FIRE age to plan age) | cumulativeFederalTax ↑（FIRE 年齡至預定壽命年齡的年度聯邦稅額累加） |
+| `audit.sortKey.endBalance.desc` | endBalance ↓ (highest end-of-plan balance wins) | endBalance ↓（期末餘額最高者勝出） |
+| `audit.sortKey.absEndBalance.asc` | \|endBalance\| ↑ (closest to $0 wins — DWZ tie-breaker) | \|endBalance\| ↑（最接近 $0 者勝出 — DWZ 平手條件） |
+| `audit.sortKey.strategyId.asc` | strategyId alphabetical (final deterministic tie-breaker) | strategyId 字母順序（最終決定平手條件） |
+| `audit.strategyRanking.modeConstraint.label` | Mode constraint: {0} | 模式限制：{0} |
+| `audit.strategyRanking.objectiveLabel.label` | Objective: {0} | 目標：{0} |
+| `audit.strategyRanking.primarySortKey.label` | Primary sort: {0} | 主排序：{0} |
+| `audit.strategyRanking.tieBreakerChain.label` | Tie-breakers: {0} → {1} | 平手條件:{0} → {1} |
+
+## Feature 015 follow-up — Sticky-header UX (1)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `withdraw.strategy.label` | Withdraw Strategy: | 提領策略： |

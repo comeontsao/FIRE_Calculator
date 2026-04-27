@@ -102,7 +102,7 @@ function notify() {
   }
 }
 
-export const chartState = Object.freeze({
+const chartState = Object.freeze({
   /**
    * Read-only view of the current state. Returns a fresh frozen snapshot
    * each access — safe to destructure, impossible to mutate internals.
@@ -178,3 +178,17 @@ export const chartState = Object.freeze({
     };
   },
 });
+
+// ---- UMD-style module exports (Feature 015 follow-up) ----
+// Converted from ES module to classic script so it loads under file:// (ES
+// module imports require CORS-clean origins which file:// doesn't provide).
+//
+// CommonJS export for Node tests (tests/unit/chartState.test.js).
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { chartState };
+}
+// Browser global registration so classic <script src="calc/chartState.js">
+// loads register chartState on window for the dashboard glue to consume.
+if (typeof globalThis !== 'undefined') {
+  globalThis.chartState = chartState;
+}

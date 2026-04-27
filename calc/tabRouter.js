@@ -89,7 +89,10 @@ const TABS = Object.freeze([
       Object.freeze({ id: 'scenarios',         labelKey: 'nav.pill.scenarios' }),
       Object.freeze({ id: 'country-chart',     labelKey: 'nav.pill.countryChart' }),
       Object.freeze({ id: 'healthcare',        labelKey: 'nav.pill.healthcare' }),
-      Object.freeze({ id: 'country-deep-dive', labelKey: 'nav.pill.countryDeepDive' }),
+      // Feature 015 follow-up — `country-deep-dive` removed as a pill;
+      // #scenarioInsight is now rendered inline below the country grid in
+      // the Scenarios pill-host, so clicking a country shows the deep-dive
+      // info on the same page rather than jumping tabs.
     ]),
   }),
   Object.freeze({
@@ -292,13 +295,19 @@ function createTabRouter() {
    * @param {{tab:string,pill:string}} to
    */
   function _applyDomState(from, to) {
-    // Tab buttons: remove .active from previous, add to new.
-    if (from && from.tab !== to.tab) {
-      const prevTabBtn = _getTabButton(from.tab);
-      if (prevTabBtn && prevTabBtn.classList) prevTabBtn.classList.remove('active');
+    // Tab buttons: defensive sweep over EVERY tab. Sets .active on the target
+    // and removes it from all others. This mirrors the tab-panel sweep below
+    // (lines ~307-310) and fixes the init-path bug where `from === null` left
+    // the HTML markup's stale `class="active"` (typically on Plan) untouched
+    // when the saved/hash state pointed to a different tab — both ended up
+    // visually "active" until the user manually clicked Plan first.
+    for (const tabEntity of _tabsById.values()) {
+      const btn = _getTabButton(tabEntity.id);
+      if (btn && btn.classList) {
+        if (tabEntity.id === to.tab) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
     }
-    const newTabBtn = _getTabButton(to.tab);
-    if (newTabBtn && newTabBtn.classList) newTabBtn.classList.add('active');
 
     // Tab panels: ensure exactly one is visible. Walk every tab in the entity
     // table and set [hidden] = (id !== to.tab). Defensive sweep covers both the

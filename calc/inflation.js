@@ -42,10 +42,20 @@
  *   toNominal: (amountReal: number, year: number) => number
  * }}
  */
-export function makeInflation(inflationRate, baseYear) {
+function makeInflation(inflationRate, baseYear) {
   const factor = (year) => Math.pow(1 + inflationRate, year - baseYear);
   return Object.freeze({
     toReal: (amountNominal, year) => amountNominal / factor(year),
     toNominal: (amountReal, year) => amountReal * factor(year),
   });
+}
+
+// ---- UMD-style module exports (Feature 015 follow-up) ----
+// Converted from ES module to classic script so it loads under file://.
+// (ES module imports require CORS-clean origins; file:// fails CORS.)
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { makeInflation };
+}
+if (typeof globalThis !== 'undefined') {
+  globalThis.makeInflation = makeInflation;
 }

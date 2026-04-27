@@ -513,3 +513,72 @@ test('bonus: onAfterActivate callback fires after every activation', () => {
   router.activate('retirement', 'ss', 'click');
   assert.equal(seen.length, 2);
 });
+
+// ----------------------------------------------------------------------------
+// Regression: init path with non-default resolved tab must clear .active from
+// stale HTML markup on every other tab button (Feature 015 follow-up).
+// Bug: HTML markup ships with class="active" on the Plan tab. If the router's
+// resolved state on init is e.g. Geography (from URL hash or storage), the old
+// code only added .active to Geography — it didn't remove the stale .active
+// from Plan because `from === null` skipped the prev-tab cleanup branch.
+// Result: both Plan AND Geography were visually active until the user clicked
+// Plan first to clear it.
+// ----------------------------------------------------------------------------
+
+test('regression: init path defensively sweeps stale .active from non-target tabs', () => {
+  const { options, host } = buildOptions({
+    hash: '#tab=geography&pill=scenarios',
+  });
+  // Pre-populate Plan with .active to mirror the real HTML markup state.
+  host.tabButtons.plan.classList.add('active');
+  // Verify the seed worked
+  assert.equal(host.tabButtons.plan._classes.has('active'), true);
+
+  const router = createTabRouter();
+  router.init(options);
+
+  // After init: only Geography should have .active. Plan must have been cleared.
+  assert.equal(host.tabButtons.geography._classes.has('active'), true,
+    'Geography (resolved tab) must have .active');
+  assert.equal(host.tabButtons.plan._classes.has('active'), false,
+    'Plan (stale from HTML markup) must have been swept clean by init');
+  // Every other tab also clean.
+  for (const id of ['retirement', 'history', 'audit']) {
+    if (host.tabButtons[id]) {
+      assert.equal(host.tabButtons[id]._classes.has('active'), false,
+        `${id}: must NOT have .active after init resolves to geography`);
+    }
+  }
+});
+
+test('regression: init path with hash=plan keeps Plan active and clears all others', () => {
+  const { options, host } = buildOptions({
+    hash: '#tab=plan&pill=profile',
+  });
+  // Seed multiple tabs with stale .active to simulate a more pathological state
+  host.tabButtons.plan.classList.add('active');
+  host.tabButtons.history && host.tabButtons.history.classList.add('active');
+
+  const router = createTabRouter();
+  router.init(options);
+
+  assert.equal(host.tabButtons.plan._classes.has('active'), true);
+  if (host.tabButtons.history) {
+    assert.equal(host.tabButtons.history._classes.has('active'), false,
+      'History (stale) must be swept clean even when resolved tab is Plan');
+  }
+});
+
+test('regression: subsequent activate() also defensively sweeps every tab button', () => {
+  const { options, host } = buildOptions();
+  const router = createTabRouter();
+  router.init(options); // -> plan/profile
+
+  router.activate('audit', 'summary', 'click');
+
+  assert.equal(host.tabButtons.audit._classes.has('active'), true);
+  assert.equal(host.tabButtons.plan._classes.has('active'), false);
+  assert.equal(host.tabButtons.geography._classes.has('active'), false);
+  assert.equal(host.tabButtons.retirement._classes.has('active'), false);
+  assert.equal(host.tabButtons.history._classes.has('active'), false);
+});

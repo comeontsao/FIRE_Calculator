@@ -12,7 +12,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chartState } from '../../calc/chartState.js';
+import { createRequire } from 'node:module';
+// Feature 015 follow-up — chartState.js converted from ES module to UMD-style
+// classic script (so it loads under file:// without CORS errors). Use
+// createRequire to import the CommonJS export.
+const require = createRequire(import.meta.url);
+const { chartState } = require('../../calc/chartState.js');
 
 /**
  * The module under test exposes a singleton. To keep tests independent we

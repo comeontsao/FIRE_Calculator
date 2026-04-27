@@ -1158,7 +1158,10 @@
     border-radius: 8px;
     padding: 8px 12px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    z-index: 20;
+    /* Feature 015 follow-up — bumped from 20 to 70 so the overlay's click
+       targets stay above the sticky stack (pill-bar=40, tab-bar=50,
+       gateSelector=60). Below header (100) so the header still wins. */
+    z-index: 70;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1964,7 +1967,8 @@
   #tabContainer {
     grid-column: 1 / -1;
   }
-  /* Top tab bar (Plan / Geography / Retirement / History) */
+  /* Top tab bar (Plan / Geography / Retirement / History) — Feature 015
+     follow-up: stacks tight under #gateSelector at top: var(--gate-bottom). */
   .tab-bar {
     display: flex;
     flex-wrap: nowrap;
@@ -1975,8 +1979,8 @@
     border-bottom: 1px solid var(--border);
     background: var(--card);
     position: sticky;
-    top: var(--header-height, 0);
-    z-index: 10;
+    top: var(--gate-bottom, var(--header-height, 0));
+    z-index: 50;
   }
   .tab {
     flex: 0 0 auto;
@@ -2295,6 +2299,160 @@
     .audit-table-wrap { overflow-x: auto; }
   }
   /* === End Feature 014 ============================================== */
+
+  /* === Feature 015 US1 — shortfall row tinting on Audit lifecycle table === */
+  table.audit-lifecycle-table tr.has-shortfall {
+    background-color: rgba(255, 80, 80, 0.10);
+  }
+  table.audit-lifecycle-table tr.has-shortfall td:first-child::before {
+    content: '⚠ ';
+    color: rgba(255, 80, 80, 0.95);
+  }
+
+  /* === Feature 015 follow-up — Audit flow-diagram substeps list === */
+  /* Per-stage ordered list showing the actual operations performed inside
+     each calculation stage. Renders as small numbered bullets below the
+     stage's headline so the user can trace the order of operations. */
+  .audit-flow__substeps {
+    list-style: decimal;
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+    text-align: left;
+    font-size: 0.72em;
+    color: var(--text-dim);
+    line-height: 1.5;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 240ms ease-out;
+  }
+  .audit-flow__substeps li {
+    padding: 1px 0;
+    word-break: break-word;
+  }
+  /* Reveal the substeps on stage-card hover/focus, OR when the parent stage is
+     `data-substeps-pinned` (a click toggles the pin). Keeps the diagram dense
+     by default but expandable for users who want detail. */
+  .audit-flow__stage:hover .audit-flow__substeps,
+  .audit-flow__stage:focus-visible .audit-flow__substeps,
+  .audit-flow__stage[data-substeps-pinned="1"] .audit-flow__substeps {
+    max-height: 1000px;
+    transition: max-height 320ms ease-in;
+  }
+  /* Visual hint that the stage is expandable — small chevron at bottom. */
+  .audit-flow__stage::after {
+    content: '⌄';
+    display: block;
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    opacity: 0.6;
+    transition: transform 240ms;
+  }
+  .audit-flow__stage:hover::after,
+  .audit-flow__stage:focus-visible::after,
+  .audit-flow__stage[data-substeps-pinned="1"]::after {
+    transform: rotate(180deg);
+    opacity: 1;
+  }
+
+  /* === Feature 015 follow-up — Compact-header inline KPIs + sticky chrome === */
+  /* Inline KPI summary appears INSIDE the brand block when the header is in
+     compact mode. Hidden at full-height; revealed by .header--compact ancestor. */
+  .header__inline-kpis {
+    display: none;
+    align-items: baseline;
+    gap: 18px;
+    margin-top: 2px;
+    font-size: 0.85em;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .header__inline-kpis .ikpi-pair { display: inline-flex; gap: 4px; align-items: baseline; }
+  .header__inline-kpis .ikpi-label {
+    color: var(--text-dim);
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .header__inline-kpis .ikpi-value {
+    color: var(--accent2);
+    font-weight: 600;
+    font-size: 1.05em;
+  }
+  .header--compact .header__inline-kpis {
+    display: inline-flex;
+  }
+
+  /* Sticky gate selector — Safe / Exact / DWZ + Withdraw Strategy stay pinned
+     just below the header at top: var(--header-height). The next band
+     (.tab-bar) reads var(--gate-bottom) which the JS observer keeps in sync
+     with this element's bottom edge — so when this band's height changes
+     (e.g., wrapping at narrow viewport), tab-bar moves down to stay tight. */
+  #gateSelector {
+    position: sticky;
+    top: var(--header-height, 0);
+    z-index: 60;
+    background: var(--card);
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0;
+  }
+
+  /* Sticky pill-bar — sub-tabs (Social Security / Withdrawal Strategy / Drawdown
+     / Lifecycle / Milestones) stick directly under the main tab-bar with
+     ZERO gap. var(--tabbar-bottom) is updated live by the JS observer. */
+  .pill-bar {
+    position: sticky;
+    top: var(--tabbar-bottom, calc(var(--header-height, 0px) + 92px));
+    z-index: 40;
+    background: var(--card);
+    margin: 0;
+  }
+
+  /* Withdraw-strategy buttons embedded into the sticky gate row. Aligned next
+     to Safe/Exact/DWZ, labeled, smaller-typeset. */
+  .gate__withdraw-strategy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-wrap: nowrap;
+  }
+  .gate__withdraw-strategy .gws-label {
+    font-size: 0.7em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .gate__withdraw-strategy button {
+    padding: 6px 10px;
+    font-size: 0.72em;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+  }
+  .gate__withdraw-strategy button[aria-checked="true"] {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Mobile responsive — at narrow viewports the gate row wraps; pill-bar top
+     auto-tracks the wrapped tab-bar via var(--tabbar-bottom). */
+  @media (max-width: 767px) {
+    #gateSelector { gap: 8px; }
+    .gate__withdraw-strategy { margin-left: 0; flex-basis: 100%; justify-content: center; }
+    .header__inline-kpis { font-size: 0.78em; gap: 12px; }
+  }
+  /* === End Feature 015 ============================================== */
 </style>
 </head>
 <body>
@@ -2304,6 +2462,13 @@
   <div class="header__brand">
     <h1 data-i18n="header.title">Roger & Rebecca FIRE Command Center</h1>
     <p class="subtitle" data-i18n="header.subtitle">Financial Independence, Retire Early — Fat FIRE with Geo-Arbitrage Strategy</p>
+    <!-- Feature 015 follow-up — inline KPIs shown only in .header--compact mode.
+         Mirrors #kpiNetWorth + #kpiFIRENum so the user keeps their two key
+         numbers in view while scrolled. Updated by syncCompactHeaderKpis(). -->
+    <div class="header__inline-kpis" aria-hidden="true">
+      <span class="ikpi-pair"><span class="ikpi-label" data-i18n="kpi.netWorth">Current Net Worth</span><span class="ikpi-value" id="ikpiNetWorth">—</span></span>
+      <span class="ikpi-pair"><span class="ikpi-label" data-i18n="kpi.fireNumber">FIRE Number (Primary)</span><span class="ikpi-value" id="ikpiFIRENum">—</span></span>
+    </div>
   </div>
   <div class="header__status">
     <div id="fireStatus" class="fire-status warning" aria-live="polite">Calculating...</div>
@@ -2363,6 +2528,17 @@
     <button id="btnSafeFire" style="flex:1;padding:6px 4px;font-size:0.72em;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer" onclick="setFireMode('safe')" data-i18n="ss.safe">🛡️ Safe</button>
     <button id="btnExact" style="flex:1;padding:6px 4px;font-size:0.72em;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer" onclick="setFireMode('exact')" data-i18n="ss.exact">⚡ Exact</button>
     <button id="btnDieWithZero" style="flex:1;padding:6px 4px;font-size:0.72em;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);cursor:pointer" onclick="setFireMode('dieWithZero')" data-i18n="ss.dieWithZero">💀 Die W/ Zero</button>
+    <!-- Feature 015 follow-up — Withdraw Strategy on the same row as Safe/Exact/DWZ.
+         These buttons share state with #btnObjectiveEstate / #btnObjectiveTax in
+         the Retirement → Withdrawal Strategy card. setWithdrawalObjective() syncs
+         both pairs. -->
+    <div class="gate__withdraw-strategy" role="group" aria-label="Withdraw Strategy">
+      <span class="gws-label" data-i18n="withdraw.strategy.label">Withdraw Strategy:</span>
+      <button id="btnObjectiveEstateInline" role="radio" aria-checked="true"
+              onclick="setWithdrawalObjective('leave-more-behind')" data-i18n="withdrawal.objective.estate">🧳 Leave more behind</button>
+      <button id="btnObjectiveTaxInline" role="radio" aria-checked="false"
+              onclick="setWithdrawalObjective('retire-sooner-pay-less-tax')" data-i18n="withdrawal.objective.tax">⚡ Pay less lifetime tax</button>
+    </div>
   </div>
 
   <!-- ==================== Feature 013 — Tabbed Navigation ==================== -->
@@ -2895,7 +3071,7 @@
         <button class="pill active" data-tab="geography" data-pill="scenarios" role="tab" aria-selected="true" data-i18n="nav.pill.scenarios">Scenarios</button>
         <button class="pill" data-tab="geography" data-pill="country-chart" role="tab" aria-selected="false" data-i18n="nav.pill.countryChart">Country Chart</button>
         <button class="pill" data-tab="geography" data-pill="healthcare" role="tab" aria-selected="false" data-i18n="nav.pill.healthcare">Healthcare</button>
-        <button class="pill" data-tab="geography" data-pill="country-deep-dive" role="tab" aria-selected="false" data-i18n="nav.pill.countryDeepDive">Country Deep-Dive</button>
+        <!-- Feature 015 follow-up — Country Deep-Dive pill removed; #scenarioInsight now appears inline under the country grid below. -->
       </nav>
       <div class="pill-host" data-tab="geography" data-pill="scenarios">
   <div class="card span-3">
@@ -2923,6 +3099,13 @@
     </div>
     <div class="scenario-grid" id="scenarioGrid">
       <!-- filled by JS -->
+    </div>
+    <!-- Feature 015 follow-up — Country Deep-Dive content moved here from a
+         separate pill, so clicking a country shows the deep-dive details inline
+         instead of jumping tabs. The same #scenarioInsight ID is preserved so
+         the existing populator (renderScenarios) writes here unchanged. -->
+    <div class="coast-fire-note" id="scenarioInsight" style="margin-top:16px" data-i18n="geo.selectHint">
+      Select a scenario above to see detailed analysis.
     </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
@@ -2975,12 +3158,7 @@
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
-      <div class="pill-host" data-tab="geography" data-pill="country-deep-dive" hidden>
-    <div class="coast-fire-note" id="scenarioInsight" style="margin-top:16px" data-i18n="geo.selectHint">
-      Select a scenario above to see detailed analysis.
-    </div>
-        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next" disabled>Next →</button>
-      </div>
+      <!-- Feature 015 follow-up — country-deep-dive pill-host removed; content is now inline in the scenarios pill-host above. -->
     </section>
 
     <section id="tab-retirement" class="tab-panel" data-tab="retirement" hidden role="tabpanel" aria-labelledby="tabBtn-retirement">
@@ -3317,8 +3495,13 @@
       <!-- T024: confirm overlay (FR-018) — shown after a drag ends; DOM overlay per research R4 -->
       <div class="override-confirm" id="overrideConfirm" hidden role="dialog" aria-live="polite" aria-label="Confirm retirement age override">
         <span class="override-confirm__label" id="overrideConfirmLabel" data-i18n="override.confirmLabel">Recalculate for retirement at age {0}?</span>
-        <button class="override-confirm__apply" id="overrideConfirmApply" type="button" data-i18n="override.applyButton">Recalculate</button>
-        <button class="override-confirm__cancel" id="overrideConfirmCancel" type="button" aria-label="Cancel" data-i18n="override.cancelButton">✕</button>
+        <!-- Feature 015 follow-up — added inline onclick as a robust fallback in case
+             addEventListener binding fails (race conditions during init), AND so the
+             handler is reachable even if a child element captures the click. -->
+        <button class="override-confirm__apply" id="overrideConfirmApply" type="button"
+                onclick="_applyConfirmedOverride()" data-i18n="override.applyButton">Recalculate</button>
+        <button class="override-confirm__cancel" id="overrideConfirmCancel" type="button" aria-label="Cancel"
+                onclick="_hideConfirmOverlay(); _cancelPreviewAndRevert();" data-i18n="override.cancelButton">✕</button>
       </div>
     </div>
     <!-- T027: reset-to-calculated control (FR-003) — visible only when override active -->
@@ -3326,6 +3509,8 @@
     <!-- T025 (feature-007 §Change 9) — lifetime-tax-comparison caption. Populated
          by renderGrowthChart on every recalc. Hidden by default; shown when data exists. -->
     <p class="chart-caveat" id="lifetimeTaxComparison" style="margin:10px 0 0 0;padding:8px 12px;background:rgba(108,99,255,0.05);border:1px solid rgba(108,99,255,0.22);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5;display:none"></p>
+    <!-- Feature 015 US1 — shortfall caption (FR-002). Visible only when shortfall years exist. -->
+    <p class="chart-caveat" id="lifecycleShortfallCaption" data-i18n="lifecycle.shortfall.caption" style="margin:10px 0 0 0;padding:8px 12px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.35);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5;display:none">Red-shaded years: active strategy cannot fund spending from any allowed pool.</p>
     <div class="fire-drag-hint" id="fireDragHint" data-i18n="fire.dragHint">💡 Drag the 🔥 FIRE triangle to the right to see what happens if you retire later</div>
     <div id="fireOverrideBanner" class="fire-override-banner">
       <button class="fire-override-reset" onclick="resetFireOverride()">↺ Reset</button>
@@ -3430,6 +3615,7 @@
               <button class="audit-flow__stage" data-target="audit-section-inputs">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.inputs">Inputs</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-inputs"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-inputs"></ol>
               </button>
               <span class="audit-flow__arrow" aria-hidden="true">▶</span>
               <span class="audit-flow__arrow-label" id="audit-flow-arrow-inputs-spending"></span>
@@ -3437,6 +3623,7 @@
               <button class="audit-flow__stage" data-target="audit-section-spending">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.spending">Spending Adjustments</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-spending"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-spending"></ol>
               </button>
               <span class="audit-flow__arrow" aria-hidden="true">▶</span>
               <span class="audit-flow__arrow-label" id="audit-flow-arrow-spending-gates"></span>
@@ -3444,6 +3631,7 @@
               <button class="audit-flow__stage" data-target="audit-section-gates">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.gates">Gate Evaluations</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-gates"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-gates"></ol>
               </button>
               <span class="audit-flow__arrow" aria-hidden="true">▶</span>
               <span class="audit-flow__arrow-label" id="audit-flow-arrow-gates-fireAge"></span>
@@ -3451,6 +3639,7 @@
               <button class="audit-flow__stage" data-target="audit-section-fireage">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.fireAge">FIRE Age</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-fireAge"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-fireAge"></ol>
               </button>
               <span class="audit-flow__arrow" aria-hidden="true">▶</span>
               <span class="audit-flow__arrow-label" id="audit-flow-arrow-fireAge-strategy"></span>
@@ -3458,6 +3647,7 @@
               <button class="audit-flow__stage" data-target="audit-section-strategy">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.strategy">Strategy Ranking</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-strategy"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-strategy"></ol>
               </button>
               <span class="audit-flow__arrow" aria-hidden="true">▶</span>
               <span class="audit-flow__arrow-label" id="audit-flow-arrow-strategy-lifecycle"></span>
@@ -3465,6 +3655,7 @@
               <button class="audit-flow__stage" data-target="audit-section-lifecycle">
                 <div class="audit-flow__label" data-i18n="audit.flow.stage.lifecycle">Lifecycle</div>
                 <div class="audit-flow__headline" id="audit-flow-headline-lifecycle"></div>
+                <ol class="audit-flow__substeps" id="audit-flow-substeps-lifecycle"></ol>
               </button>
             </div>
           </section>
@@ -3554,15 +3745,30 @@
 <div class="save-toast" id="saveToast">✅ Snapshot saved!</div>
 
 <!--
-  ES-module bootstrap (T019 / feature 001-modular-calc-engine).
-  Exposes pure calc modules to the classic <script> glue below via window.*.
-  Must execute before any code that reads window.chartState or window.makeInflation.
+  Classic-script bootstrap (Feature 015 follow-up — converted from ES-module
+  bootstrap T019). The original ES-module imports failed under file:// because
+  ES module requests require CORS-clean origins (file:// fails CORS, blocking
+  the imports and breaking the dashboard for users who open the HTML directly).
+  Loading these as classic scripts works under file:// because <script src=>
+  isn't subject to the same CORS rules.
+
+  These scripts use UMD-style global registration: they assign chartState and
+  makeInflation to globalThis at the end of each file. The assignments below
+  preserve window.chartState / window.makeInflation for any code that reads
+  them by name.
 -->
-<script type="module">
-  import { chartState } from './calc/chartState.js';
-  import { makeInflation } from './calc/inflation.js';
-  window.chartState = chartState;
-  window.makeInflation = makeInflation;
+<script src="calc/chartState.js"></script>
+<script src="calc/inflation.js"></script>
+<script>
+  // Forward globals onto window (already done by globalThis.* in the modules,
+  // but assign explicitly so any code that captures these at parse-time sees
+  // them populated). Then signal bootstrap-ready for any code that listens.
+  if (typeof globalThis !== 'undefined' && globalThis.chartState) {
+    window.chartState = globalThis.chartState;
+  }
+  if (typeof globalThis !== 'undefined' && globalThis.makeInflation) {
+    window.makeInflation = globalThis.makeInflation;
+  }
   window.__calcBootstrapReady = true;
   document.dispatchEvent(new Event('calc-bootstrap-ready'));
 </script>
@@ -5293,7 +5499,8 @@ const TRANSLATIONS = {
     'nav.pill.scenarios':      'Scenarios',
     'nav.pill.countryChart':   'Country Chart',
     'nav.pill.healthcare':     'Healthcare',
-    'nav.pill.countryDeepDive':'Country Deep-Dive',
+    // Feature 015 follow-up — `nav.pill.countryDeepDive` removed; the deep-dive
+    // pill was retired and #scenarioInsight is now inline under the country grid.
     'nav.pill.ss':             'Social Security',
     'nav.pill.withdrawal':     'Withdrawal Strategy',
     'nav.pill.drawdown':       'Drawdown',
@@ -5346,6 +5553,29 @@ const TRANSLATIONS = {
     'audit.empty.noRecalc':                     'No calculation results yet — change any input or click Reset.',
     'audit.empty.strategyPending':              'Strategy ranking pending — please wait for the next recalc.',
     'audit.label.winnerBadge':                  'winner',
+    // Feature 015 US1 — shortfall visibility (chart overlay + audit row class + Copy Debug)
+    'lifecycle.shortfall.caption':              'Red-shaded years: active strategy cannot fund spending from any allowed pool.',
+    'lifecycle.shortfall.tooltipPrefix':        'Shortfall — strategy could not fund spending',
+    'audit.lifecycle.shortfallColumn.title':    'Shortfall',
+    'audit.lifecycle.shortfallColumn.value.true':  'Yes',
+    'audit.lifecycle.shortfallColumn.value.false': '—',
+    // Feature 015 US4 — Audit Strategy Ranking active sort-key labels (FR-016)
+    'audit.mode.safe.constraint':               'Safe — every retirement-year total ≥ buffer × annual spend AND end balance ≥ 0',
+    'audit.mode.exact.constraint':              'Exact — end balance ≥ terminal buffer × annual spend',
+    'audit.mode.dwz.constraint':                'Die With Zero — end balance ≈ $0 at plan age',
+    'audit.objective.preserve.label':           'Preserve estate',
+    'audit.objective.minimizeTax.label':        'Minimize lifetime tax',
+    'audit.sortKey.residualArea.desc':          'residualArea ↓ (sum of yearly totals from FIRE age to plan age)',
+    'audit.sortKey.cumulativeFederalTax.asc':   'cumulativeFederalTax ↑ (sum of yearly federal tax from FIRE age to plan age)',
+    'audit.sortKey.endBalance.desc':            'endBalance ↓ (highest end-of-plan balance wins)',
+    'audit.sortKey.absEndBalance.asc':          '|endBalance| ↑ (closest to $0 wins — DWZ tie-breaker)',
+    'audit.sortKey.strategyId.asc':             'strategyId alphabetical (final deterministic tie-breaker)',
+    'audit.strategyRanking.modeConstraint.label':   'Mode constraint: {0}',
+    'audit.strategyRanking.objectiveLabel.label':   'Objective: {0}',
+    'audit.strategyRanking.primarySortKey.label':   'Primary sort: {0}',
+    'audit.strategyRanking.tieBreakerChain.label':  'Tie-breakers: {0} → {1}',
+    // Feature 015 follow-up — Withdraw Strategy label inline beside Safe/Exact/DWZ
+    'withdraw.strategy.label':                  'Withdraw Strategy:',
   },
   zh: {
     'header.title': 'Roger & Rebecca FIRE 指揮中心',
@@ -6192,7 +6422,7 @@ const TRANSLATIONS = {
     'nav.pill.scenarios':      '情境',
     'nav.pill.countryChart':   '國家比較圖',
     'nav.pill.healthcare':     '醫療',
-    'nav.pill.countryDeepDive':'國家詳情',
+    // Feature 015 follow-up — nav.pill.countryDeepDive removed (pill retired).
     'nav.pill.ss':             '社會安全金',
     'nav.pill.withdrawal':     '提款策略',
     'nav.pill.drawdown':       '資產提領',
@@ -6245,6 +6475,29 @@ const TRANSLATIONS = {
     'audit.empty.noRecalc':                     '尚未進行計算 — 請變更輸入或點選重設。',
     'audit.empty.strategyPending':              '策略排名計算中 — 請等待下次重新計算。',
     'audit.label.winnerBadge':                  '勝出',
+    // Feature 015 US1 — shortfall visibility (chart overlay + audit row class + Copy Debug)
+    'lifecycle.shortfall.caption':              '紅色標示年份：當前策略無法從任何允許的資金池支應該年度支出。',
+    'lifecycle.shortfall.tooltipPrefix':        '資金缺口 — 策略無法支應支出',
+    'audit.lifecycle.shortfallColumn.title':    '資金缺口',
+    'audit.lifecycle.shortfallColumn.value.true':  '是',
+    'audit.lifecycle.shortfallColumn.value.false': '—',
+    // Feature 015 US4 — Audit Strategy Ranking active sort-key labels (FR-016)
+    'audit.mode.safe.constraint':               '安全 — 每年退休後總額 ≥ 緩衝倍數 × 年度支出，且期末餘額 ≥ 0',
+    'audit.mode.exact.constraint':              '精確 — 期末餘額 ≥ 期末緩衝倍數 × 年度支出',
+    'audit.mode.dwz.constraint':                'Die With Zero — 預定壽命年齡時期末餘額 ≈ $0',
+    'audit.objective.preserve.label':           '保留遺產',
+    'audit.objective.minimizeTax.label':        '終身稅額最小化',
+    'audit.sortKey.residualArea.desc':          'residualArea ↓（FIRE 年齡至預定壽命年齡的年度總額累加）',
+    'audit.sortKey.cumulativeFederalTax.asc':   'cumulativeFederalTax ↑（FIRE 年齡至預定壽命年齡的年度聯邦稅額累加）',
+    'audit.sortKey.endBalance.desc':            'endBalance ↓（期末餘額最高者勝出）',
+    'audit.sortKey.absEndBalance.asc':          '|endBalance| ↑（最接近 $0 者勝出 — DWZ 平手條件）',
+    'audit.sortKey.strategyId.asc':             'strategyId 字母順序（最終決定平手條件）',
+    'audit.strategyRanking.modeConstraint.label':   '模式限制：{0}',
+    'audit.strategyRanking.objectiveLabel.label':   '目標：{0}',
+    'audit.strategyRanking.primarySortKey.label':   '主排序：{0}',
+    'audit.strategyRanking.tieBreakerChain.label':  '平手條件:{0} → {1}',
+    // Feature 015 follow-up — Withdraw Strategy label
+    'withdraw.strategy.label':                  '提領策略：',
   }
 };
 
@@ -6760,8 +7013,11 @@ function setWithdrawalObjective(id) {
   try { localStorage.setItem('fire_withdrawalObjective', id); } catch (_e) {}
   const btnEstate = document.getElementById('btnObjectiveEstate');
   const btnTax = document.getElementById('btnObjectiveTax');
+  // Feature 015 follow-up — sync the inline (header-row) buttons too.
+  const btnEstateInline = document.getElementById('btnObjectiveEstateInline');
+  const btnTaxInline = document.getElementById('btnObjectiveTaxInline');
+  const isEstate = id === 'leave-more-behind';
   if (btnEstate && btnTax) {
-    const isEstate = id === 'leave-more-behind';
     btnEstate.setAttribute('aria-checked', isEstate ? 'true' : 'false');
     btnTax.setAttribute('aria-checked', isEstate ? 'false' : 'true');
     btnEstate.style.background = isEstate ? 'var(--accent)' : 'var(--card)';
@@ -6770,6 +7026,10 @@ function setWithdrawalObjective(id) {
     btnTax.style.background = isEstate ? 'var(--card)' : 'var(--accent)';
     btnTax.style.color = isEstate ? 'var(--text-dim)' : '#fff';
     btnTax.style.borderColor = isEstate ? 'var(--border)' : 'var(--accent)';
+  }
+  if (btnEstateInline && btnTaxInline) {
+    btnEstateInline.setAttribute('aria-checked', isEstate ? 'true' : 'false');
+    btnTaxInline.setAttribute('aria-checked', isEstate ? 'false' : 'true');
   }
   if (_lastStrategyResults && _lastStrategyResults.rows) {
     _lastStrategyResults = rankByObjective(_lastStrategyResults.rows, id, fireMode);
@@ -6934,6 +7194,12 @@ function renderKpiCards(state) {
       ? '$' + Math.round(snap.accessibleFireNum).toLocaleString()
       : '—';
   }
+  // Feature 015 follow-up — mirror Net Worth + FIRE Number to the inline
+  // header KPI strip (visible only when .header--compact is active).
+  const ikpiNW = document.getElementById('ikpiNetWorth');
+  const ikpiFN = document.getElementById('ikpiFIRENum');
+  if (ikpiNW) ikpiNW.textContent = (netWorthEl && netWorthEl.textContent) || '—';
+  if (ikpiFN) ikpiFN.textContent = (fireNumEl && fireNumEl.textContent) || '—';
   if (fireNumSubEl) {
     fireNumSubEl.textContent = t('dyn.accessibleNeededSub', snap.scenarioFlag, snap.mortgageEnabled ? ' 🏠' : '');
   }
@@ -7751,6 +8017,40 @@ let _dwzPreciseCache = null;
 // linear interpolation across the feasibility boundary. For Safe and Exact,
 // the constraint set is multi-dimensional so we use integer-year precision
 // (Safe's extra phase-transition constraints aren't smoothly monotonic).
+// Feature 015 US3 — drag-skip guard. Set by the FIRE-marker drag handler so
+// the per-strategy finder is short-circuited during interactive drag (FR-010).
+// Cleared on input change OR after 500ms idle following drag-end. Lives on
+// globalThis to be reachable from any function in either HTML file.
+if (typeof globalThis !== 'undefined') {
+  if (typeof globalThis._userDraggedFireAge === 'undefined') globalThis._userDraggedFireAge = false;
+  if (typeof globalThis._userDraggedFireAgeValue === 'undefined') globalThis._userDraggedFireAgeValue = undefined;
+}
+
+// Feature 015 US3 — per-strategy FIRE age finder (Option B per clarification
+// 2026-04-27). Surfaced via the Audit Strategy Ranking section so the user can
+// see different per-strategy ages. The displayed FIRE age (chart input) is
+// still produced by `findFireAgeNumerical` for backward-compat with the
+// existing chart pipeline.
+function findPerStrategyFireAge(strategyId, inp, annualSpend, mode) {
+  if (typeof getStrategies !== 'function') return null;
+  const policies = getStrategies();
+  const strategy = policies && policies.find(s => s.id === strategyId);
+  if (!strategy) return null;
+  const endAge = inp.endAge || 95;
+  const baseAge = inp.ageRoger || inp.agePerson1 || 30;
+  const maxYrs = Math.min(45, Math.max(0, endAge - baseAge - 1));
+  for (let y = 0; y <= maxYrs; y++) {
+    const candidateFireAge = baseAge + y;
+    try {
+      const sim = signedLifecycleEndBalance(inp, annualSpend, candidateFireAge);
+      if (isFireAgeFeasible(sim, inp, annualSpend, mode, candidateFireAge)) {
+        return { strategyId, perStrategyFireAge: candidateFireAge, feasible: true };
+      }
+    } catch (_e) { /* skip non-feasible candidate */ }
+  }
+  return { strategyId, perStrategyFireAge: null, feasible: false };
+}
+
 function findFireAgeNumerical(inp, annualSpend, mode) {
   const endAge = inp.endAge || 95;
   const ageRoger = inp.ageRoger;
@@ -8320,8 +8620,19 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         lastRow.irmaaBreached = mix.irmaaBreached;
         lastRow.rule55Active = mix.rule55Active;
         lastRow.magi = mix.magi;
+        // Feature 015 US1 — shortfall flag. True when the active strategy could
+        // not fund spending from any allowed pool this year (mix.shortfall > 0
+        // means stocks were debited beyond zero, then clamped). Consumers:
+        // lifecycle chart shortfall overlay plugin, audit table .has-shortfall
+        // row class, Copy Debug audit.lifecycleProjection.rows[].hasShortfall.
+        lastRow.hasShortfall = (mix.shortfall || 0) > 0;
       }
     }
+  }
+  // Feature 015 US1 — accumulation-phase rows have no shortfall by construction
+  // (no withdrawal happens). Backfill the field so consumers don't see undefined.
+  for (const row of data) {
+    if (row.hasShortfall === undefined) row.hasShortfall = false;
   }
   // Conservation diagnostic - flag rows where pStocks > total (impossible by construction).
   // If this fires, the chart's "Stocks above Total" visual is a real calc bug, not a
@@ -8707,6 +9018,49 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     }
   }
 
+  // === Step 7.5 (Feature 015 follow-up B-015-6): Spending-floor pass ===
+  // Bracket-fill smoothing (Step 2) + IRMAA cap (Step 7) are TAX OPTIMIZATIONS.
+  // They must not override the user's need to fund the year's spending. If after
+  // all the prior steps the user still has a shortfall AND there's untapped
+  // pTrad, draw additional Trad to close the gap. Funding spending takes priority
+  // over IRMAA ("not eating" outranks "Medicare premium hike").
+  //
+  // Bug surfaced (2026-04-27, RR scenario): age 65 with pStocks=0, pCash=0,
+  // pRoth=0, pTrad=$325k, grossSpend=$60.1k, ssIncome=0. Without this pass,
+  // the smoothed target ($325k / 35yrs ≈ $9.3k) becomes a HARD CAP — leaving a
+  // ~$50k shortfall every year for ages 63–69 until SS kicks in. With this pass,
+  // the strategy draws enough Trad to fund spending and accepts the higher
+  // marginal tax burden as the cost of solvency.
+  let floorPassActivated = false;
+  if (canAccess401k && stillNeeded > 0 && wTrad < pTrad) {
+    for (let floorIter = 0; floorIter < 5 && stillNeeded > 0 && wTrad < pTrad; floorIter++) {
+      // Gross-up the shortfall by 1.30x to account for the marginal tax bite of
+      // additional Trad. Overestimate is fine — the result is clamped to remaining
+      // pTrad, and any over-draw flows into syntheticConversion (Step 8) where
+      // it accumulates back into stocks rather than being lost.
+      const grossedUp = stillNeeded * 1.30;
+      const additionalTradForFloor = Math.min(pTrad - wTrad, grossedUp);
+      if (additionalTradForFloor < 1) break;
+      wTrad += additionalTradForFloor;
+      phase = computeSpendMix(wTrad);
+      wRoth = phase.wRoth;
+      wStocks = phase.wStocks;
+      wCash = phase.wCash;
+      ltcgTax = phase.ltcgTax;
+      taxOwed = phase.taxOwed;
+      ordIncome = phase.ordIncome;
+      stillNeeded = phase.shortfall;
+      floorPassActivated = true;
+    }
+    if (floorPassActivated) {
+      magi = wTrad + taxableSS + wStocks * gainPct;
+      // The floor pass may push MAGI above the IRMAA threshold; that's expected.
+      if (irmaaThreshold > 0 && age >= 63 && magi > effectiveIrmaaCap) {
+        irmaaBreached = true;
+      }
+    }
+  }
+
   // === Step 8: Synthetic conversion — excess of net receipts over gross spend ===
   const totalTax = taxOwed + ltcgTax;
   const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
@@ -9043,7 +9397,28 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
         const add = Math.min(gap, avail.pRoth);
         wRoth += add; avail.pRoth -= add;
       } else {
-        break;
+        break; // exhausted non-Trad pools — fall through to floor pass
+      }
+    }
+    let preliminary = computeNet();
+    let preliminaryShortfall = Math.max(0, grossSpend - (preliminary.grossReceivedLocal - preliminary.totalTaxLocal));
+
+    // === Spending-floor pass (Feature 015 follow-up B-015-7) ===
+    // Mirrors the fix in taxOptimizedWithdrawal Step 7.5: the θ cap is a tax
+    // optimization that must not override spending. If the user is starving
+    // post-Roth/post-Stocks/post-Cash AND has untapped pTrad, draw more Trad —
+    // the alternative is starvation, which is not an acceptable trade-off.
+    const availTrad = Math.max(0, pools.pTrad - wTrad - rmd);
+    if (canAccess401k && preliminaryShortfall > 0 && availTrad > 0) {
+      let stillNeeded = preliminaryShortfall;
+      for (let floorIter = 0; floorIter < 5 && stillNeeded > 10; floorIter++) {
+        const remainingPTrad = Math.max(0, pools.pTrad - wTrad);
+        if (remainingPTrad < 1) break;
+        const additional = Math.min(remainingPTrad, stillNeeded * 1.30);
+        if (additional < 1) break;
+        wTrad += additional;
+        const r2 = computeNet();
+        stillNeeded = Math.max(0, grossSpend - (r2.grossReceivedLocal - r2.totalTaxLocal));
       }
     }
     const final = computeNet();
@@ -9246,11 +9621,24 @@ function scoreAndRank(inp, fireAge, mode, objective) {
       if (endOfPlanNetWorthReal < 0) feasible = false;
     }
 
+    // Feature 015 US4 — residualArea: sum of per-year totals between FIRE
+    // age and plan age. Higher = more wealth on the books across more years
+    // = better for "Preserve estate" objective. Per orthogonality contract §4.
+    let residualArea = 0;
+    for (const row of perYearRows) {
+      const t = (typeof row.totalEnd === 'number' && Number.isFinite(row.totalEnd)) ? row.totalEnd : 0;
+      residualArea += t;
+    }
+    residualArea = Math.round(residualArea);
+
     return {
       strategyId: strategy.id,
       perYearRows,
       endOfPlanNetWorthReal,
       lifetimeFederalTaxReal: lifetimeTax,
+      // Feature 015 US4 — orthogonal sort-key fields (FR-014, FR-015).
+      cumulativeFederalTaxReal: Math.round(lifetimeTax),
+      residualAreaReal: residualArea,
       averageEffectiveTaxRate: avgEffRate,
       earliestFeasibleFireAge: fireAge, // Architecture B: fixed FIRE age across strategies
       feasibleUnderCurrentMode: feasible,
@@ -9338,37 +9726,58 @@ function scoreAndRank(inp, fireAge, mode, objective) {
       if (gate !== null) r.feasibleUnderCurrentMode = gate.feasible && !r.hasShortfall;
       return r;
     }
-    // 11-point θ-sweep: try θ ∈ {0, 0.1, ..., 1.0}, pick the one that minimizes
-    // lifetime federal tax (research.md §Decision 2). Tie-break by higher
-    // end-of-plan net worth so we don't pick a θ that minimizes tax by going
-    // infeasible.
+    // Feature 015 US2 — 3-pass θ-sweep: feasibility filter BEFORE tax ranking.
+    // Per specs/015-calc-debt-cleanup/contracts/theta-sweep-feasibility.contract.md §1
     //
-    // Feature 008 — chart-consistent feasibility per θ: for each θ, also check
-    // the REAL chart trajectory so we reject θ values that drain to $0 in the
-    // growth chart even though _simulateStrategyLifetime (which ignores
-    // mortgage/college/healthcare overlays) considers them feasible.
-    let best = null;
-    let bestTheta = 0.5;
+    // Pass 1 — simulate every candidate (and remember its θ + diagnostics).
+    // Pass 2 — filter to feasible candidates (no chart floor violation AND no
+    //          internal-sim shortfall). The chart-based gate alone is not enough
+    //          because the chart sees pools compound when the strategy refuses
+    //          to draw enough — that's a real infeasibility hidden by the chart.
+    // Pass 3 — rank survivors by lifetime federal tax ascending, tie-break by
+    //          higher end-of-plan net worth.
+    //
+    // If Pass 2 yields zero survivors, the strategy reports
+    // feasibleUnderCurrentMode: false and stores the lowest-tax overall θ
+    // (and its shortfall-year count) for diagnostic display in the audit.
+    const candidates = [];
     for (let i = 0; i <= 10; i++) {
       const theta = i / 10;
       const bfOptsTheta = Object.assign({}, bfOpts, { _theta: theta });
       const r = _simulateStrategyLifetime(strategy, bfOptsTheta);
       const gate = _chartFeasibility('tax-optimized-search', theta);
-      // Chart authoritative AND internal-sim shortfall clear. Without the
-      // shortfall AND, theta=0 wins the search by reporting near-zero tax
-      // because it refuses to fund spending — pools compound in the chart
-      // (so chart sees no floor breach) but the user has multi-year
-      // shortfalls that the chart misses.
       if (gate !== null) r.feasibleUnderCurrentMode = gate.feasible && !r.hasShortfall;
-      // Prefer feasible; then minimize tax; break ties by higher end balance.
-      if (!best) { best = r; bestTheta = theta; continue; }
-      if (r.feasibleUnderCurrentMode && !best.feasibleUnderCurrentMode) { best = r; bestTheta = theta; continue; }
-      if (!r.feasibleUnderCurrentMode && best.feasibleUnderCurrentMode) continue;
-      if (r.lifetimeFederalTaxReal < best.lifetimeFederalTaxReal - 100) { best = r; bestTheta = theta; continue; }
-      if (Math.abs(r.lifetimeFederalTaxReal - best.lifetimeFederalTaxReal) <= 100 &&
-          r.endOfPlanNetWorthReal > best.endOfPlanNetWorthReal + 1000) { best = r; bestTheta = theta; }
+      r.thetaUsed = theta;
+      candidates.push(r);
     }
-    if (best) best.chosenTheta = bestTheta;
+    const feasible = candidates.filter(r => r.feasibleUnderCurrentMode);
+    if (feasible.length === 0) {
+      // No feasible θ — fall back to lowest-tax overall as diagnostic only.
+      const fallback = candidates.reduce(
+        (best, r) => (r.lifetimeFederalTaxReal < best.lifetimeFederalTaxReal ? r : best),
+        candidates[0]
+      );
+      fallback.chosenTheta = fallback.thetaUsed;
+      fallback.lowestTaxOverallTheta = fallback.thetaUsed;
+      fallback.shortfallYearsAtLowestTax =
+        Array.isArray(fallback.shortfallYearAges) ? fallback.shortfallYearAges.length :
+        (fallback.hasShortfall ? 1 : 0);
+      return fallback;
+    }
+    // Pass 3 — rank survivors by tax asc, then end-balance desc.
+    let best = null;
+    let bestTheta = 0.5;
+    for (const r of feasible) {
+      if (!best) { best = r; bestTheta = r.thetaUsed; continue; }
+      if (r.lifetimeFederalTaxReal < best.lifetimeFederalTaxReal - 100) { best = r; bestTheta = r.thetaUsed; continue; }
+      if (Math.abs(r.lifetimeFederalTaxReal - best.lifetimeFederalTaxReal) <= 100 &&
+          r.endOfPlanNetWorthReal > best.endOfPlanNetWorthReal + 1000) { best = r; bestTheta = r.thetaUsed; }
+    }
+    if (best) {
+      best.chosenTheta = bestTheta;
+      best.lowestTaxOverallTheta = null;
+      best.shortfallYearsAtLowestTax = 0;
+    }
     return best;
   });
   return rankByObjective(results, objective || 'leave-more-behind', mode);
@@ -9376,39 +9785,66 @@ function scoreAndRank(inp, fireAge, mode, objective) {
 
 // Sort-only operation. Called on objective toggle (no re-simulation).
 //
-// Sort key by mode:
-//   - safe / exact: feasibility first, then user's objective (estate vs tax),
-//     then strategyId alpha. Higher end-balance OR lower tax wins per objective.
-//   - dieWithZero: feasibility first, then SMALLEST non-negative end balance
-//     (closest to $0 — what "die with zero" actually means), then lower tax
-//     (less surplus = less to be taxed on the residual), then strategyId alpha.
-//     This makes the DWZ-displayed chart actually look drained, instead of
-//     inheriting the same preservation-flavored winner as Safe/Exact.
+// Feature 015 US4 — Mode and Objective are ORTHOGONAL (clarification 2026-04-27).
+// Mode controls the end-state feasibility constraint (already applied upstream
+// as feasibleUnderCurrentMode). Objective controls the path-shape sort key
+// applied across mode-feasible candidates.
+//
+// Sort key by (mode, objective) per
+//   specs/015-calc-debt-cleanup/contracts/mode-objective-orthogonality.contract.md §1
+//
+//   safe + estate          → endBalance desc → residualArea desc → strategyId asc
+//   safe + tax             → cumulativeFederalTax asc → endBalance desc → strategyId asc
+//   exact + estate         → endBalance desc → residualArea desc → strategyId asc
+//   exact + tax            → cumulativeFederalTax asc → endBalance desc → strategyId asc
+//   dieWithZero + estate   → residualArea desc → |endBalance| asc → strategyId asc
+//                            (DWZ honors the user's preserve intent by
+//                             back-loading the drain — more residual remains
+//                             at any age before plan age. Removes the historical
+//                             "smallest end balance" silent override.)
+//   dieWithZero + tax      → cumulativeFederalTax asc → residualArea desc → strategyId asc
 function rankByObjective(results, objective, mode) {
   const isDWZ = mode === 'dieWithZero';
   const obj = objective === 'retire-sooner-pay-less-tax' ? 'tax' : 'estate';
   const END_TOL = 1000; // FR-009
   const TAX_TOL = 100;
+  const RESIDUAL_TOL = 1000;
   const alpha = (a, b) => a.strategyId.localeCompare(b.strategyId);
+  const getResidual = r => (typeof r.residualAreaReal === 'number' ? r.residualAreaReal : 0);
+  const getTax = r => (typeof r.cumulativeFederalTaxReal === 'number' ? r.cumulativeFederalTaxReal : (r.lifetimeFederalTaxReal || 0));
+  const getEnd = r => (typeof r.endOfPlanNetWorthReal === 'number' ? r.endOfPlanNetWorthReal : 0);
   const rows = results.slice().sort((a, b) => {
     // Infeasible strategies sorted to the bottom regardless of score.
     if (a.feasibleUnderCurrentMode !== b.feasibleUnderCurrentMode) {
       return a.feasibleUnderCurrentMode ? -1 : 1;
     }
-    const endGap = b.endOfPlanNetWorthReal - a.endOfPlanNetWorthReal;
-    const taxGap = a.lifetimeFederalTaxReal - b.lifetimeFederalTaxReal;
-    if (isDWZ) {
-      // Smaller endBalance wins (closest to $0 among feasible).
-      const drainGap = a.endOfPlanNetWorthReal - b.endOfPlanNetWorthReal;
-      if (Math.abs(drainGap) > END_TOL) return drainGap > 0 ? 1 : -1;
-      if (Math.abs(taxGap) > TAX_TOL) return taxGap > 0 ? 1 : -1;
+    const endA = getEnd(a), endB = getEnd(b);
+    const taxA = getTax(a), taxB = getTax(b);
+    const resA = getResidual(a), resB = getResidual(b);
+    if (isDWZ && obj === 'estate') {
+      const resGap = resB - resA;
+      if (Math.abs(resGap) > RESIDUAL_TOL) return resGap > 0 ? 1 : -1;
+      const absGap = Math.abs(endA) - Math.abs(endB);
+      if (Math.abs(absGap) > END_TOL) return absGap > 0 ? 1 : -1;
       return alpha(a, b);
     }
-    if (obj === 'estate') {
-      if (Math.abs(endGap) > END_TOL) return endGap > 0 ? 1 : -1;
+    if (isDWZ && obj === 'tax') {
+      const taxGap = taxA - taxB;
       if (Math.abs(taxGap) > TAX_TOL) return taxGap > 0 ? 1 : -1;
+      const resGap = resB - resA;
+      if (Math.abs(resGap) > RESIDUAL_TOL) return resGap > 0 ? 1 : -1;
+      return alpha(a, b);
+    }
+    // Safe/Exact branches.
+    if (obj === 'estate') {
+      const endGap = endB - endA;
+      if (Math.abs(endGap) > END_TOL) return endGap > 0 ? 1 : -1;
+      const resGap = resB - resA;
+      if (Math.abs(resGap) > RESIDUAL_TOL) return resGap > 0 ? 1 : -1;
       return alpha(a, b);
     } else {
+      const taxGap = taxA - taxB;
+      const endGap = endB - endA;
       if (Math.abs(taxGap) > TAX_TOL) return taxGap > 0 ? 1 : -1;
       if (Math.abs(endGap) > END_TOL) return endGap > 0 ? 1 : -1;
       return alpha(a, b);
@@ -11018,17 +11454,17 @@ function renderScenarios(inp) {
     // V1 — `is-interactive` opts this card into the .card.is-interactive:hover accent rule.
     card.className = 'scenario-card is-interactive' + (s.id === selectedScenario ? ' selected' : '');
     card.onclick = () => {
-      // Feature 013 (FR-029) — clicking a country card switches to the
-      // Country Deep-Dive pill. The pill-host visibility is owned by the
-      // tab router via the [hidden] attribute, so the legacy `.is-open`
-      // class on #scenarioInsight is no longer load-bearing for show/hide
-      // (we keep adding it so any inner CSS that styles `.is-open` still
-      // resolves correctly).
+      // Feature 015 follow-up — clicking a country no longer jumps to a
+      // separate "Country Deep-Dive" pill (that pill was removed). The
+      // #scenarioInsight panel now lives directly under the country grid
+      // in the same Scenarios pill-host, so renderScenarios populates it
+      // and the user sees the result inline. Scroll the panel into view
+      // so the user notices the new content.
       const insight = document.getElementById('scenarioInsight');
       selectedScenario = s.id;
-      if (insight) insight.classList.add('is-open');
-      if (window.tabRouter) {
-        window.tabRouter.activate('geography', 'country-deep-dive', 'click');
+      if (insight) {
+        insight.classList.add('is-open');
+        try { insight.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_e) {}
       }
       recalcAll();
     };
@@ -11247,10 +11683,14 @@ function setupFireDragListeners() {
       // preview before this new drag begins.
       _hideConfirmOverlay();
       _previewFireAge = null;
+      // Feature 015 US3 — drag-skip guard. While the user is actively dragging,
+      // the per-strategy finder should be short-circuited (FR-010).
+      globalThis._userDraggedFireAge = true;
       // Capture the drag-start age so we can detect "did the user actually move it?"
       const startAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null)
         ? fireAgeOverride
         : calculatedFireAge;
+      globalThis._userDraggedFireAgeValue = startAge;
       _dragPreview.active = true;
       _dragPreview.dragStartAge = startAge;
       _dragPreview.previewAge = startAge;
@@ -11312,6 +11752,13 @@ function setupFireDragListeners() {
       const preview = _dragPreview.previewAge;
       const startAge = _dragPreview.dragStartAge;
       _dragPreview.active = false;
+      // Feature 015 US3 — drag-skip guard clearOnIdle. Re-enable the
+      // per-strategy finder 500ms after drag-end (idle window) so a subsequent
+      // recalc gets fresh per-strategy ages. Earlier input changes also clear.
+      setTimeout(() => {
+        globalThis._userDraggedFireAge = false;
+        globalThis._userDraggedFireAgeValue = undefined;
+      }, 500);
       if (preview != null && startAge != null && preview !== startAge) {
         _showConfirmOverlay(preview);
       } else {
@@ -11368,9 +11815,17 @@ function _cancelPreviewAndRevert() {
 // All subscribers registered in T021 fan out automatically from here.
 function _applyConfirmedOverride() {
   const overlay = document.getElementById('overrideConfirm');
-  if (!overlay) return;
+  if (!overlay) {
+    console.warn('[applyOverride] overlay element not found');
+    return;
+  }
   const age = Number(overlay.dataset.previewAge);
-  if (!Number.isFinite(age)) { _hideConfirmOverlay(); return; }
+  if (!Number.isFinite(age)) {
+    console.warn('[applyOverride] no valid previewAge on overlay; aborting', overlay.dataset);
+    _hideConfirmOverlay();
+    return;
+  }
+  console.log('[applyOverride] applying override for age', age);
   _previewFireAge = null; // clear preview before chartState notifies subscribers
   _hideConfirmOverlay();
   // Mark the drag-hint as seen once the user has completed a full drag→confirm cycle.
@@ -11394,7 +11849,22 @@ function _applyConfirmedOverride() {
       cs.revalidateFeasibilityAt(age, feasibleAtAge);
     } catch (_e) { /* defensive: never block override on feasibility calc */ }
   }
-  else _setOverrideFire(age);
+  else {
+    // Feature 015 follow-up — when chartState ES module fails to load (CORS
+    // under file:// protocol), the listeners never fire. Set the fallback
+    // override AND call recalcAll() directly so the dashboard re-renders.
+    // Also show the reset button manually (its visibility is normally driven
+    // by the chartState onChange listener).
+    console.warn('[applyOverride] chartState unavailable (file:// CORS); using direct recalcAll fallback');
+    _setOverrideFire(age);
+    try {
+      if (typeof recalcAll === 'function') recalcAll();
+      const resetBtn = document.getElementById('overrideReset');
+      if (resetBtn) resetBtn.hidden = false;
+    } catch (e) {
+      console.error('[applyOverride] recalcAll fallback failed', e);
+    }
+  }
 }
 
 function _setupOverrideConfirmListeners() {
@@ -11490,6 +11960,42 @@ function _applyInitialDragHintState() {
 // `irmaaCapped`, `irmaaBreached`, `rule55Active`, `magi`). A future consumer
 // that draws SS-reduction captions, IRMAA threshold lines, or Rule-of-55
 // markers reads those fields off the cached `_lastLifecycleDataset.lifecycle`.
+// Feature 015 US1 — shortfall overlay plugin. Inline custom Chart.js plugin
+// (Constitution V — no external CDN dependency). Per-instance registration
+// only on the lifecycle (growth) chart. Reads chart.options.shortfallRanges
+// (array of {xMin, xMax} age pairs) and paints rgba(255,80,80,0.18) rectangles
+// over the canvas region for those age ranges.
+//
+// Consumes: chart.options.shortfallRanges (set by renderGrowthChart from
+//           lifecycle rows where row.hasShortfall === true)
+// Consumed by: charts.growth (line ~11789) — included in plugins array
+const shortfallOverlayPlugin = {
+  id: 'shortfallOverlay',
+  afterDatasetsDraw(chart, _args, _opts) {
+    const ranges = (chart.options && chart.options.shortfallRanges) || [];
+    if (!Array.isArray(ranges) || ranges.length === 0) return;
+    const { ctx: cctx, chartArea, scales } = chart;
+    if (!cctx || !chartArea || !scales || !scales.x) return;
+    cctx.save();
+    cctx.fillStyle = 'rgba(255, 80, 80, 0.18)';
+    for (const r of ranges) {
+      // r.xMin / r.xMax are the dataset indexes (since x-axis is categorical
+      // labels of "year (age)"). Use getPixelForValue on the index, not age.
+      const x1 = scales.x.getPixelForValue(r.xMin);
+      const x2 = scales.x.getPixelForValue(r.xMax);
+      if (Number.isFinite(x1) && Number.isFinite(x2) && x2 >= x1) {
+        cctx.fillRect(
+          Math.min(x1, x2),
+          chartArea.top,
+          Math.abs(x2 - x1) + 1, // +1 so adjacent single-year ranges don't render as 0px
+          chartArea.bottom - chartArea.top
+        );
+      }
+    }
+    cctx.restore();
+  },
+};
+
 function renderGrowthChart(inp) {
   const ctx = document.getElementById('growthChart').getContext('2d');
   const scenario = scenarios.find(s => s.id === selectedScenario);
@@ -11763,6 +12269,26 @@ function renderGrowthChart(inp) {
     },
   };
 
+  // Feature 015 US1 — compute shortfall age-index ranges from the lifecycle
+  // rows. Walks the array once collecting contiguous runs of hasShortfall===true.
+  // Index-based (not age-based) because the chart's x-axis is a categorical
+  // label list, not a numeric age scale.
+  const shortfallRanges = [];
+  let runStart = -1;
+  for (let i = 0; i < lifecycle.length; i++) {
+    const isSh = lifecycle[i] && lifecycle[i].hasShortfall === true;
+    if (isSh && runStart < 0) runStart = i;
+    else if (!isSh && runStart >= 0) {
+      shortfallRanges.push({ xMin: runStart, xMax: i - 1 });
+      runStart = -1;
+    }
+  }
+  if (runStart >= 0) shortfallRanges.push({ xMin: runStart, xMax: lifecycle.length - 1 });
+
+  // Toggle the bilingual caption visibility (FR-002 / FR-005)
+  const shortfallCaption = document.getElementById('lifecycleShortfallCaption');
+  if (shortfallCaption) shortfallCaption.style.display = shortfallRanges.length > 0 ? '' : 'none';
+
   charts.growth = new Chart(ctx, {
     type: 'line',
     data: {
@@ -11773,6 +12299,8 @@ function renderGrowthChart(inp) {
       responsive: true,
       maintainAspectRatio: false,
       animation: _fireDrag.active ? false : undefined, // no animation during drag
+      // Feature 015 US1 — read by inline shortfallOverlayPlugin (above)
+      shortfallRanges,
       plugins: {
         legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
         subtitle: {
@@ -11814,7 +12342,7 @@ function renderGrowthChart(inp) {
         },
       },
     },
-    plugins: [dragHintPlugin],
+    plugins: [dragHintPlugin, shortfallOverlayPlugin],
   });
   // Feature 013 (T018) — register with the tab router for resize-on-activate.
   if (window.tabRouter) window.tabRouter.registerChart('lifecycle', charts.growth);
@@ -13398,6 +13926,18 @@ window._rebindStickyHeaderObserver();
       if (!stg) continue;
       const headlineEl = _$id('audit-flow-headline-' + stg.stageId);
       if (headlineEl) headlineEl.textContent = stg.headlineOutput || '';
+      // Feature 015 follow-up — populate the ordered sub-steps list per stage
+      // so the user sees the actual sequence of operations within each stage.
+      const substepsEl = _$id('audit-flow-substeps-' + stg.stageId);
+      if (substepsEl) {
+        substepsEl.innerHTML = '';
+        const steps = Array.isArray(stg.subSteps) ? stg.subSteps : [];
+        for (const step of steps) {
+          const li = document.createElement('li');
+          li.textContent = step;
+          substepsEl.appendChild(li);
+        }
+      }
     }
     // Arrow labels — pair each stage's downstreamArrowLabel with the
     // corresponding `audit-flow-arrow-{from}-{to}` span. Stage IDs in the
@@ -13488,6 +14028,40 @@ window._rebindStickyHeaderObserver();
     wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
+  // Feature 015 US4 — Compute the active (Mode, Objective) sort-key chain
+  // labels for plain-text display. Mirrors the resolution table in
+  // contracts/mode-objective-orthogonality.contract.md §1.
+  function _f15ActiveSortKey() {
+    const mode = (typeof currentFireMode !== 'undefined' && currentFireMode) ? currentFireMode :
+      (typeof getCurrentFireMode === 'function' ? getCurrentFireMode() : 'safe');
+    const objective = (typeof currentObjective !== 'undefined' && currentObjective) ? currentObjective :
+      (typeof getCurrentObjective === 'function' ? getCurrentObjective() : 'leave-more-behind');
+    const obj = (objective === 'retire-sooner-pay-less-tax') ? 'tax' : 'estate';
+    let primary, tieA, tieB;
+    if (mode === 'dieWithZero' && obj === 'estate') {
+      primary = 'audit.sortKey.residualArea.desc';
+      tieA = 'audit.sortKey.absEndBalance.asc';
+      tieB = 'audit.sortKey.strategyId.asc';
+    } else if (mode === 'dieWithZero' && obj === 'tax') {
+      primary = 'audit.sortKey.cumulativeFederalTax.asc';
+      tieA = 'audit.sortKey.residualArea.desc';
+      tieB = 'audit.sortKey.strategyId.asc';
+    } else if (obj === 'estate') {
+      primary = 'audit.sortKey.endBalance.desc';
+      tieA = 'audit.sortKey.residualArea.desc';
+      tieB = 'audit.sortKey.strategyId.asc';
+    } else {
+      primary = 'audit.sortKey.cumulativeFederalTax.asc';
+      tieA = 'audit.sortKey.endBalance.desc';
+      tieB = 'audit.sortKey.strategyId.asc';
+    }
+    const modeKey = mode === 'safe' ? 'audit.mode.safe.constraint'
+      : mode === 'exact' ? 'audit.mode.exact.constraint'
+      : 'audit.mode.dwz.constraint';
+    const objKey = obj === 'estate' ? 'audit.objective.preserve.label' : 'audit.objective.minimizeTax.label';
+    return { modeKey, objKey, primary, tieA, tieB };
+  }
+
   function _renderStrategyTable(snapshot) {
     const wrap = _$id('audit-table-strategy');
     if (!wrap) return;
@@ -13498,12 +14072,21 @@ window._rebindStickyHeaderObserver();
       return;
     }
     const winnerLabel = _safeT('audit.label.winnerBadge', 'winner');
+    // Feature 015 US4 — active sort-key header (FR-016)
+    const sk = _f15ActiveSortKey();
+    const headerHtml = ''
+      + '<div class="audit-active-sort-key" style="margin:0 0 0.75rem 0;padding:0.6rem 0.85rem;background:rgba(108,99,255,0.05);border-left:3px solid var(--accent);border-radius:0.4rem;font-size:0.85em;color:var(--text-dim);line-height:1.55">'
+      + '<div>' + _safeT('audit.strategyRanking.modeConstraint.label', 'Mode constraint: {0}').replace('{0}', _esc(_safeT(sk.modeKey, ''))) + '</div>'
+      + '<div>' + _safeT('audit.strategyRanking.objectiveLabel.label', 'Objective: {0}').replace('{0}', _esc(_safeT(sk.objKey, ''))) + '</div>'
+      + '<div>' + _safeT('audit.strategyRanking.primarySortKey.label', 'Primary sort: {0}').replace('{0}', _esc(_safeT(sk.primary, ''))) + '</div>'
+      + '<div>' + _safeT('audit.strategyRanking.tieBreakerChain.label', 'Tie-breakers: {0} → {1}').replace('{0}', _esc(_safeT(sk.tieA, ''))).replace('{1}', _esc(_safeT(sk.tieB, ''))) + '</div>'
+      + '</div>';
     const rows = rs.map(function (r) {
       const cls = r.isWinner ? ' class="audit-row--winner"' : '';
       const winnerBadge = r.isWinner ? ' <span class="audit-winner-badge">' + _esc(winnerLabel) + '</span>' : '';
       return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(r.endBalance) + '</td><td>' + _fmtMoney(r.lifetimeFederalTax) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function _renderLifecycleTable(snapshot) {
@@ -13517,10 +14100,18 @@ window._rebindStickyHeaderObserver();
     }
     const fireIdx = (typeof lp.fireAgeRowIndex === 'number') ? lp.fireAgeRowIndex : -1;
     const rows = rs.map(function (r, i) {
-      const cls = (i === fireIdx) ? ' class="audit-row--fireage"' : '';
-      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(r.total) + '</td><td>' + _fmtMoney(r.withdrawals) + '</td><td>' + _fmtMoney(r.ssIncome) + '</td></tr>';
+      // Feature 015 US1 — append has-shortfall class when this row's strategy
+      // could not fund spending. Mutually compatible with audit-row--fireage.
+      const classes = [];
+      if (i === fireIdx) classes.push('audit-row--fireage');
+      if (r.hasShortfall === true) classes.push('has-shortfall');
+      const cls = classes.length > 0 ? ' class="' + classes.join(' ') + '"' : '';
+      const shortfallTd = r.hasShortfall === true
+        ? '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.true', 'Yes') + '</td>'
+        : '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.false', '—') + '</td>';
+      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(r.total) + '</td><td>' + _fmtMoney(r.withdrawals) + '</td><td>' + _fmtMoney(r.ssIncome) + '</td>' + shortfallTd + '</tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function _renderCrossValRows(snapshot) {
@@ -13591,12 +14182,21 @@ window._rebindStickyHeaderObserver();
 
   // T018 — click-to-scroll wiring on the flow diagram. Single delegated
   // listener; binds at parse time because the markup is static.
+  // Feature 015 follow-up — also toggles `data-substeps-pinned` so clicking
+  // a stage pins its substeps list open (substeps also show on hover/focus,
+  // but users who want to compare two stages side-by-side can pin them).
   (function _wireAuditFlowClicks() {
     const audit = document.querySelector('#audit-flow-diagram .audit-flow');
     if (!audit) return;
     audit.addEventListener('click', function (ev) {
       const stage = ev.target && ev.target.closest && ev.target.closest('.audit-flow__stage[data-target]');
       if (!stage) return;
+      // Toggle the substeps-pinned flag so clicking pins/unpins the list.
+      if (stage.getAttribute('data-substeps-pinned') === '1') {
+        stage.removeAttribute('data-substeps-pinned');
+      } else {
+        stage.setAttribute('data-substeps-pinned', '1');
+      }
       const targetId = stage.dataset.target;
       const targetEl = document.getElementById(targetId);
       if (!targetEl) return;
@@ -13645,6 +14245,20 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
       if (state.tab === 'audit' && window._lastAuditSnapshot
           && typeof window._renderAuditUI === 'function') {
         window._renderAuditUI(window._lastAuditSnapshot);
+      }
+      // Feature 015 follow-up — re-run the milestone-timeline layout when its
+      // pill becomes active. The SVG path between milestone bullets is sized
+      // from getBoundingClientRect(); when the pill-host is hidden, the
+      // container has 0 width and the path renders invisible. A theme toggle
+      // happened to also re-render the chart which masked the bug. Run the
+      // layout AFTER the pill-host un-hides, then again on next frame so any
+      // CSS reflow from going-visible has settled.
+      if (state.tab === 'retirement' && state.pill === 'milestones'
+          && typeof layoutTimelineSerpentine === 'function') {
+        try { layoutTimelineSerpentine(); } catch (_e) {}
+        requestAnimationFrame(() => {
+          try { layoutTimelineSerpentine(); } catch (_e) {}
+        });
       }
     },
   });
@@ -14323,7 +14937,22 @@ function updateHeaderHeight() {
   const header = document.getElementById('siteHeader');
   if (!header) return;
   const bottom = header.getBoundingClientRect().bottom;
-  document.documentElement.style.setProperty('--header-height', Math.max(0, bottom) + 'px');
+  const root = document.documentElement.style;
+  root.setProperty('--header-height', Math.max(0, bottom) + 'px');
+  // Feature 015 follow-up — also expose gate + tab-bar live heights so the
+  // sticky stack (gateSelector → tabBar → pillBar) composes tight against
+  // the previous band with no visible gap. Each var is the OFFSET-FROM-VIEWPORT-TOP
+  // of the band's BOTTOM, so the next band can use it directly as its `top`.
+  const gate = document.getElementById('gateSelector');
+  if (gate) {
+    const gb = gate.getBoundingClientRect().bottom;
+    root.setProperty('--gate-bottom', Math.max(0, gb) + 'px');
+  }
+  const tabBar = document.getElementById('tabBar');
+  if (tabBar) {
+    const tb = tabBar.getBoundingClientRect().bottom;
+    root.setProperty('--tabbar-bottom', Math.max(0, tb) + 'px');
+  }
 }
 (function initHeaderHeightObserver() {
   if (document.readyState === 'loading') {
@@ -14332,11 +14961,13 @@ function updateHeaderHeight() {
     updateHeaderHeight();
   }
   if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(updateHeaderHeight);
     const header = document.getElementById('siteHeader');
-    if (header) {
-      const ro = new ResizeObserver(updateHeaderHeight);
-      ro.observe(header);
-    }
+    const gate = document.getElementById('gateSelector');
+    const tabBar = document.getElementById('tabBar');
+    if (header) ro.observe(header);
+    if (gate) ro.observe(gate);
+    if (tabBar) ro.observe(tabBar);
   } else {
     window.addEventListener('resize', updateHeaderHeight);
   }
