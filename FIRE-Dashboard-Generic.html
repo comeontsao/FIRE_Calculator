@@ -528,16 +528,86 @@
     letter-spacing: 1px;
   }
 
-  .expense-table td:last-child {
-    text-align: right;
-    font-weight: 600;
-  }
+  /* % of income column — per-row total weight. */
+  .expense-table td.exp-pct { text-align: right; font-weight: 600; }
 
   .expense-table input[type="number"] {
     width: 100px;
     padding: 6px 10px;
     text-align: right;
     font-size: 0.9em;
+  }
+
+  /* +Add / remove machinery on the expense table. */
+  .expense-table td.exp-row-action {
+    width: 36px;
+    text-align: center;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+  .exp-remove-btn {
+    width: 24px;
+    height: 24px;
+    line-height: 22px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.75em;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .exp-remove-btn:hover {
+    background: var(--danger, #ff6b6b);
+    border-color: var(--danger, #ff6b6b);
+    color: #fff;
+  }
+  .exp-locked-badge {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    line-height: 22px;
+    text-align: center;
+    color: var(--text-dim);
+    opacity: 0.6;
+    cursor: help;
+  }
+
+  .exp-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(108, 99, 255, 0.06);
+    border: 1px dashed rgba(108, 99, 255, 0.35);
+    border-radius: 8px;
+  }
+  .exp-add-row select {
+    flex: 1;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.88em;
+  }
+  .exp-add-row__btn {
+    padding: 6px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .exp-add-row__btn:hover { opacity: 0.88; }
+  .exp-add-row__btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   /* Milestone timeline — serpentine (S-shape) horizontal flow.
@@ -2475,6 +2545,65 @@
     color: rgba(255, 80, 80, 0.95);
   }
 
+  /* === Per-year asset breakdown table (Lifecycle pill) ============== */
+  /* Companion to the Full Portfolio chart — scrollable so the 50+ rows
+     don't push the rest of the page out of view. Compact monospace
+     numbers so columns line up cleanly. */
+  .lifecycle-asset-table-wrap {
+    max-height: 360px;
+    overflow-y: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  table.lifecycle-asset-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+  }
+  table.lifecycle-asset-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 0.72em;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+  }
+  table.lifecycle-asset-table thead th:first-child,
+  table.lifecycle-asset-table thead th:nth-child(2) {
+    text-align: left;
+  }
+  table.lifecycle-asset-table tbody td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--text);
+  }
+  table.lifecycle-asset-table tbody td:first-child,
+  table.lifecycle-asset-table tbody td:nth-child(2) {
+    text-align: left;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  table.lifecycle-asset-table tbody td:last-child {
+    font-weight: 600;
+    color: var(--accent2);
+  }
+  table.lifecycle-asset-table tr.lifecycle-asset-row--fire {
+    background: rgba(255, 107, 107, 0.10);
+  }
+  table.lifecycle-asset-table tr.lifecycle-asset-row--fire td:first-child::after {
+    content: ' 🔥';
+  }
+  table.lifecycle-asset-table tr:hover {
+    background: rgba(108, 99, 255, 0.06);
+  }
+
   /* === Feature 015 follow-up — Audit flow-diagram substeps list === */
   .audit-flow__substeps {
     list-style: decimal;
@@ -3122,7 +3251,7 @@
     <div class="card-title"><span class="icon">💸</span> <span data-i18n="sec.expenses">Monthly Expense Breakdown (Editable)</span></div>
     <table class="expense-table" id="expenseTable">
       <thead>
-        <tr><th data-i18n="exp.category">Category</th><th data-i18n="exp.monthly">Monthly ($)</th><th data-i18n="exp.annual">Annual ($)</th><th data-i18n="exp.pctIncome">% of Income</th></tr>
+        <tr><th data-i18n="exp.category">Category</th><th data-i18n="exp.monthly">Monthly ($)</th><th data-i18n="exp.annual">Annual ($)</th><th data-i18n="exp.pctIncome">% of Income</th><th aria-hidden="true"></th></tr>
       </thead>
       <tbody>
         <!-- filled by JS -->
@@ -3133,9 +3262,17 @@
           <td id="expTotal">—</td>
           <td id="expTotalAnnual">—</td>
           <td id="expTotalPct">—</td>
+          <td aria-hidden="true"></td>
         </tr>
       </tfoot>
     </table>
+    <!-- +Add expense picker. Translation labels populated by buildExpenseTable. -->
+    <div class="exp-add-row" role="group" aria-label="Add expense">
+      <select id="expenseLibraryPicker" aria-label="Pick category"></select>
+      <button type="button" class="exp-add-row__btn"
+              onclick="addExpenseRow(document.getElementById('expenseLibraryPicker').value)"
+              data-i18n="exp.add.button">+ Add expense</button>
+    </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
@@ -3665,6 +3802,13 @@
         </div>
       </div>
     </div>
+  </div>
+  <!-- Per-year asset breakdown — companion to the Full Portfolio chart above. -->
+  <div class="card span-3 surface--secondary lifecycle-asset-card">
+    <div class="card-title">
+      <span data-i18n="lifecycle.assetTable.title">Year-by-year asset breakdown</span>
+    </div>
+    <div class="lifecycle-asset-table-wrap" id="lifecycleAssetTable"></div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
@@ -4689,18 +4833,49 @@ function getMortgageMonthlyDelta() {
 }
 
 // ==================== DATA & STATE ====================
+// Seed for the expense table on first load. After construction the live state
+// lives in `currentExpenses` (mutable) so the user can add / remove rows.
+// The Rent / Housing row at index 0 is LOCKED — multiple parts of the calc
+// (mortgage delta, scenario rent diff) read it by hard-coded id `exp_0`, so
+// it stays at slot 0 and cannot be removed. All OTHER rows are removable.
 const defaultExpenses = [
-  { name: 'Rent / Housing', monthly: 1500 },
-  { name: 'Groceries & Dining', monthly: 600 },
-  { name: 'Childcare / Education', monthly: 0 },
-  { name: 'Transportation', monthly: 400 },
-  { name: 'Health Insurance & Medical', monthly: 300 },
-  { name: 'Utilities & Internet', monthly: 200 },
-  { name: 'Kids Activities & Stuff', monthly: 0 },
-  { name: 'Entertainment & Subscriptions', monthly: 100 },
-  { name: 'Clothing & Personal', monthly: 100 },
-  { name: 'Miscellaneous', monthly: 200 },
+  { name: 'Rent / Housing',                i18nKey: 'exp.row.rent',          monthly: 1500 },
+  { name: 'Groceries & Dining',            i18nKey: 'exp.row.groceries',     monthly: 600 },
+  { name: 'Childcare / Education',         i18nKey: 'exp.row.childcare',     monthly: 0 },
+  { name: 'Transportation',                i18nKey: 'exp.row.transport',     monthly: 400 },
+  { name: 'Health Insurance & Medical',    i18nKey: 'exp.row.health',        monthly: 300 },
+  { name: 'Utilities & Internet',          i18nKey: 'exp.row.utilities',     monthly: 200 },
+  { name: 'Kids Activities & Stuff',       i18nKey: 'exp.row.kids',          monthly: 0 },
+  { name: 'Entertainment & Subscriptions', i18nKey: 'exp.row.entertainment', monthly: 100 },
+  { name: 'Clothing & Personal',           i18nKey: 'exp.row.clothing',      monthly: 100 },
+  { name: 'Miscellaneous',                 i18nKey: 'exp.row.misc',          monthly: 200 },
 ];
+
+// Mutable working copy. Seeded from defaultExpenses, but the user may add
+// rows from EXPENSE_LIBRARY or remove any row beyond index 0. saveState /
+// restoreState round-trip this array as objects so renames + additions
+// persist cleanly.
+let currentExpenses = defaultExpenses.map(e => Object.assign({}, e));
+
+// Pre-translated catalog of categories the user can ADD to the expense
+// table. Each entry has a stable `key` (i18n + dedupe), a default monthly
+// dollar amount as a starting point, and a label that resolves through t()
+// at render time. The 'custom' entry is special — picking it prompts for a
+// free-text name (no i18nKey, just a literal `name` string).
+const EXPENSE_LIBRARY = Object.freeze([
+  Object.freeze({ key: 'pets',           i18nKey: 'expLib.pets',           monthly: 75  }),
+  Object.freeze({ key: 'travel',         i18nKey: 'expLib.travel',         monthly: 300 }),
+  Object.freeze({ key: 'subscriptions',  i18nKey: 'expLib.subscriptions',  monthly: 50  }),
+  Object.freeze({ key: 'hobbies',        i18nKey: 'expLib.hobbies',        monthly: 100 }),
+  Object.freeze({ key: 'donations',      i18nKey: 'expLib.donations',      monthly: 100 }),
+  Object.freeze({ key: 'personalCare',   i18nKey: 'expLib.personalCare',   monthly: 75  }),
+  Object.freeze({ key: 'gifts',          i18nKey: 'expLib.gifts',          monthly: 50  }),
+  Object.freeze({ key: 'homeMaint',      i18nKey: 'expLib.homeMaint',      monthly: 200 }),
+  Object.freeze({ key: 'insuranceOther', i18nKey: 'expLib.insuranceOther', monthly: 100 }),
+  Object.freeze({ key: 'phone',          i18nKey: 'expLib.phone',          monthly: 80  }),
+  Object.freeze({ key: 'gym',            i18nKey: 'expLib.gym',            monthly: 50  }),
+  Object.freeze({ key: 'custom',         i18nKey: 'expLib.custom',         monthly: 0   }),
+]);
 
 // === FEATURE 010 — Country budget scaling helpers ===
 // Contract: specs/010-country-budget-scaling/contracts/scaling-formula.contract.md
@@ -5921,6 +6096,26 @@ const TRANSLATIONS = {
     'exp.row.entertainment': 'Entertainment & Subscriptions',
     'exp.row.clothing': 'Clothing & Personal',
     'exp.row.misc': 'Miscellaneous',
+    // Library of categories the user can add via the +Add picker.
+    'expLib.pets':           'Pets',
+    'expLib.travel':         'Travel & Vacation',
+    'expLib.subscriptions':  'Subscriptions / Streaming',
+    'expLib.hobbies':        'Hobbies',
+    'expLib.donations':      'Donations / Charity',
+    'expLib.personalCare':   'Personal Care / Beauty',
+    'expLib.gifts':          'Gifts',
+    'expLib.homeMaint':      'Home Maintenance / Repairs',
+    'expLib.insuranceOther': 'Insurance (Life / Auto / Other)',
+    'expLib.phone':          'Phone & Mobile',
+    'expLib.gym':            'Gym & Fitness',
+    'expLib.custom':         'Other (custom name)',
+    // +Add / Remove UI.
+    'exp.add.button':         '+ Add expense',
+    'exp.add.placeholder':    'Pick a category…',
+    'exp.add.confirm':        'Add',
+    'exp.remove.label':       'Remove this expense',
+    'exp.custom.prompt':      'Name for the new expense:',
+    'exp.locked.title':       'Rent / Housing is locked — used by the mortgage scenario',
     'country.card.budget': 'Budget',
     'country.card.bridgeAtFire': 'Bridge $ at FIRE',
     'country.card.target25x': '25× total target',
@@ -5965,8 +6160,20 @@ const TRANSLATIONS = {
     'snap.descEstSep': '= estimated/projected. Only objective fields are tracked for changes.',
     'chart.lifecycle.totalPortfolio': 'Total Portfolio',
     'chart.lifecycle.p401k': '401K',
+    'chart.lifecycle.tradLine': 'Trad 401K',
+    'chart.lifecycle.rothLine': 'Roth 401K',
+    'chart.lifecycle.cashLine': 'Cash',
     'chart.lifecycle.stocks': 'Stocks/Brokerage',
     'chart.lifecycle.stocksShort': 'Stocks',
+    'lifecycle.assetTable.title': 'Year-by-year asset breakdown',
+    'lifecycle.assetTable.col.age': 'Age',
+    'lifecycle.assetTable.col.year': 'Year',
+    'lifecycle.assetTable.col.trad': 'Trad 401K',
+    'lifecycle.assetTable.col.roth': 'Roth 401K',
+    'lifecycle.assetTable.col.stocks': 'Stocks',
+    'lifecycle.assetTable.col.cash': 'Cash',
+    'lifecycle.assetTable.col.total': 'Total',
+    'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE (age {0})',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 Original FIRE (age {0})',
@@ -6850,6 +7057,26 @@ const TRANSLATIONS = {
     'exp.row.kids': '小孩活動與用品',
     'exp.row.entertainment': '娛樂／訂閱',
     'exp.row.clothing': '服飾／個人',
+    // 可新增類別的庫
+    'expLib.pets':           '寵物',
+    'expLib.travel':         '旅遊',
+    'expLib.subscriptions':  '訂閱／串流',
+    'expLib.hobbies':        '興趣愛好',
+    'expLib.donations':      '捐款／公益',
+    'expLib.personalCare':   '個人保養／美容',
+    'expLib.gifts':          '禮物',
+    'expLib.homeMaint':      '居家維護／修繕',
+    'expLib.insuranceOther': '保險（壽險／車險／其他）',
+    'expLib.phone':          '手機通訊',
+    'expLib.gym':            '健身',
+    'expLib.custom':         '其他（自訂名稱）',
+    // 新增／移除 UI
+    'exp.add.button':         '+ 新增項目',
+    'exp.add.placeholder':    '選擇類別…',
+    'exp.add.confirm':        '新增',
+    'exp.remove.label':       '移除此項目',
+    'exp.custom.prompt':      '新項目名稱：',
+    'exp.locked.title':       '房租／住房已鎖定 — 房貸試算需要使用',
     'exp.row.misc': '其他',
     'country.card.budget': '預算',
     'country.card.bridgeAtFire': 'FIRE 橋樑資金',
@@ -6895,8 +7122,20 @@ const TRANSLATIONS = {
     'snap.descEstSep': '＝ 估算／預測。僅追蹤實際欄位的變化。',
     'chart.lifecycle.totalPortfolio': '總投資組合',
     'chart.lifecycle.p401k': '401K',
+    'chart.lifecycle.tradLine': '傳統 401K',
+    'chart.lifecycle.rothLine': 'Roth 401K',
+    'chart.lifecycle.cashLine': '現金',
     'chart.lifecycle.stocks': '股票／應稅帳戶',
     'chart.lifecycle.stocksShort': '股票',
+    'lifecycle.assetTable.title': '逐年資產明細',
+    'lifecycle.assetTable.col.age': '年齡',
+    'lifecycle.assetTable.col.year': '年份',
+    'lifecycle.assetTable.col.trad': '傳統 401K',
+    'lifecycle.assetTable.col.roth': 'Roth 401K',
+    'lifecycle.assetTable.col.stocks': '股票',
+    'lifecycle.assetTable.col.cash': '現金',
+    'lifecycle.assetTable.col.total': '總計',
+    'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE（{0} 歲）',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 原 FIRE（{0} 歲）',
@@ -7166,45 +7405,109 @@ function setFireMode(mode) {
 }
 
 // ==================== EXPENSE TABLE ====================
-function expRowKey(name) {
-  const map = {
-    'Rent / Housing': 'exp.row.rent',
-    'Groceries & Dining': 'exp.row.groceries',
-    'Childcare / Education': 'exp.row.childcare',
-    'Transportation': 'exp.row.transport',
-    'Health Insurance & Medical': 'exp.row.health',
-    'Utilities & Internet': 'exp.row.utilities',
-    'Kids Activities & Stuff': 'exp.row.kids',
-    'Entertainment & Subscriptions': 'exp.row.entertainment',
-    'Clothing & Personal': 'exp.row.clothing',
-    'Miscellaneous': 'exp.row.misc',
-  };
-  return map[name] || name;
+// Resolve the displayed label for an expense row. Library entries and the
+// 10 seed rows have an i18nKey; user-typed custom rows fall back to the
+// stored `name` literal (no translation — see EXPENSE_LIBRARY 'custom' option).
+function _expenseLabel(exp) {
+  if (exp && exp.i18nKey && typeof t === 'function') {
+    const translated = t(exp.i18nKey);
+    if (translated && translated !== exp.i18nKey) return translated;
+  }
+  return (exp && exp.name) ? exp.name : '';
 }
+
+// Persist the current monthly value into currentExpenses[i] so add/remove
+// renders the value the user just typed (instead of resetting from seed).
+function _syncCurrentExpenseValue(i) {
+  const el = document.getElementById('exp_' + i);
+  if (!el) return;
+  const v = parseFloat(el.value);
+  if (Number.isFinite(v) && currentExpenses[i]) {
+    currentExpenses[i].monthly = v;
+  }
+}
+
 function buildExpenseTable() {
   const tbody = document.querySelector('#expenseTable tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
-  defaultExpenses.forEach((exp, i) => {
+  currentExpenses.forEach((exp, i) => {
     const tr = document.createElement('tr');
+    const label = _expenseLabel(exp);
+    const isLocked = (i === 0); // Rent / Housing — used by mortgage delta.
+    const removeCell = isLocked
+      ? `<td class="exp-row-action"><span class="exp-locked-badge" title="${t('exp.locked.title')}">🔒</span></td>`
+      : `<td class="exp-row-action"><button type="button" class="exp-remove-btn" aria-label="${t('exp.remove.label')}" title="${t('exp.remove.label')}" onclick="removeExpenseRow(${i})">✕</button></td>`;
     tr.innerHTML = `
-      <td>${t(expRowKey(exp.name))}</td>
-      <td><input type="number" id="exp_${i}" value="${exp.monthly}" onchange="recalcAll()" style="width:100px"></td>
+      <td>${label}</td>
+      <td><input type="number" id="exp_${i}" value="${exp.monthly}" onchange="_syncCurrentExpenseValue(${i});recalcAll()" style="width:100px"></td>
       <td class="exp-annual">—</td>
       <td class="exp-pct">—</td>
+      ${removeCell}
     `;
     tbody.appendChild(tr);
   });
+  _populateExpenseLibraryPicker();
 }
 
 function getExpenses() {
-  return defaultExpenses.map((exp, i) => {
-    const val = parseFloat(document.getElementById(`exp_${i}`).value) || 0;
-    return { name: exp.name, monthly: val };
+  return currentExpenses.map((exp, i) => {
+    const el = document.getElementById('exp_' + i);
+    const val = el ? (parseFloat(el.value) || 0) : exp.monthly;
+    return { name: exp.name, i18nKey: exp.i18nKey || null, monthly: val };
   });
 }
 
 function getTotalMonthlyExpenses() {
   return getExpenses().reduce((sum, e) => sum + e.monthly, 0);
+}
+
+// ----- Add / remove handlers -----
+function addExpenseRow(libKey) {
+  if (!libKey) return;
+  for (let i = 0; i < currentExpenses.length; i++) _syncCurrentExpenseValue(i);
+  const lib = EXPENSE_LIBRARY.find(e => e.key === libKey);
+  if (!lib) return;
+  if (lib.key === 'custom') {
+    const fallback = (typeof t === 'function') ? t('expLib.custom') : 'Other';
+    const name = (typeof window !== 'undefined' && typeof window.prompt === 'function')
+      ? window.prompt(t('exp.custom.prompt'), '') : '';
+    if (name === null) return;
+    const trimmed = (name || '').trim();
+    currentExpenses.push({ name: trimmed.length > 0 ? trimmed : fallback, i18nKey: null, monthly: 0 });
+  } else {
+    currentExpenses.push({ name: lib.key, i18nKey: lib.i18nKey, monthly: lib.monthly });
+  }
+  buildExpenseTable();
+  recalcAll();
+  try { saveState(); } catch (_e) { /* swallow */ }
+}
+
+function removeExpenseRow(idx) {
+  if (typeof idx !== 'number' || idx <= 0 || idx >= currentExpenses.length) return;
+  for (let i = 0; i < currentExpenses.length; i++) _syncCurrentExpenseValue(i);
+  currentExpenses.splice(idx, 1);
+  buildExpenseTable();
+  recalcAll();
+  try { saveState(); } catch (_e) { /* swallow */ }
+}
+
+function _populateExpenseLibraryPicker() {
+  const sel = document.getElementById('expenseLibraryPicker');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = (typeof t === 'function') ? t('exp.add.placeholder') : 'Pick a category…';
+  sel.appendChild(placeholder);
+  for (const lib of EXPENSE_LIBRARY) {
+    const opt = document.createElement('option');
+    opt.value = lib.key;
+    opt.textContent = (typeof t === 'function') ? t(lib.i18nKey) : lib.key;
+    sel.appendChild(opt);
+  }
+  if (prev) sel.value = prev;
 }
 
 // ==================== CORE CALCULATIONS ====================
@@ -7817,8 +8120,10 @@ function renderLifecycleSidebarChart(_state) {
     : -1;
 
   const totals = lifecycle.map(function (r) { return (typeof r.total === 'number') ? Math.round(r.total) : 0; });
-  const p401k  = lifecycle.map(function (r) { return (typeof r.p401k === 'number') ? Math.round(r.p401k) : 0; });
+  const pTrad = lifecycle.map(function (r) { return (typeof r.p401kTrad === 'number') ? Math.round(r.p401kTrad) : 0; });
+  const pRoth = lifecycle.map(function (r) { return (typeof r.p401kRoth === 'number') ? Math.round(r.p401kRoth) : 0; });
   const pStocks = lifecycle.map(function (r) { return (typeof r.pStocks === 'number') ? Math.round(r.pStocks) : 0; });
+  const pCash = lifecycle.map(function (r) { return (typeof r.pCash === 'number') ? Math.round(r.pCash) : 0; });
   const fireMarker = lifecycle.map(function (_d, i) { return i === fireIdx ? totals[i] : null; });
   const unlockMarker = lifecycle.map(function (d, i) { return d.age === 60 ? totals[i] : null; });
   const ssMarker = lifecycle.map(function (_d, i) { return i === ssIdx ? totals[i] : null; });
@@ -7857,9 +8162,20 @@ function renderLifecycleSidebarChart(_state) {
       },
     },
     {
-      label: t('chart.lifecycle.p401k'),
-      data: p401k,
-      borderColor: 'rgba(0,212,170,0.5)',
+      label: t('chart.lifecycle.tradLine'),
+      data: pTrad,
+      borderColor: 'rgba(0,212,170,0.55)',
+      borderDash: [4, 4],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.2,
+      fill: false,
+    },
+    {
+      label: t('chart.lifecycle.rothLine'),
+      data: pRoth,
+      borderColor: 'rgba(132,108,255,0.55)',
       borderDash: [4, 4],
       tension: 0,
       cubicInterpolationMode: 'monotone',
@@ -7870,7 +8186,18 @@ function renderLifecycleSidebarChart(_state) {
     {
       label: t('chart.lifecycle.stocksShort'),
       data: pStocks,
-      borderColor: 'rgba(255,217,61,0.5)',
+      borderColor: 'rgba(255,217,61,0.55)',
+      borderDash: [4, 4],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.2,
+      fill: false,
+    },
+    {
+      label: t('chart.lifecycle.cashLine'),
+      data: pCash,
+      borderColor: 'rgba(170,180,200,0.55)',
       borderDash: [4, 4],
       tension: 0,
       cubicInterpolationMode: 'monotone',
@@ -7923,6 +8250,13 @@ function renderLifecycleSidebarChart(_state) {
   }
 
   const chartData = { labels: ages, datasets: datasets };
+  // Dataset order is statically: 0=Total, 1=Trad, 2=Roth, 3=Stocks, 4=Cash,
+  // 5=FIRE marker, 6=Unlock marker, 7=SS marker, (8=Ghost FIRE if override).
+  // The drag pipeline reads this index off the chart instance below so it
+  // stays correct even if we reorder later.
+  const _sidebarFireMarkerIdx = datasets.findIndex(function (d) {
+    return d && d.pointStyle === 'triangle' && d.showLine === false && d.borderColor === '#ff6b6b';
+  });
 
   if (!_sidebarLifecycleChart) {
     _sidebarLifecycleChart = new Chart(canvas.getContext('2d'), {
@@ -7935,7 +8269,17 @@ function renderLifecycleSidebarChart(_state) {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: { enabled: true, mode: 'index', intersect: false },
+          tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
+            // Suppress marker entries (FIRE / Unlock / SS) in the tooltip
+            // body so the per-asset breakdown stays readable.
+            filter: function (item) {
+              const ds = item && item.dataset;
+              return !(ds && ds.showLine === false);
+            },
+          },
         },
         scales: {
           x: {
@@ -7963,6 +8307,8 @@ function renderLifecycleSidebarChart(_state) {
     _sidebarLifecycleChart.data = chartData;
     _sidebarLifecycleChart.update('none');
   }
+  // Stamp the FIRE marker dataset's index so the drag pipeline finds it.
+  _sidebarLifecycleChart._fireMarkerIdx = _sidebarFireMarkerIdx;
 
   // MC-6 — caption mirrors FIRE age + end-of-life portfolio.
   const fireAgeEl = document.getElementById('sidebarFireAge');
@@ -12281,9 +12627,16 @@ let _previewFireAge = null;
 function _getFireMarkerPosition() {
   const chart = charts.growth;
   if (!chart) return null;
-  const meta = chart.getDatasetMeta(3); // FIRE marker is always dataset index 3
+  // Drag pipeline used to hard-code dataset index 3, but adding Trad/Roth/Cash
+  // lines shifted the order. renderGrowthChart now stamps the marker's index
+  // onto the chart instance via chart._fireMarkerIdx; fall back to 3 only if
+  // the field is missing (defensive — should not happen post-refactor).
+  const idx = (typeof chart._fireMarkerIdx === 'number' && chart._fireMarkerIdx >= 0)
+    ? chart._fireMarkerIdx
+    : 3;
+  const meta = chart.getDatasetMeta(idx);
   if (!meta || !meta.data) return null;
-  const ds = chart.data.datasets[3];
+  const ds = chart.data.datasets[idx];
   if (!ds) return null;
   for (let i = 0; i < ds.data.length; i++) {
     if (ds.data[i] !== null && ds.data[i] !== undefined) {
@@ -12433,9 +12786,15 @@ function setupFireDragListeners() {
 function _getSidebarFireMarkerPosition() {
   const chart = _sidebarLifecycleChart;
   if (!chart) return null;
-  const meta = chart.getDatasetMeta(3); // FIRE marker is dataset index 3 in the sidebar config
+  // Same approach as the main chart — read the FIRE marker's index from the
+  // chart instance instead of hard-coding it, so dataset additions (Trad,
+  // Roth, Cash) don't silently break drag.
+  const idx = (typeof chart._fireMarkerIdx === 'number' && chart._fireMarkerIdx >= 0)
+    ? chart._fireMarkerIdx
+    : 3;
+  const meta = chart.getDatasetMeta(idx);
   if (!meta || !meta.data) return null;
-  const ds = chart.data.datasets[3];
+  const ds = chart.data.datasets[idx];
   if (!ds) return null;
   for (let i = 0; i < ds.data.length; i++) {
     if (ds.data[i] !== null && ds.data[i] !== undefined) {
@@ -12852,6 +13211,52 @@ const shortfallOverlayPlugin = {
   },
 };
 
+// =============================================================================
+// MODULE: lifecycle asset breakdown table
+// Inputs : lifecycle[] (from projectFullLifecycle — each row carries
+//          age, year, p401kTrad, p401kRoth, pStocks, pCash, total) +
+//          fireAge (highlights that row).
+// Outputs: Replaces the contents of #lifecycleAssetTable with a sticky-header
+//          scrollable <table>: Year | Age | Trad 401K | Roth 401K | Stocks |
+//          Cash | Total. The FIRE-age row gets a red tint + 🔥 suffix.
+// Consumers: companion to renderGrowthChart on the Retirement → Lifecycle pill.
+// =============================================================================
+function renderLifecycleAssetTable(lifecycle, fireAge) {
+  const wrap = document.getElementById('lifecycleAssetTable');
+  if (!wrap) return;
+  if (!Array.isArray(lifecycle) || lifecycle.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const fmt = (n) => '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString();
+  const headers = [
+    t('lifecycle.assetTable.col.year'),
+    t('lifecycle.assetTable.col.age'),
+    t('lifecycle.assetTable.col.trad'),
+    t('lifecycle.assetTable.col.roth'),
+    t('lifecycle.assetTable.col.stocks'),
+    t('lifecycle.assetTable.col.cash'),
+    t('lifecycle.assetTable.col.total'),
+  ];
+  const headHtml = '<thead><tr>'
+    + headers.map((h) => '<th>' + h + '</th>').join('')
+    + '</tr></thead>';
+  const bodyHtml = '<tbody>' + lifecycle.map((d) => {
+    const isFire = (typeof fireAge === 'number') && d.age === fireAge;
+    const cls = isFire ? ' class="lifecycle-asset-row--fire"' : '';
+    return '<tr' + cls + '>'
+      + '<td>' + d.year + '</td>'
+      + '<td>' + d.age + '</td>'
+      + '<td>' + fmt(d.p401kTrad) + '</td>'
+      + '<td>' + fmt(d.p401kRoth) + '</td>'
+      + '<td>' + fmt(d.pStocks) + '</td>'
+      + '<td>' + fmt(d.pCash) + '</td>'
+      + '<td>' + fmt(d.total) + '</td>'
+      + '</tr>';
+  }).join('') + '</tbody>';
+  wrap.innerHTML = '<table class="lifecycle-asset-table">' + headHtml + bodyHtml + '</table>';
+}
+
 function renderGrowthChart(inp) {
   // Chart ↔ Module (feature 009): Full Portfolio Lifecycle renders output from adultCount-gated calc layer —
   // projectFullLifecycle + simulateDrawdown + calcRealisticSSA + getHealthcareMonthly, all branched on detectMFJ(inp).
@@ -12956,9 +13361,19 @@ function renderGrowthChart(inp) {
       },
     },
     {
-      label: t('chart.lifecycle.p401k'),
-      data: lifecycle.map(d => Math.round(d.p401k)),
-      borderColor: 'rgba(0,212,170,0.4)',
+      label: t('chart.lifecycle.tradLine'),
+      data: lifecycle.map(d => Math.round(d.p401kTrad)),
+      borderColor: 'rgba(0,212,170,0.55)',
+      borderDash: [5,5],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.5,
+    },
+    {
+      label: t('chart.lifecycle.rothLine'),
+      data: lifecycle.map(d => Math.round(d.p401kRoth)),
+      borderColor: 'rgba(132,108,255,0.55)',
       borderDash: [5,5],
       tension: 0,
       cubicInterpolationMode: 'monotone',
@@ -12968,7 +13383,17 @@ function renderGrowthChart(inp) {
     {
       label: t('chart.lifecycle.stocks'),
       data: lifecycle.map(d => Math.round(d.pStocks)),
-      borderColor: 'rgba(255,217,61,0.4)',
+      borderColor: 'rgba(255,217,61,0.55)',
+      borderDash: [5,5],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.5,
+    },
+    {
+      label: t('chart.lifecycle.cashLine'),
+      data: lifecycle.map(d => Math.round(d.pCash)),
+      borderColor: 'rgba(170,180,200,0.55)',
       borderDash: [5,5],
       tension: 0,
       cubicInterpolationMode: 'monotone',
@@ -12987,6 +13412,10 @@ function renderGrowthChart(inp) {
       pointHoverRadius: 15,
     },
   ];
+  // Track where the FIRE marker landed in the dataset array so the drag
+  // helpers can find it even as we add/remove other lines (replaces the old
+  // hard-coded index 3). Stamped onto the chart instance after construction.
+  const _fireMarkerDatasetIdx = datasets.length - 1;
 
   // Ghost marker for original FIRE when override is active
   if (hasOverride) {
@@ -13155,6 +13584,11 @@ function renderGrowthChart(inp) {
       responsive: true,
       maintainAspectRatio: false,
       animation: _fireDrag.active ? false : undefined, // no animation during drag
+      // Hovering anywhere on the chart shows EVERY series' value at that
+      // x-position — Total / Trad / Roth / Stocks / Cash all appear in the
+      // tooltip together, so the user can read the per-asset breakdown for
+      // any year without leaving the chart.
+      interaction: { mode: 'index', intersect: false },
       // Feature 015 US1 — read by inline shortfallOverlayPlugin (above)
       shortfallRanges,
       plugins: {
@@ -13169,17 +13603,30 @@ function renderGrowthChart(inp) {
           padding: { bottom: 8 },
         },
         tooltip: {
+          // Show every series at the hovered x-position.
+          mode: 'index',
+          intersect: false,
           callbacks: {
             label: (tCtx) => {
-              if (tCtx.parsed.y === null) return null;
+              if (tCtx.parsed.y === null || tCtx.parsed.y === undefined) return null;
+              // Markers (FIRE / 401K Unlocks / SS) are point-only datasets
+              // with showLine === false. Suppress them in the tooltip body so
+              // the per-year asset breakdown stays clean — the markers
+              // already speak for themselves visually on the chart.
+              const ds = tCtx.dataset || {};
+              if (ds.showLine === false) return null;
               const d = lifecycle[tCtx.dataIndex];
-              if (!d) return `${tCtx.dataset.label}: $${tCtx.parsed.y.toLocaleString()}`;
+              if (!d) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}`;
+              // Only annotate the Total Portfolio series with phase + flow
+              // context (the asset lines just show their pool balance).
+              const isTotal = tCtx.datasetIndex === 0;
+              if (!isTotal) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}`;
               const phaseLabels = { 'accumulation': 'Saving', 'phase1-taxable-only': 'Phase 1: Taxable Only (401K locked)', 'phase2-401k-unlocked': 'Phase 2: 401K Unlocked', 'phase3-with-ss': 'Phase 3: With SS' };
               const phase = phaseLabels[d.phase] || d.phase;
               const extra = d.phase !== 'accumulation'
                 ? ` | Withdrawing $${Math.round(d.withdrawal).toLocaleString()}/yr` + (d.ssIncome > 0 ? ` | SS: $${Math.round(d.ssIncome).toLocaleString()}/yr` : '')
                 : ` | Contributing $${Math.round(d.contribution).toLocaleString()}/yr`;
-              return `${tCtx.dataset.label}: $${tCtx.parsed.y.toLocaleString()} [${phase}]${extra}`;
+              return `${ds.label}: $${tCtx.parsed.y.toLocaleString()} [${phase}]${extra}`;
             }
           }
         }
@@ -13200,8 +13647,15 @@ function renderGrowthChart(inp) {
     },
     plugins: [dragHintPlugin, shortfallOverlayPlugin],
   });
+  // Stamp the FIRE marker dataset's index onto the chart so the drag helpers
+  // (_getFireMarkerPosition / _isNearFireMarker) find it regardless of how
+  // many additional series have been added.
+  charts.growth._fireMarkerIdx = _fireMarkerDatasetIdx;
   // Feature 013 (T018) — register with the tab router for resize-on-activate.
   if (window.tabRouter) window.tabRouter.registerChart('lifecycle', charts.growth);
+
+  // Companion table beneath the chart — same data, scrollable per-year breakdown.
+  try { renderLifecycleAssetTable(lifecycle, fireAge); } catch (_e) { /* swallow */ }
 
   // Attach drag listeners (once, persists across chart recreations)
   setupFireDragListeners();
@@ -13763,10 +14217,13 @@ function saveState() {
       state[id] = el.value;
     }
   });
-  // Save expenses
-  state._expenses = defaultExpenses.map((exp, i) => {
+  // Save expenses as objects ({name, i18nKey, monthly}) so user-added rows
+  // and renames round-trip cleanly. Older snapshots use a positional number
+  // array — restoreState detects and migrates that shape on read.
+  state._expenses = currentExpenses.map((exp, i) => {
     const el = document.getElementById('exp_' + i);
-    return el ? parseFloat(el.value) || 0 : exp.monthly;
+    const monthly = el ? (parseFloat(el.value) || 0) : exp.monthly;
+    return { name: exp.name, i18nKey: exp.i18nKey || null, monthly };
   });
   // Save SSA earnings history
   state._ssEarningsHistory = ssEarningsHistory;
@@ -13870,13 +14327,31 @@ function restoreState() {
       }
     });
 
-    // Restore expenses
-    if (state._expenses && Array.isArray(state._expenses)) {
-      state._expenses.forEach((val, i) => {
-        const el = document.getElementById('exp_' + i);
-        if (el) el.value = val;
-        if (i < defaultExpenses.length) defaultExpenses[i].monthly = val;
-      });
+    // Restore expenses. Two formats are accepted:
+    //   • Legacy positional: [num, num, ...] aligned with defaultExpenses.
+    //   • Current shape:     [{name, i18nKey, monthly}, ...].
+    // The legacy form is migrated into the object shape on read; saveState
+    // always writes the new shape, so the legacy path is one-shot.
+    if (state._expenses && Array.isArray(state._expenses) && state._expenses.length > 0) {
+      const first = state._expenses[0];
+      if (typeof first === 'number') {
+        currentExpenses = defaultExpenses.map((seed, i) => {
+          const v = state._expenses[i];
+          return Object.assign({}, seed, {
+            monthly: typeof v === 'number' ? v : seed.monthly,
+          });
+        });
+      } else if (first && typeof first === 'object') {
+        currentExpenses = state._expenses.map((row) => ({
+          name: row && typeof row.name === 'string' ? row.name : '',
+          i18nKey: row && typeof row.i18nKey === 'string' ? row.i18nKey : null,
+          monthly: row && Number.isFinite(row.monthly) ? row.monthly : 0,
+        }));
+        if (!currentExpenses[0] || currentExpenses[0].i18nKey !== 'exp.row.rent') {
+          currentExpenses.unshift(Object.assign({}, defaultExpenses[0]));
+        }
+      }
+      try { buildExpenseTable(); } catch (_e) { /* swallow */ }
     }
 
     // Restore SSA earnings history
