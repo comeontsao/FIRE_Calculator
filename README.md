@@ -17,10 +17,11 @@ Drop in your real balances, your real income, your real spending. The dashboard 
 
 Most calculators treat FIRE as a single number: *"You'll be ready at 55."* This one shows you the shape of the thing:
 
-- **Drag to ask "what if"** — Grab the FIRE marker on the Full Portfolio Lifecycle chart. Drop it on any age. Every chart, KPI, and status banner recomputes in the same frame so you can see exactly what retiring earlier or later costs you.
-- **Three retirement postures** — **Safe** (phase-transition buffers + end-balance ≥ 0), **Exact** (end with a chosen cushion), **Die-With-Zero** (spend the last dollar the day you die). Same math engine, three different feasibility constraints.
+- **Drag to ask "what if"** — Grab the FIRE marker on the Full Portfolio Lifecycle chart (or its pinnable sidebar mirror — both are draggable). Drop it on any age. Every chart, KPI, and status banner recomputes in the same frame so you can see exactly what retiring earlier or later costs you.
+- **Three retirement postures** — **Safe** (per-year buffer floor across all three retirement phases + end-balance ≥ 20% of FIRE-balance, so the tail trends upward instead of grinding to $0), **Exact** (end with a chosen cushion in years-of-spend), **Die-With-Zero** (spend the last dollar the day you die — same trajectory floor as Safe; only the optimization target differs). Same math engine, three different feasibility constraints.
 - **Bracket-fill tax smoothing** — Instead of drawing the 12% bracket in a concentrated 3-year burst then leaving headroom wasted, the tool fills the bracket every year and routes the excess into taxable brokerage. Honest about IRMAA, Rule of 55, and the 5-year Roth clock — every rule that changes your answer gets a visible indicator on the chart.
 - **Multi-strategy withdrawal optimizer** — Seven withdrawal policies (Bracket-Fill Smoothed, Conventional, Proportional, Roth Ladder, Tax-Optimized Search, Trad-First, Trad-Last Preserve) scored against your active objective. Flip between "leave more behind" and "pay less lifetime tax" and the winner banner, compare panel, Lifetime Withdrawal chart, and full portfolio trajectory all re-render together. Infeasible strategies still previewable with a warning badge so you can see *why* they fail under your mode. Chart-consistent Safe/Exact/DWZ gate means "Safe" actually rejects strategies that drain to $0 and live on Social Security.
+- **Per-year asset breakdown** — Hover any age on the Lifecycle chart and the tooltip shows every pool at that moment: Total · Trad 401K · Roth 401K · Stocks · Cash. A scrollable table beneath the chart lets you scan the whole 50-year trajectory; the FIRE-age row is highlighted.
 - **Geo-arbitrage, real numbers** — Twelve countries, each with its own cost-of-living, visa cost, relocation cost, healthcare delta, and tax treatment. Switch between them without contaminating each card's FIRE number with the previous country's assumptions.
 - **Transparent, not magical** — When a rule (Social Security taxable portion, IRMAA threshold, RMD after 73, Rule of 55 unlock, home sale at FIRE) affects a given year, the chart shows you. No black box.
 
@@ -61,15 +62,19 @@ The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm ins
 
 ## Features
 
-- **Full Portfolio Lifecycle chart** — accumulation → FIRE → drawdown → Social Security, drawn as a single phase-colored curve. Draggable FIRE marker. Pinnable sidebar mirror so the chart follows you as you edit inputs. Reflects the currently-displayed withdrawal strategy (winner or previewed) with mortgage / college / second-home overlays preserved.
+- **Tabbed dashboard** — four themed tabs (Plan · Geography · Retirement · History) with sub-tab pills, plus an Audit tab. The KPI ribbon and the pinned Lifecycle sidebar stay visible across every tab so the headline numbers never disappear. Active view persists in `localStorage` and via URL hash (`#tab=…&pill=…`) for bookmarkable deep links.
+- **Full Portfolio Lifecycle chart** — accumulation → FIRE → drawdown → Social Security, drawn as a single phase-colored curve. Draggable FIRE marker (on either the main chart **or** the pinnable sidebar mirror — both are wired up). Reflects the currently-displayed withdrawal strategy (winner or previewed) with mortgage / college / second-home overlays preserved. Hovering any year lists every pool: Total · Trad 401K · Roth 401K · Stocks · Cash.
+- **Year-by-year asset breakdown table** — companion to the Lifecycle chart. Sticky-header scrollable table with Year · Age · Trad 401K · Roth 401K · Stocks · Cash · Total, FIRE-age row highlighted. Reads the same simulator the chart draws, so they're guaranteed consistent.
 - **Lifetime Withdrawal Strategy chart** — per-year stacked bars showing Traditional 401K, Roth, taxable stocks (LTCG), and cash draws. Effective tax rate overlay. Rebuilds when you switch objective or preview a different strategy.
 - **Strategy comparison panel** — table of the six non-winner strategies with end-of-plan balance, lifetime tax, earliest feasible FIRE age, and a Preview button (warning-styled for infeasible rows) that swaps every chart + banner to that strategy so you can see the trade-off visually.
+- **Editable expense list** — ten seeded categories plus a `+ Add expense` picker that draws from a pre-translated library (Pets, Travel, Subscriptions, Hobbies, Donations, Personal Care, Gifts, Home Maintenance, Insurance, Phone, Gym) or a free-text custom name. Every row except the locked Rent / Housing row gets a remove button. Only the *sum* drives the FIRE math — adding/removing rows just reshapes the breakdown.
 - **KPI row** — Net Worth, FIRE Number, Progress %, Years to FIRE.
 - **Country comparison grid** — twelve destinations, each card ranked by its own FIRE number and years-to-FIRE, with visa + relocation + healthcare overlays.
 - **Milestone timeline** — $500K, $1M, Coast FIRE, 401K unlock at 59.5, Social Security start, RMDs, per-scenario FIRE. Dollar-target milestones flip to "Already achieved!" the moment current net worth crosses the threshold, independent of projection quirks.
 - **Mortgage + Second-home planning** — buy now, buy later, keep / sell / inherit at FIRE, rental income overlay. Loan term slider supports 15–40 years.
 - **College planning** — per-kid cost estimates, loan-funding split, parent-PLUS modeling.
 - **Healthcare delta** — per-country pre-65 and post-65 estimates with user overrides.
+- **Audit tab** — shows the inputs, spending derivation, every Safe/Exact/DWZ gate's per-mode verdict with the actual formula, the FIRE-age search trace, the strategy ranking, the per-year lifecycle table, and any cross-validation warnings — so when a number surprises you, you can trace exactly where it came from.
 - **Snapshot history** — save your numbers as a CSV row, track progress over time.
 - **Bilingual** — English and Traditional Chinese (zh-TW), toggled at the top-right.
 - **Dark theme**, responsive down to mobile, no framework.
@@ -78,11 +83,7 @@ The dashboard has no dependencies beyond Chart.js (loaded from CDN). No `npm ins
 
 ## What's next
 
-Active design work — not shipped yet:
-
-- **Tabbed dashboard navigation** ([spec](specs/013-tabbed-navigation/spec.md)) — replace the current single-scroll layout with **4 themed tabs** (Plan · Geography · Retirement · History) and sub-tab pill bars, so the dashboard stops trying to show all 18 sections at once. Calc engine, charts, and formulas are untouched — pure frontend reorganization. Plan tab walks through Profile → Assets → Investment → Mortgage → Expenses → Summary like a tax-form wizard, with a `Next →` button on each card. KPI ribbon and the pinned Lifecycle sidebar stay visible across every tab so headline numbers never disappear. State persists in `localStorage` and via URL hash (`#tab=…&pill=…`) for bookmarkable deep links. Quick What-If is removed.
-
-For the full picture of what's done, in-flight, and on the wishlist, see the master planning doc: [FIRE-Dashboard-Roadmap.md](./FIRE-Dashboard-Roadmap.md).
+For the full picture of what's done, in-flight, and on the wishlist, see the master planning doc: [FIRE-Dashboard-Roadmap.md](./FIRE-Dashboard-Roadmap.md) and the active backlog: [BACKLOG.md](./BACKLOG.md).
 
 ---
 
@@ -90,7 +91,7 @@ For the full picture of what's done, in-flight, and on the wishlist, see the mas
 
 Everything runs locally. Your figures live in your browser's `localStorage` and your CSV snapshot file (if you choose to save one). Nothing gets sent to a server. There is no server. No analytics. No third-party scripts beyond Chart.js from CDN for rendering. If you open the file from your filesystem (`file://...`) it still works.
 
-You can close the browser, copy the HTML file to an air-gapped machine, and it'll run there too.
+You can close the browser, copy the HTML file together with the `calc/` folder to an air-gapped machine, and it'll run there too.
 
 ---
 
@@ -98,7 +99,7 @@ You can close the browser, copy the HTML file to an air-gapped machine, and it'l
 
 - Vanilla JavaScript (ES2020+). No build step, no transpiler, no bundler.
 - Chart.js loaded from CDN. Zero other runtime dependencies.
-- Single HTML file (`FIRE-Dashboard-Generic.html`) — drop it on any web host, or run it from your filesystem.
+- Mostly-single-file: `FIRE-Dashboard-Generic.html` plus a small `calc/` folder (tab routing, FIRE-age state machine, audit data, inflation helpers) loaded as classic `<script>` tags. Drop the HTML *and the `calc/` folder* together on any web host, or run from your filesystem. Moving the HTML alone (without `calc/`) will load but tab/pill clicks won't wire up.
 - Spec-driven development via [GitHub spec-kit](https://github.com/github/spec-kit). Every feature ships with a spec, a plan, a task list, contracts, and a closeout in `specs/`.
 - Tested via Node unit tests (`tests/unit/*.test.js`) + a browser smoke harness (`tests/baseline/browser-smoke.test.js`).
 
@@ -118,9 +119,13 @@ Both should show all green.
 ## Project layout
 
 ```
-FIRE-Dashboard-Generic.html     # the dashboard — single-file HTML app
+FIRE-Dashboard-Generic.html     # the dashboard (load this in your browser)
+calc/                           # required sidecars — must travel with the HTML
+  ├── tabRouter.js              #   tab + pill navigation
+  ├── chartState.js             #   FIRE-age single-source-of-truth + drag confirm
+  ├── calcAudit.js              #   Audit tab data assembly
+  └── inflation.js              #   inflation helpers
 FIRE-snapshots.csv              # append-only snapshot history
-calc/                           # extracted calc modules (gradual migration out of inline)
 specs/                          # feature specs + plans + tasks + closeouts
 tests/                          # unit tests + browser smoke harness
 docs/                           # README assets
