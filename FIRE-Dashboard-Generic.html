@@ -14,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="calc/tabRouter.js"></script>
 <script src="calc/calcAudit.js"></script>
+<script src="calc/payoffVsInvest.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -2604,6 +2605,99 @@
     background: rgba(108, 99, 255, 0.06);
   }
 
+  /* === Feature 016 — Payoff vs Invest pill ============================= */
+  .pvi-card { display: flex; flex-direction: column; gap: 14px; }
+  .pvi-subtitle { margin: 0; color: var(--text-dim); font-size: 0.88em; line-height: 1.5; }
+  .pvi-input-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    padding: 12px 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  @media (max-width: 900px) { .pvi-input-row { grid-template-columns: 1fr; } }
+  .pvi-input-group label { display: block; font-size: 0.82em; color: var(--text-dim); margin-bottom: 6px; }
+  .pvi-input-value { color: var(--accent2); font-weight: 600; margin-left: 6px; }
+  .pvi-input-group input[type="range"] { width: 100%; }
+  .pvi-framing-radios { display: flex; gap: 14px; flex-wrap: wrap; }
+  .pvi-framing-radios label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.88em; color: var(--text); margin-bottom: 0; cursor: pointer; }
+
+  .pvi-verdict-banner {
+    padding: 12px 14px;
+    background: rgba(108, 99, 255, 0.08);
+    border: 1px solid rgba(108, 99, 255, 0.35);
+    border-radius: 10px; font-size: 0.92em; line-height: 1.5;
+  }
+  .pvi-verdict-line { color: var(--text); }
+  .pvi-verdict-line + .pvi-verdict-line { margin-top: 4px; color: var(--text-dim); }
+
+  .pvi-explainer {
+    padding: 14px 16px;
+    background: rgba(255, 217, 61, 0.08);
+    border: 1px solid rgba(255, 217, 61, 0.35);
+    border-radius: 10px; color: var(--text-dim);
+    font-size: 0.9em; line-height: 1.5; text-align: center;
+  }
+
+  .pvi-chart-wrap {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .pvi-chart-title {
+    font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+
+  .pvi-factor-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .pvi-factor-title {
+    font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-dim); margin-bottom: 10px;
+  }
+  .pvi-factor-list { display: flex; flex-direction: column; gap: 6px; }
+  .pvi-factor-row {
+    display: grid; grid-template-columns: 1.6fr 1.2fr auto;
+    gap: 10px; align-items: center;
+    padding: 6px 8px; border-radius: 6px; font-size: 0.85em;
+  }
+  .pvi-factor-row:hover { background: rgba(108, 99, 255, 0.06); }
+  .pvi-factor-row__label { color: var(--text); font-weight: 500; }
+  .pvi-factor-row__value { color: var(--accent2); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pvi-factor-row__arrow {
+    font-size: 0.78em; padding: 2px 8px; border-radius: 999px;
+    text-align: center; white-space: nowrap;
+  }
+  .pvi-factor-row--prepay  .pvi-factor-row__arrow { background: rgba(255,107,107,0.18); color: #ff6b6b; }
+  .pvi-factor-row--invest  .pvi-factor-row__arrow { background: rgba(108,99,255,0.18); color: #846cff; }
+  .pvi-factor-row--neutral .pvi-factor-row__arrow { background: var(--card); color: var(--text-dim); }
+  .pvi-factor-row--dominant .pvi-factor-row__label { font-weight: 700; }
+
+  .pvi-tweaks {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .pvi-tweak-row { display: flex; flex-direction: column; gap: 8px; }
+  .pvi-toggle-label { display: inline-flex; align-items: center; gap: 8px; font-size: 0.92em; color: var(--text); cursor: pointer; }
+  .pvi-refi-inputs {
+    display: grid; grid-template-columns: 2fr 1fr 1fr;
+    gap: 10px; margin-left: 22px;
+  }
+  @media (max-width: 700px) { .pvi-refi-inputs { grid-template-columns: 1fr; } }
+  .pvi-refi-inputs label { display: flex; flex-direction: column; font-size: 0.82em; color: var(--text-dim); gap: 4px; }
+  .pvi-refi-inputs input,
+  .pvi-refi-inputs select {
+    padding: 5px 8px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 0.88em;
+  }
+  .pvi-override-input { display: flex; align-items: center; gap: 10px; margin-left: 22px; }
+  .pvi-override-input input[type="number"] {
+    padding: 5px 8px; width: 100px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.88em;
+  }
+  .pvi-input-hint { font-size: 0.78em; color: var(--text-dim); line-height: 1.4; }
+  /* === End Feature 016 ============================================== */
+
   /* === Feature 015 follow-up — Audit flow-diagram substeps list === */
   .audit-flow__substeps {
     list-style: decimal;
@@ -2832,6 +2926,7 @@
         <button class="pill" data-tab="plan" data-pill="assets" role="tab" aria-selected="false" data-i18n="nav.pill.assets">Assets</button>
         <button class="pill" data-tab="plan" data-pill="investment" role="tab" aria-selected="false" data-i18n="nav.pill.investment">Investment</button>
         <button class="pill" data-tab="plan" data-pill="mortgage" role="tab" aria-selected="false" data-i18n="nav.pill.mortgage">Mortgage</button>
+        <button class="pill" data-tab="plan" data-pill="payoff-invest" role="tab" aria-selected="false" data-i18n="nav.pill.payoffInvest">Payoff vs Invest</button>
         <button class="pill" data-tab="plan" data-pill="expenses" role="tab" aria-selected="false" data-i18n="nav.pill.expenses">Expenses</button>
         <button class="pill" data-tab="plan" data-pill="summary" role="tab" aria-selected="false" data-i18n="nav.pill.summary">Summary</button>
       </nav>
@@ -3246,6 +3341,111 @@
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
+      <!-- ========== Feature 016 — Payoff vs Invest pill ========== -->
+      <div class="pill-host" data-tab="plan" data-pill="payoff-invest" hidden>
+        <div class="card span-3 surface--secondary pvi-card">
+          <div class="card-title">
+            <span class="icon">⚖️</span>
+            <span data-i18n="pvi.section.title">Mortgage payoff vs. invest extra cash</span>
+          </div>
+          <p class="pvi-subtitle" data-i18n="pvi.section.subtitle">At your current numbers, which path leaves you wealthier?</p>
+
+          <div class="pvi-input-row">
+            <div class="pvi-input-group">
+              <label for="pviExtraMonthly">
+                <span data-i18n="pvi.input.extraMonthly">Extra monthly cash to allocate</span>
+                <span class="pvi-input-value" id="pviExtraMonthlyVal">$500</span>
+              </label>
+              <input type="range" id="pviExtraMonthly" min="0" max="5000" step="50" value="500"
+                     oninput="document.getElementById('pviExtraMonthlyVal').textContent='$'+Number(this.value).toLocaleString();recomputePayoffVsInvest();_pviSaveState();">
+            </div>
+            <div class="pvi-input-group">
+              <label data-i18n="pvi.input.framing">Net-worth framing</label>
+              <div class="pvi-framing-radios">
+                <label><input type="radio" name="pviFraming" id="pviFramingTotal" value="totalNetWorth" checked
+                              onchange="recomputePayoffVsInvest();_pviSaveState()">
+                  <span data-i18n="pvi.input.framing.total">Total (incl. home equity)</span></label>
+                <label><input type="radio" name="pviFraming" id="pviFramingLiquid" value="liquidNetWorth"
+                              onchange="recomputePayoffVsInvest();_pviSaveState()">
+                  <span data-i18n="pvi.input.framing.liquid">Liquid only (investments + cash)</span></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="pvi-verdict-banner" id="pviVerdictBanner" hidden>
+            <div class="pvi-verdict-line" id="pviVerdictAtFire">—</div>
+            <div class="pvi-verdict-line" id="pviVerdictAtEnd">—</div>
+          </div>
+
+          <div class="pvi-explainer" id="pviExplainerCard" hidden>
+            <span id="pviExplainerText">—</span>
+          </div>
+
+          <div class="pvi-chart-wrap" id="pviChartWrapWealth">
+            <div class="pvi-chart-title" data-i18n="pvi.chart.wealth.title">Wealth trajectory — Prepay vs Invest</div>
+            <div class="chart-container">
+              <canvas id="payoffVsInvestWealthChart"></canvas>
+            </div>
+          </div>
+
+          <div class="pvi-chart-wrap" id="pviChartWrapAmort">
+            <div class="pvi-chart-title" data-i18n="pvi.chart.amort.title">Where each dollar goes</div>
+            <div class="chart-container">
+              <canvas id="payoffVsInvestAmortizationChart"></canvas>
+            </div>
+          </div>
+
+          <div class="pvi-factor-card" id="pviFactorCardWrap">
+            <div class="pvi-factor-title" data-i18n="pvi.factor.heading">Factors driving the verdict</div>
+            <div class="pvi-factor-list" id="payoffVsInvestFactorList"></div>
+          </div>
+
+          <div class="pvi-tweaks">
+            <div class="pvi-tweak-row">
+              <label class="pvi-toggle-label">
+                <input type="checkbox" id="pviRefiEnabled"
+                       onchange="recomputePayoffVsInvest();_pviSaveState();_pviUpdateRefiVisibility()">
+                <span data-i18n="pvi.input.refi.enable">Plan a refinance</span>
+              </label>
+              <div class="pvi-refi-inputs" id="pviRefiInputs" hidden>
+                <label>
+                  <span data-i18n="pvi.input.refi.year">Refi in N years</span>
+                  <span class="pvi-input-value" id="pviRefiYearVal">5</span>
+                  <input type="range" id="pviRefiYear" min="1" max="40" step="1" value="5"
+                         oninput="document.getElementById('pviRefiYearVal').textContent=this.value;recomputePayoffVsInvest();_pviSaveState()">
+                </label>
+                <label>
+                  <span data-i18n="pvi.input.refi.newRate">New rate (%)</span>
+                  <input type="number" id="pviRefiNewRate" min="0.5" max="12" step="0.05" value="5.0"
+                         onchange="recomputePayoffVsInvest();_pviSaveState()">
+                </label>
+                <label>
+                  <span data-i18n="pvi.input.refi.newTerm">New term</span>
+                  <select id="pviRefiNewTerm" onchange="recomputePayoffVsInvest();_pviSaveState()">
+                    <option value="15">15</option>
+                    <option value="20">20</option>
+                    <option value="30" selected>30</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="pvi-tweak-row">
+              <label class="pvi-toggle-label">
+                <input type="checkbox" id="pviEffRateOverrideEnabled"
+                       onchange="recomputePayoffVsInvest();_pviSaveState();_pviUpdateOverrideVisibility()">
+                <span data-i18n="pvi.input.effRate.title">Effective mortgage rate (after-tax)</span>
+              </label>
+              <div class="pvi-override-input" id="pviOverrideInput" hidden>
+                <input type="number" id="pviEffRateOverride" min="0" max="12" step="0.05" value="6.0"
+                       onchange="recomputePayoffVsInvest();_pviSaveState()">
+                <span class="pvi-input-hint" data-i18n="pvi.input.effRate.hint">Lower this if your state lets you deduct mortgage interest. Adjusts the verdict only — not the bank's amortization.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
+      </div>
+      <!-- ========== End Feature 016 ========== -->
       <div class="pill-host" data-tab="plan" data-pill="expenses" hidden>
   <div class="card span-2">
     <div class="card-title"><span class="icon">💸</span> <span data-i18n="sec.expenses">Monthly Expense Breakdown (Editable)</span></div>
@@ -6116,6 +6316,56 @@ const TRANSLATIONS = {
     'exp.remove.label':       'Remove this expense',
     'exp.custom.prompt':      'Name for the new expense:',
     'exp.locked.title':       'Rent / Housing is locked — used by the mortgage scenario',
+    // ===== Feature 016 — Payoff vs Invest =====
+    'nav.pill.payoffInvest': 'Payoff vs Invest',
+    'pvi.section.title': 'Mortgage payoff vs. invest extra cash',
+    'pvi.section.subtitle': 'At your current numbers, which path leaves you wealthier?',
+    'pvi.input.extraMonthly': 'Extra monthly cash to allocate',
+    'pvi.input.framing': 'Net-worth framing',
+    'pvi.input.framing.total': 'Total (incl. home equity)',
+    'pvi.input.framing.liquid': 'Liquid only (investments + cash)',
+    'pvi.input.refi.enable': 'Plan a refinance',
+    'pvi.input.refi.year': 'Refi in N years',
+    'pvi.input.refi.newRate': 'New rate (%)',
+    'pvi.input.refi.newTerm': 'New term',
+    'pvi.input.effRate.title': 'Effective mortgage rate (after-tax)',
+    'pvi.input.effRate.hint': "Lower this if your state lets you deduct mortgage interest. Adjusts the verdict only — not the bank's amortization.",
+    'pvi.chart.wealth.title': 'Wealth trajectory — Prepay vs Invest',
+    'pvi.chart.wealth.prepay': 'Prepay Mortgage',
+    'pvi.chart.wealth.invest': 'Invest Extra',
+    'pvi.chart.wealth.crossover': 'Lines cross',
+    'pvi.chart.wealth.callout': 'At {0} (age {1}): {2} wins by {3}',
+    'pvi.chart.amort.title': 'Where each dollar goes',
+    'pvi.amort.prepay.interest': 'Prepay — Interest paid',
+    'pvi.amort.prepay.principal': 'Prepay — Principal paid',
+    'pvi.amort.invest.interest': 'Invest — Interest paid',
+    'pvi.amort.invest.principal': 'Invest — Principal paid',
+    'pvi.verdict.winsBy': '{0} wins by ${1} at {2}',
+    'pvi.verdict.tie': 'Effectively tied at {0}',
+    'pvi.verdict.atFire': 'FIRE (age {0})',
+    'pvi.verdict.atEnd': 'plan-end (age {0})',
+    'pvi.factor.heading': 'Factors driving the verdict',
+    'pvi.factor.realSpread.label': 'Real return spread (after tax & inflation)',
+    'pvi.factor.nominalRate.label': 'Nominal mortgage rate',
+    'pvi.factor.stocksAfterTax.label': 'Expected stocks return (after-tax real)',
+    'pvi.factor.stocksReal.label': 'Expected stocks return (real, buy & hold)',
+    'pvi.factor.terminalLtcg.label': 'Terminal LTCG if you sold (not applied during accumulation)',
+    'pvi.factor.cashFlowHeadStart.label': 'Earlier mortgage payoff (cash-flow head-start)',
+    'pvi.factor.timeHorizon.label': 'Time horizon',
+    'pvi.factor.ltcgDrag.label': 'Tax drag on invested gains',
+    'pvi.factor.mortgageRemaining.label': 'Mortgage years remaining',
+    'pvi.factor.naturalPayoff.label': 'Mortgage paid off before FIRE?',
+    'pvi.factor.effectiveRateOverride.label': 'Effective rate override active',
+    'pvi.factor.plannedRefi.label': 'Planned refi',
+    'pvi.factor.favors.prepay': '▼ Favors Prepay',
+    'pvi.factor.favors.invest': '▲ Favors Invest',
+    'pvi.factor.favors.neutral': '◇ Neutral',
+    'pvi.disabled.noMortgage': 'Toggle the mortgage on the Mortgage pill to see this analysis.',
+    'pvi.disabled.alreadyPaid': 'Mortgage is already paid off — comparison is moot.',
+    'pvi.disabled.invalidAges': 'Comparison requires a valid age window (current < FIRE < plan-end).',
+    'pvi.refi.clamped': 'Refi-year was clamped to your home purchase year.',
+    'pvi.prepay': 'Prepay',
+    'pvi.invest': 'Invest',
     'country.card.budget': 'Budget',
     'country.card.bridgeAtFire': 'Bridge $ at FIRE',
     'country.card.target25x': '25× total target',
@@ -7077,6 +7327,56 @@ const TRANSLATIONS = {
     'exp.remove.label':       '移除此項目',
     'exp.custom.prompt':      '新項目名稱：',
     'exp.locked.title':       '房租／住房已鎖定 — 房貸試算需要使用',
+    // ===== Feature 016 — 還貸 vs 投資 =====
+    'nav.pill.payoffInvest': '還貸 vs 投資',
+    'pvi.section.title': '提早還清房貸 vs. 投入市場',
+    'pvi.section.subtitle': '以你目前的數字,哪條路會讓你更有錢？',
+    'pvi.input.extraMonthly': '每月額外可用現金',
+    'pvi.input.framing': '淨資產計算方式',
+    'pvi.input.framing.total': '總計（含房屋淨值）',
+    'pvi.input.framing.liquid': '流動資產（投資＋現金）',
+    'pvi.input.refi.enable': '規劃再融資',
+    'pvi.input.refi.year': 'N 年後再融資',
+    'pvi.input.refi.newRate': '新利率（%）',
+    'pvi.input.refi.newTerm': '新還款年限',
+    'pvi.input.effRate.title': '實質房貸利率（稅後）',
+    'pvi.input.effRate.hint': '如果你的州可抵扣房貸利息,請調低此值。僅影響結論,不影響實際攤還。',
+    'pvi.chart.wealth.title': '財富軌跡 — 還貸 vs 投資',
+    'pvi.chart.wealth.prepay': '提早還清房貸',
+    'pvi.chart.wealth.invest': '投入市場',
+    'pvi.chart.wealth.crossover': '交叉點',
+    'pvi.chart.wealth.callout': '在 {0}（{1} 歲）:{2} 多 {3}',
+    'pvi.chart.amort.title': '每塊錢的去向',
+    'pvi.amort.prepay.interest': '還貸 — 利息支出',
+    'pvi.amort.prepay.principal': '還貸 — 本金支出',
+    'pvi.amort.invest.interest': '投資 — 利息支出',
+    'pvi.amort.invest.principal': '投資 — 本金支出',
+    'pvi.verdict.winsBy': '{0} 在 {2} 多 ${1}',
+    'pvi.verdict.tie': '在 {0} 大致打平',
+    'pvi.verdict.atFire': 'FIRE（{0} 歲）',
+    'pvi.verdict.atEnd': '計畫終點（{0} 歲）',
+    'pvi.factor.heading': '影響結論的因素',
+    'pvi.factor.realSpread.label': '實質報酬利差（稅後＋通膨後）',
+    'pvi.factor.nominalRate.label': '名目房貸利率',
+    'pvi.factor.stocksAfterTax.label': '預期股票報酬（稅後實質）',
+    'pvi.factor.stocksReal.label': '預期股票報酬（實質，買入持有）',
+    'pvi.factor.terminalLtcg.label': '若賣出時的長期資本利得稅（持有期間不課徵）',
+    'pvi.factor.cashFlowHeadStart.label': '更早還清房貸（現金流先發優勢）',
+    'pvi.factor.timeHorizon.label': '時間長度',
+    'pvi.factor.ltcgDrag.label': '投資收益稅率',
+    'pvi.factor.mortgageRemaining.label': '房貸剩餘年數',
+    'pvi.factor.naturalPayoff.label': '退休前房貸自然還清？',
+    'pvi.factor.effectiveRateOverride.label': '實質利率覆寫中',
+    'pvi.factor.plannedRefi.label': '規劃再融資',
+    'pvi.factor.favors.prepay': '▼ 偏向還貸',
+    'pvi.factor.favors.invest': '▲ 偏向投資',
+    'pvi.factor.favors.neutral': '◇ 中性',
+    'pvi.disabled.noMortgage': '在「房貸」分頁啟用房貸後可查看此分析。',
+    'pvi.disabled.alreadyPaid': '房貸已還清,無需比較。',
+    'pvi.disabled.invalidAges': '比較需要有效的年齡區間（目前 < FIRE < 計畫終點）。',
+    'pvi.refi.clamped': '再融資年份已對齊到你買房的年份。',
+    'pvi.prepay': '還貸',
+    'pvi.invest': '投資',
     'exp.row.misc': '其他',
     'country.card.budget': '預算',
     'country.card.bridgeAtFire': 'FIRE 橋樑資金',
@@ -13212,6 +13512,300 @@ const shortfallOverlayPlugin = {
 };
 
 // =============================================================================
+// MODULE: Payoff vs Invest pill (Feature 016) — Generic mirror of RR.
+// Inputs : reads existing dashboard state (mortgage, returns, ages, taxes)
+//          plus this pill's own DOM inputs (extraMonthly, framing, refi,
+//          effective-rate override). Hands the assembled record to
+//          calc/payoffVsInvest.js → computePayoffVsInvest. Receives back the
+//          full output record and renders 3 charts + verdict + factors.
+// Outputs: 3 charts + verdict banner + factor breakdown + explainer card on
+//          the Plan → Payoff vs Invest pill. Read-only relative to every
+//          other chart in the dashboard (Constitution Principle III).
+// Consumers: this is the consumer; calc/payoffVsInvest.js is the producer.
+// =============================================================================
+
+let charts_pviWealth = null;
+let charts_pviAmort  = null;
+
+function _assemblePayoffVsInvestInputs() {
+  const inp = (typeof getInputs === 'function') ? getInputs() : null;
+  if (!inp) return null;
+  const cs = (typeof _cs === 'function') ? _cs() : null;
+  const effFireAge = (cs && cs.state && Number.isFinite(cs.state.effectiveFireAge))
+    ? cs.state.effectiveFireAge
+    : (typeof calculatedFireAge === 'number' && Number.isFinite(calculatedFireAge)
+        ? calculatedFireAge
+        : ((inp.agePerson1 || 36) + 10));
+  const mortgage = (typeof mortgageEnabled !== 'undefined' && mortgageEnabled)
+    ? (typeof getMortgageInputs === 'function' ? getMortgageInputs() : null)
+    : null;
+  const extraEl = document.getElementById('pviExtraMonthly');
+  const framingTotalEl = document.getElementById('pviFramingTotal');
+  const refiEnabledEl = document.getElementById('pviRefiEnabled');
+  const refiYearEl = document.getElementById('pviRefiYear');
+  const refiNewRateEl = document.getElementById('pviRefiNewRate');
+  const refiNewTermEl = document.getElementById('pviRefiNewTerm');
+  const ovrEnabledEl = document.getElementById('pviEffRateOverrideEnabled');
+  const ovrEl = document.getElementById('pviEffRateOverride');
+
+  const plannedRefi = (refiEnabledEl && refiEnabledEl.checked) ? {
+    refiYear: parseInt(refiYearEl ? refiYearEl.value : '5', 10) || 5,
+    newRate: (parseFloat(refiNewRateEl ? refiNewRateEl.value : '5') || 5) / 100,
+    newTerm: parseInt(refiNewTermEl ? refiNewTermEl.value : '30', 10) || 30,
+  } : null;
+
+  const effectiveRateOverride = (ovrEnabledEl && ovrEnabledEl.checked)
+    ? ((parseFloat(ovrEl ? ovrEl.value : '0') || 0) / 100)
+    : null;
+
+  return {
+    currentAge: inp.agePerson1 || 36,
+    fireAge: effFireAge,
+    endAge: inp.endAge || 99,
+    mortgageEnabled: !!mortgage,
+    mortgage,
+    stocksReturn: inp.returnRate,
+    inflation: inp.inflationRate,
+    ltcgRate: inp.taxTrad ? Math.min(0.20, inp.taxTrad) : 0.15,
+    stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
+    extraMonthly: extraEl ? (parseFloat(extraEl.value) || 0) : 500,
+    framing: (framingTotalEl && framingTotalEl.checked) ? 'totalNetWorth' : 'liquidNetWorth',
+    effectiveRateOverride,
+    plannedRefi,
+  };
+}
+
+function _renderPayoffVsInvestExplainerCard(disabledReason) {
+  const card = document.getElementById('pviExplainerCard');
+  const txt = document.getElementById('pviExplainerText');
+  const wrapWealth = document.getElementById('pviChartWrapWealth');
+  const wrapAmort  = document.getElementById('pviChartWrapAmort');
+  const verdict    = document.getElementById('pviVerdictBanner');
+  const factorWrap = document.getElementById('pviFactorCardWrap');
+  if (!card || !txt) return;
+  const map = {
+    'no-mortgage': 'pvi.disabled.noMortgage',
+    'already-paid-off': 'pvi.disabled.alreadyPaid',
+    'invalid-ages': 'pvi.disabled.invalidAges',
+  };
+  const key = map[disabledReason] || 'pvi.disabled.noMortgage';
+  txt.textContent = (typeof t === 'function') ? t(key) : 'Comparison unavailable.';
+  card.hidden = false;
+  if (verdict) verdict.hidden = true;
+  if (wrapWealth) wrapWealth.style.display = 'none';
+  if (wrapAmort)  wrapAmort.style.display  = 'none';
+  if (factorWrap) factorWrap.style.display = 'none';
+}
+
+function _hidePayoffVsInvestExplainer() {
+  const card = document.getElementById('pviExplainerCard');
+  const wrapWealth = document.getElementById('pviChartWrapWealth');
+  const wrapAmort  = document.getElementById('pviChartWrapAmort');
+  const verdict    = document.getElementById('pviVerdictBanner');
+  const factorWrap = document.getElementById('pviFactorCardWrap');
+  if (card) card.hidden = true;
+  if (verdict) verdict.hidden = false;
+  if (wrapWealth) wrapWealth.style.display = '';
+  if (wrapAmort)  wrapAmort.style.display  = '';
+  if (factorWrap) factorWrap.style.display = '';
+}
+
+function renderPayoffVsInvestWealthChart(outputs, framing) {
+  const canvas = document.getElementById('payoffVsInvestWealthChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (charts_pviWealth) { try { charts_pviWealth.destroy(); } catch (_e) {} }
+  const key = framing === 'liquidNetWorth' ? 'liquidNetWorth' : 'totalNetWorth';
+  const ageLabels = outputs.prepayPath.map((r) => 'age ' + r.age);
+  const prepayData = outputs.prepayPath.map((r) => r[key]);
+  const investData = outputs.investPath.map((r) => r[key]);
+
+  const datasets = [
+    { label: t('pvi.chart.wealth.prepay'), data: prepayData,
+      borderColor: 'rgba(255,107,107,0.85)', backgroundColor: 'rgba(255,107,107,0.10)',
+      fill: false, tension: 0, pointRadius: 0, borderWidth: 2 },
+    { label: t('pvi.chart.wealth.invest'), data: investData,
+      borderColor: 'rgba(108,99,255,0.85)', backgroundColor: 'rgba(108,99,255,0.10)',
+      fill: false, tension: 0, pointRadius: 0, borderWidth: 2 },
+  ];
+  if (outputs.crossover) {
+    const idx = Math.max(0, Math.min(outputs.prepayPath.length - 1, outputs.crossover.ageRoundedDisplay - outputs.prepayPath[0].age));
+    datasets.push({
+      label: t('pvi.chart.wealth.crossover'),
+      data: outputs.prepayPath.map((_r, i) => i === idx ? outputs.crossover.totalNetWorth : null),
+      borderColor: '#ffd93d', backgroundColor: '#ffd93d',
+      pointRadius: 8, pointStyle: 'crossRot', showLine: false,
+    });
+  }
+  if (outputs.refiAnnotation) {
+    const refiIdx = Math.max(0, Math.min(outputs.prepayPath.length - 1, outputs.refiAnnotation.refiAge - outputs.prepayPath[0].age));
+    datasets.push({
+      label: 'Refi (' + (outputs.refiAnnotation.newRate * 100).toFixed(2) + '%)',
+      data: outputs.prepayPath.map((_r, i) => i === refiIdx ? prepayData[refiIdx] : null),
+      borderColor: '#00d4aa', backgroundColor: '#00d4aa',
+      pointRadius: 7, pointStyle: 'rect', showLine: false,
+    });
+  }
+
+  charts_pviWealth = new Chart(ctx, {
+    type: 'line',
+    data: { labels: ageLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: {
+            label: (tCtx) => {
+              if (tCtx.parsed.y === null || tCtx.parsed.y === undefined) return null;
+              return tCtx.dataset.label + ': $' + Math.round(tCtx.parsed.y).toLocaleString();
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#8b8fa3', maxTicksLimit: 15, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          ticks: {
+            color: '#8b8fa3',
+            callback: (v) => v >= 1000000 ? '$' + (v / 1000000).toFixed(1) + 'M' : '$' + Math.round(v / 1000) + 'K',
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+    },
+  });
+  if (window.tabRouter) window.tabRouter.registerChart('payoff-invest', charts_pviWealth);
+}
+
+function renderPayoffVsInvestAmortizationChart(outputs) {
+  const canvas = document.getElementById('payoffVsInvestAmortizationChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (charts_pviAmort) { try { charts_pviAmort.destroy(); } catch (_e) {} }
+  const ageLabels = outputs.amortizationSplit.prepay.map((r) => 'age ' + r.age);
+  const datasets = [
+    { label: t('pvi.amort.prepay.interest'),
+      data: outputs.amortizationSplit.prepay.map((r) => r.interestPaidThisYear),
+      backgroundColor: 'rgba(255,107,107,0.45)', stack: 'prepay' },
+    { label: t('pvi.amort.prepay.principal'),
+      data: outputs.amortizationSplit.prepay.map((r) => r.principalPaidThisYear),
+      backgroundColor: 'rgba(255,107,107,0.85)', stack: 'prepay' },
+    { label: t('pvi.amort.invest.interest'),
+      data: outputs.amortizationSplit.invest.map((r) => r.interestPaidThisYear),
+      backgroundColor: 'rgba(108,99,255,0.45)', stack: 'invest' },
+    { label: t('pvi.amort.invest.principal'),
+      data: outputs.amortizationSplit.invest.map((r) => r.principalPaidThisYear),
+      backgroundColor: 'rgba(108,99,255,0.85)', stack: 'invest' },
+  ];
+  charts_pviAmort = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: ageLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: {
+            label: (tCtx) => {
+              const v = tCtx.parsed.y;
+              if (!Number.isFinite(v) || v === 0) return null;
+              return tCtx.dataset.label + ': $' + Math.round(v).toLocaleString();
+            },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8b8fa3', maxTicksLimit: 15, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          stacked: true,
+          ticks: {
+            color: '#8b8fa3',
+            callback: (v) => v >= 1000000 ? '$' + (v / 1000000).toFixed(1) + 'M' : '$' + Math.round(v / 1000) + 'K',
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+    },
+  });
+  if (window.tabRouter) window.tabRouter.registerChart('payoff-invest', charts_pviAmort);
+}
+
+function renderPayoffVsInvestVerdictBanner(verdict, inputs) {
+  const banner = document.getElementById('pviVerdictBanner');
+  const lineFire = document.getElementById('pviVerdictAtFire');
+  const lineEnd  = document.getElementById('pviVerdictAtEnd');
+  if (!banner || !lineFire || !lineEnd || !verdict) return;
+  banner.hidden = false;
+  const fmt$ = (n) => Math.round(n).toLocaleString();
+  const winnerLabel = (w) => w === 'prepay' ? t('pvi.prepay') : (w === 'invest' ? t('pvi.invest') : '');
+  const fireMoment = t('pvi.verdict.atFire', inputs.fireAge);
+  const endMoment  = t('pvi.verdict.atEnd', inputs.endAge);
+  if (verdict.isTieAtFire) lineFire.textContent = t('pvi.verdict.tie', fireMoment);
+  else lineFire.textContent = t('pvi.verdict.winsBy', winnerLabel(verdict.winnerAtFire), fmt$(verdict.marginAtFire), fireMoment);
+  if (verdict.isTieAtEnd) lineEnd.textContent = t('pvi.verdict.tie', endMoment);
+  else lineEnd.textContent = t('pvi.verdict.winsBy', winnerLabel(verdict.winnerAtEnd), fmt$(verdict.marginAtEnd), endMoment);
+}
+
+function renderPayoffVsInvestFactorBreakdown(factors) {
+  const list = document.getElementById('payoffVsInvestFactorList');
+  if (!list) return;
+  if (!factors || factors.length === 0) { list.innerHTML = ''; return; }
+  const arrow = (s) => {
+    if (s === 'prepay') return t('pvi.factor.favors.prepay');
+    if (s === 'invest') return t('pvi.factor.favors.invest');
+    return t('pvi.factor.favors.neutral');
+  };
+  const html = factors.map((f) => {
+    const cls = 'pvi-factor-row pvi-factor-row--' + (f.favoredStrategy || 'neutral')
+              + (f.magnitude === 'dominant' ? ' pvi-factor-row--dominant' : '');
+    return '<div class="' + cls + '">'
+         + '<span class="pvi-factor-row__label">' + (t(f.i18nKey) || f.key) + '</span>'
+         + '<span class="pvi-factor-row__value">' + (f.valueDisplay || '') + '</span>'
+         + '<span class="pvi-factor-row__arrow">' + arrow(f.favoredStrategy) + '</span>'
+         + '</div>';
+  }).join('');
+  list.innerHTML = html;
+}
+
+function _pviUpdateRefiVisibility() {
+  const cb = document.getElementById('pviRefiEnabled');
+  const wrap = document.getElementById('pviRefiInputs');
+  if (cb && wrap) wrap.hidden = !cb.checked;
+}
+function _pviUpdateOverrideVisibility() {
+  const cb = document.getElementById('pviEffRateOverrideEnabled');
+  const wrap = document.getElementById('pviOverrideInput');
+  if (cb && wrap) wrap.hidden = !cb.checked;
+}
+
+function _pviSaveState() {
+  try { if (typeof saveState === 'function') saveState(); } catch (_e) {}
+}
+
+function recomputePayoffVsInvest() {
+  if (typeof computePayoffVsInvest !== 'function') return;
+  const inputs = _assemblePayoffVsInvestInputs();
+  if (!inputs) return;
+  const outputs = computePayoffVsInvest(inputs);
+  if (outputs.disabledReason) {
+    _renderPayoffVsInvestExplainerCard(outputs.disabledReason);
+    return;
+  }
+  _hidePayoffVsInvestExplainer();
+  try { renderPayoffVsInvestWealthChart(outputs, inputs.framing); } catch (_e) { console.error('[pvi] wealth chart', _e); }
+  try { renderPayoffVsInvestAmortizationChart(outputs); } catch (_e) { console.error('[pvi] amort chart', _e); }
+  try { renderPayoffVsInvestVerdictBanner(outputs.verdict, inputs); } catch (_e) { console.error('[pvi] verdict', _e); }
+  try { renderPayoffVsInvestFactorBreakdown(outputs.factors); } catch (_e) { console.error('[pvi] factors', _e); }
+}
+
+// =============================================================================
 // MODULE: lifecycle asset breakdown table
 // Inputs : lifecycle[] (from projectFullLifecycle — each row carries
 //          age, year, p401kTrad, p401kRoth, pStocks, pCash, total) +
@@ -14274,6 +14868,27 @@ function saveState() {
       if (Number.isFinite(v) && v > 0) state._scenarioOverrides[k] = v;
     });
   }
+  // Feature 016 — Payoff vs Invest pill local state.
+  try {
+    const _pviExtra = document.getElementById('pviExtraMonthly');
+    const _pviFramingTotal = document.getElementById('pviFramingTotal');
+    const _pviRefiEnabled = document.getElementById('pviRefiEnabled');
+    const _pviRefiYear = document.getElementById('pviRefiYear');
+    const _pviRefiNewRate = document.getElementById('pviRefiNewRate');
+    const _pviRefiNewTerm = document.getElementById('pviRefiNewTerm');
+    const _pviOvrEnabled = document.getElementById('pviEffRateOverrideEnabled');
+    const _pviOvr = document.getElementById('pviEffRateOverride');
+    state._payoffVsInvest = {
+      extraMonthly: _pviExtra ? (parseFloat(_pviExtra.value) || 500) : 500,
+      framing: (_pviFramingTotal && _pviFramingTotal.checked) ? 'totalNetWorth' : 'liquidNetWorth',
+      refiEnabled: _pviRefiEnabled ? !!_pviRefiEnabled.checked : false,
+      refiYear: _pviRefiYear ? (parseInt(_pviRefiYear.value, 10) || 5) : 5,
+      refiNewRate: _pviRefiNewRate ? ((parseFloat(_pviRefiNewRate.value) || 5) / 100) : 0.05,
+      refiNewTerm: _pviRefiNewTerm ? (parseInt(_pviRefiNewTerm.value, 10) || 30) : 30,
+      effRateOverrideEnabled: _pviOvrEnabled ? !!_pviOvrEnabled.checked : false,
+      effRateOverride: _pviOvr ? ((parseFloat(_pviOvr.value) || 0) / 100) : 0,
+    };
+  } catch (_e) { /* swallow */ }
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
 }
 
@@ -14479,6 +15094,37 @@ function restoreState() {
       }, 0);
     }
 
+    // Feature 016 — Payoff vs Invest pill local state.
+    if (state._payoffVsInvest && typeof state._payoffVsInvest === 'object') {
+      try {
+        const pvi = state._payoffVsInvest;
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+        const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+        if (Number.isFinite(pvi.extraMonthly)) {
+          setVal('pviExtraMonthly', pvi.extraMonthly);
+          const lbl = document.getElementById('pviExtraMonthlyVal');
+          if (lbl) lbl.textContent = '$' + Number(pvi.extraMonthly).toLocaleString();
+        }
+        const totalEl = document.getElementById('pviFramingTotal');
+        const liquidEl = document.getElementById('pviFramingLiquid');
+        if (totalEl && liquidEl) {
+          if (pvi.framing === 'liquidNetWorth') { liquidEl.checked = true; totalEl.checked = false; }
+          else { totalEl.checked = true; liquidEl.checked = false; }
+        }
+        setChk('pviRefiEnabled', pvi.refiEnabled);
+        if (Number.isFinite(pvi.refiYear)) {
+          setVal('pviRefiYear', pvi.refiYear);
+          const lbl = document.getElementById('pviRefiYearVal');
+          if (lbl) lbl.textContent = String(pvi.refiYear);
+        }
+        if (Number.isFinite(pvi.refiNewRate)) setVal('pviRefiNewRate', (pvi.refiNewRate * 100).toFixed(2));
+        if (Number.isFinite(pvi.refiNewTerm)) setVal('pviRefiNewTerm', String(pvi.refiNewTerm));
+        setChk('pviEffRateOverrideEnabled', pvi.effRateOverrideEnabled);
+        if (Number.isFinite(pvi.effRateOverride)) setVal('pviEffRateOverride', (pvi.effRateOverride * 100).toFixed(2));
+        if (typeof _pviUpdateRefiVisibility === 'function') _pviUpdateRefiVisibility();
+        if (typeof _pviUpdateOverrideVisibility === 'function') _pviUpdateOverrideVisibility();
+      } catch (_e) { /* swallow */ }
+    }
     return true;
   } catch (e) {
     console.warn('Failed to restore state:', e);
@@ -14490,6 +15136,10 @@ function restoreState() {
 const _originalRecalcAll = recalcAll;
 recalcAll = function() {
   _originalRecalcAll();
+  // Feature 016 — read-only side analysis. Runs AFTER the main recalc so it
+  // sees the freshly-computed FIRE age and updated mortgage state, but its
+  // own outputs do not feed back into any other chart.
+  try { if (typeof recomputePayoffVsInvest === 'function') recomputePayoffVsInvest(); } catch (_e) {}
   saveState();
 };
 

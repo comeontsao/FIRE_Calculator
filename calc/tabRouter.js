@@ -74,12 +74,13 @@ const TABS = Object.freeze([
     id: 'plan',
     labelKey: 'nav.tab.plan',
     pills: Object.freeze([
-      Object.freeze({ id: 'profile',    labelKey: 'nav.pill.profile' }),
-      Object.freeze({ id: 'assets',     labelKey: 'nav.pill.assets' }),
-      Object.freeze({ id: 'investment', labelKey: 'nav.pill.investment' }),
-      Object.freeze({ id: 'mortgage',   labelKey: 'nav.pill.mortgage' }),
-      Object.freeze({ id: 'expenses',   labelKey: 'nav.pill.expenses' }),
-      Object.freeze({ id: 'summary',    labelKey: 'nav.pill.summary' }),
+      Object.freeze({ id: 'profile',       labelKey: 'nav.pill.profile' }),
+      Object.freeze({ id: 'assets',        labelKey: 'nav.pill.assets' }),
+      Object.freeze({ id: 'investment',    labelKey: 'nav.pill.investment' }),
+      Object.freeze({ id: 'mortgage',      labelKey: 'nav.pill.mortgage' }),
+      Object.freeze({ id: 'payoff-invest', labelKey: 'nav.pill.payoffInvest' }), // Feature 016
+      Object.freeze({ id: 'expenses',      labelKey: 'nav.pill.expenses' }),
+      Object.freeze({ id: 'summary',       labelKey: 'nav.pill.summary' }),
     ]),
   }),
   Object.freeze({

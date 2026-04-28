@@ -582,3 +582,17 @@ test('regression: subsequent activate() also defensively sweeps every tab button
   assert.equal(host.tabButtons.retirement._classes.has('active'), false);
   assert.equal(host.tabButtons.history._classes.has('active'), false);
 });
+
+// Feature 016 — Plan tab gained the 'payoff-invest' pill between mortgage
+// and expenses. Lock that placement so a future refactor doesn't drop it.
+test('Feature 016: Plan tab includes payoff-invest pill between mortgage and expenses', () => {
+  const planTab = DEFAULT_TABS.find((t) => t.id === 'plan');
+  assert.ok(planTab, 'plan tab present in entity table');
+  const ids = planTab.pills.map((p) => p.id);
+  assert.ok(ids.includes('payoff-invest'), 'payoff-invest pill present');
+  const idxMortgage = ids.indexOf('mortgage');
+  const idxPayoff = ids.indexOf('payoff-invest');
+  const idxExpenses = ids.indexOf('expenses');
+  assert.ok(idxMortgage >= 0 && idxPayoff > idxMortgage && idxExpenses > idxPayoff,
+    `expected order: mortgage < payoff-invest < expenses; got ${ids.join(',')}`);
+});

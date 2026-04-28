@@ -353,6 +353,15 @@ A pragmatic order: 002 (quick wins first), 003 (unblock), 004 (big one), then pi
 
 ---
 
+## Done in feature 016 — Mortgage Payoff vs Invest (2026-04-28)
+
+- **US1 MVP — chart + verdict + amortization split**: Read-only Plan sub-pill that visualizes whether prepaying the mortgage or investing extra cash yields more wealth year-by-year. Three new charts: Wealth Trajectory, "Where each dollar goes" (per-year interest+principal stacked-bar), Verdict banner with winner + dollar margin at FIRE-age and plan-end. Crossover marker drawn when the lines cross.
+- **US2 — Factor Breakdown + Refi inputs + State-MID effective-rate override**: Factor card lists 7+ drivers (real-spread, time-horizon, LTCG drag, mortgage years remaining, etc.) with directional arrows. Optional planned mid-window refi (year + new rate + new term) shared by both strategies. Effective-rate override slider for state-MID approximation (verdict-only, doesn't change amortization).
+- **Calc module**: `calc/payoffVsInvest.js` — pure UMD module with month-stepped simulation, refi handling, crossover detection via linear interpolation, factor evaluation. 12 fixture-locked unit tests in `tests/unit/payoffVsInvest.test.js` covering SC-002 / SC-003 / SC-008 / SC-009 / SC-010.
+- **Lockstep delivery**: both `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html` shipped together. Bilingual EN+zh-TW for every new string. Tab router updated to register the new pill.
+- **Read-only contract enforced**: pill never writes to FIRE-age, FIRE-number, scenario, snapshot CSV, or strategy ranker state. Toggle the slider freely; no other chart's numbers change.
+- Spec / Plan / Tasks: see [`specs/016-mortgage-payoff-vs-invest/`](./specs/016-mortgage-payoff-vs-invest/) and its `CLOSEOUT.md`.
+
 ## Done in feature 015 — Calc-Engine Debt Cleanup (2026-04-27)
 
 - **US1 Shortfall visibility on lifecycle chart**: red overlay + bilingual caption + audit row class + Copy Debug `hasShortfall` field. Closed.
