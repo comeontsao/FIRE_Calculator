@@ -1519,13 +1519,27 @@
   #langEN[style*="accent"], #langZH[style*="accent"] {
     /* JS toggles inline styles on these; use attribute match to re-skin active */
   }
+  /* Sidebar toggle — accent-tinted so it reads as an interactive control
+     against the dark header chrome. Same visual weight as the active
+     language pill so it's discoverable without dominating. */
   #sidebarToggle {
-    background: var(--card) !important;
-    border: 1px solid var(--border) !important;
+    background: var(--accent-soft) !important;
+    border: 1px solid var(--accent) !important;
     border-radius: 999px !important;
-    color: var(--text-dim) !important;
+    color: var(--accent) !important;
+    box-shadow: 0 0 0 0 rgba(255,107,107,0);
+    transition: box-shadow 0.15s, transform 0.12s, background 0.15s;
   }
-  #sidebarToggle:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+  #sidebarToggle:hover {
+    background: var(--accent) !important;
+    color: #fff !important;
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  #sidebarToggle:active { transform: scale(0.96); }
+  #sidebarToggle[aria-pressed="true"] {
+    background: var(--accent) !important;
+    color: #fff !important;
+  }
 
   /* ============================================================
      FEATURE 011 — Responsive header layout overrides
@@ -2190,6 +2204,53 @@
     .pill-bar { padding: 0.3rem 0.6rem; gap: 0.3rem; }
     .tab { padding: 0.4rem 0.75rem; font-size: 0.95em; }
     .pill { padding: 0.3rem 0.65rem; font-size: 0.9em; }
+  }
+
+  /* Landscape layout for Plan sub-tab panels (>=1100px).
+     Each Plan panel originally rendered a single card in the left third of
+     the pill-host's 3-column grid, leaving 2/3 empty on wide screens. Below
+     1100px the existing responsive rules collapse the pill-host to 2 cols
+     then 1 col, so portrait/tablet/phone reading is preserved. */
+  @media (min-width: 1100px) {
+    .pill-host[data-tab="plan"][data-pill="profile"]    > .card,
+    .pill-host[data-tab="plan"][data-pill="assets"]     > .card,
+    .pill-host[data-tab="plan"][data-pill="investment"] > .card,
+    .pill-host[data-tab="plan"][data-pill="expenses"]   > .card {
+      grid-column: 1 / -1;
+    }
+    .pill-host[data-tab="plan"][data-pill="profile"] > .card {
+      column-count: 2;
+      column-gap: 28px;
+    }
+    .pill-host[data-tab="plan"][data-pill="profile"] > .card > * {
+      break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .pill-host[data-tab="plan"][data-pill="profile"] > .card > .card-title {
+      column-span: all;
+    }
+    .pill-host[data-tab="plan"][data-pill="assets"] > .card {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px 16px;
+      align-items: start;
+    }
+    .pill-host[data-tab="plan"][data-pill="assets"] > .card > .card-title {
+      grid-column: 1 / -1;
+    }
+    .pill-host[data-tab="plan"][data-pill="investment"] > .card {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 28px;
+      align-items: start;
+    }
+    .pill-host[data-tab="plan"][data-pill="investment"] > .card > .card-title {
+      grid-column: 1 / -1;
+    }
+    .pill-host[data-tab="plan"][data-pill="summary"] .pie-stack {
+      display: contents;
+    }
   }
   /* === End Feature 013 ============================================== */
 
@@ -7908,6 +7969,9 @@ function renderLifecycleSidebarChart(_state) {
       ? '$' + Math.round(endTotal).toLocaleString()
       : '—';
   }
+  // Attach the sidebar drag listeners once the chart instance exists. The
+  // setup is idempotent — guarded by canvas.dataset.fireDragBound.
+  try { setupSidebarFireDragListeners(); } catch (_e) {}
 }
 
 function calcFIRENumber(annualSpend, swr) {
@@ -8208,6 +8272,11 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
 
   let balanceAtUnlock = null;
   let balanceAtSS = null;
+  // Spendable portfolio at the moment FIRE begins (first retired year).
+  // Consumed by the Safe gate's terminal-floor rule: the simulation's
+  // endBalance must remain ≥ SAFE_TERMINAL_FIRE_RATIO × balanceAtFire so the
+  // tail of the chart slopes upward instead of bleeding to ~$0 by plan age.
+  let balanceAtFire = null;
   // Trajectory minimums per phase (Safe-mode trajectory enforcement).
   // Phase 1 (FIRE → 59.5): min balance during taxable-only drawdown.
   // Phase 2 (59.5 → SS claim): min balance after 401K unlocks, before SS starts.
@@ -8240,6 +8309,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
     // Safe-mode "every year" enforcement across all 3 phases.
     if (isRetired) {
       const eb = effBal();
+      if (balanceAtFire === null) balanceAtFire = eb;
       if (!is401kUnlocked) {
         // Phase 1 year — sample min before unlock
         minBalancePhase1 = Math.min(minBalancePhase1, eb);
@@ -8344,19 +8414,27 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
   const endBalance = pTrad + pRoth + pStocks + pCash;
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
   if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
-  return { endBalance, balanceAtUnlock, balanceAtSS, minBalancePhase1, minBalancePhase2, minBalancePhase3 };
+  if (balanceAtFire === null) balanceAtFire = endBalance;
+  return { endBalance, balanceAtUnlock, balanceAtSS, balanceAtFire, minBalancePhase1, minBalancePhase2, minBalancePhase3 };
 }
 
 // ==================== UNIFIED MODE-AWARE FEASIBILITY ====================
 //  Safe:        EVERY Phase-1 year balance ≥ bufferUnlock × spend,
 //               EVERY Phase-2 year balance ≥ bufferSS     × spend,
 //               EVERY Phase-3 year balance ≥ bufferSS     × spend,
-//               endBalance ≥ 0 at plan age.
+//               endBalance ≥ SAFE_TERMINAL_FIRE_RATIO × balance-at-FIRE so the
+//               tail of the chart slopes upward instead of grinding to ~$0.
 //               (Trajectory enforcement across ALL three retirement phases —
 //                prevents the chart from visibly depleting before plan age
 //                while the signed endBalance barely clears zero.)
 //  Exact:       endBalance      ≥ terminalBuffer × spend
 //  DieWithZero: endBalance      ≥ 0
+
+// Safe-mode terminal-floor: endBalance must stay at least this fraction of the
+// portfolio total at the FIRE moment, so the chart's last years slope upward
+// rather than bleeding toward zero. Tunable; matches the value the user pinned
+// in their feedback ("20% of the FIRE year, at the year that we plan to leave").
+const SAFE_TERMINAL_FIRE_RATIO = 0.20;
 
 // Mirror the chart's strategy detection so the feasibility gate evaluates the
 // SAME simulated lifecycle the user is looking at. Without this, the gate
@@ -8448,6 +8526,14 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
         const floor = (row.age < unlockAge) ? bufUnlock : bufSS;
         if (row.total < floor) return false;
       }
+      // Terminal-floor: the chart's last total must remain at least
+      // SAFE_TERMINAL_FIRE_RATIO of the FIRE-moment balance, so the tail
+      // slopes upward rather than draining to ~$0.
+      const fireRow = chart.find(r => r && r.age === fireAge);
+      const fireBal = fireRow && typeof fireRow.total === 'number' ? fireRow.total : 0;
+      const lastRow = chart[chart.length - 1];
+      const endBal = lastRow && typeof lastRow.total === 'number' ? lastRow.total : 0;
+      if (fireBal > 0 && endBal < SAFE_TERMINAL_FIRE_RATIO * fireBal) return false;
       return true;
     } catch (_e) {
       // Fall through to signed-sim check if chart sim is unavailable.
@@ -8456,10 +8542,13 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
   const minP1 = (typeof sim.minBalancePhase1 === 'number') ? sim.minBalancePhase1 : Infinity;
   const minP2 = (typeof sim.minBalancePhase2 === 'number') ? sim.minBalancePhase2 : Infinity;
   const minP3 = (typeof sim.minBalancePhase3 === 'number') ? sim.minBalancePhase3 : Infinity;
+  const fireBalSigned = (typeof sim.balanceAtFire === 'number') ? sim.balanceAtFire : 0;
+  const terminalSigned = SAFE_TERMINAL_FIRE_RATIO * fireBalSigned;
   return minP1 >= bufUnlock
       && minP2 >= bufSS
       && minP3 >= bufSS
-      && sim.endBalance >= 0;
+      && sim.endBalance >= 0
+      && (fireBalSigned <= 0 || sim.endBalance >= terminalSigned);
 }
 
 // Thin helper for callers that want a single boolean at a given age.
@@ -9596,6 +9685,12 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
 // Contract: specs/008-multi-strategy-withdrawal-optimizer/contracts/strategy-module.contract.md
 // =========================================================================
 
+// Local re-declaration of SAFE_TERMINAL_FIRE_RATIO so the strategy block
+// (which the unit test harness extracts via extractBlock and evaluates in
+// isolation) keeps the same Safe-mode terminal-floor as isFireAgeFeasible.
+// Must match the constant of the same name defined above the gate.
+const SAFE_TERMINAL_FIRE_RATIO_STRATEGY = 0.20;
+
 // Resolve effective 401k unlock age given Rule-of-55 options. Shared by every
 // policy so they all agree on eligibility semantics.
 function _effectiveUnlockAge(bfOpts) {
@@ -10106,12 +10201,19 @@ function scoreAndRank(inp, fireAge, mode, objective) {
       : 0;
 
     // Feature 008 — mode-aware feasibility gate, mirrors isFireAgeFeasible.
-    // Safe: every retirement year's start-of-year total ≥ buffer × spend.
+    // Safe: every retirement year's start-of-year total ≥ buffer × spend AND
+    //       end-of-plan total ≥ SAFE_TERMINAL_FIRE_RATIO × FIRE-moment total
+    //       (so the tail slopes upward instead of draining to ~$0).
     // Exact: endOfPlanNetWorthReal ≥ terminalBufferYears × spend.
     // DWZ: endOfPlanNetWorthReal ≥ 0 (already covered by feasible flag).
     if (mode === 'safe') {
       if (_bufUnlockFloor > 0 && _minTotalPreUnlock < _bufUnlockFloor) feasible = false;
       if (_bufSSFloor > 0 && _minTotalPostUnlock < _bufSSFloor) feasible = false;
+      const _fireRow = perYearRows.length > 0 ? perYearRows[0] : null;
+      const _lastRow = perYearRows.length > 0 ? perYearRows[perYearRows.length - 1] : null;
+      const _totalAtFire = _fireRow && typeof _fireRow.totalStart === 'number' ? _fireRow.totalStart : 0;
+      const _totalAtEnd = _lastRow && typeof _lastRow.totalEnd === 'number' ? _lastRow.totalEnd : 0;
+      if (_totalAtFire > 0 && _totalAtEnd < SAFE_TERMINAL_FIRE_RATIO_STRATEGY * _totalAtFire) feasible = false;
     } else if (mode === 'exact') {
       let _tYrs = 0;
       try {
@@ -10205,6 +10307,12 @@ function scoreAndRank(inp, fireAge, mode, objective) {
         if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
         const floor = row.age < 59.5 ? bufUnlock : bufSS;
         if (row.total < floor) return { feasible: false, endBalance: endBal };
+      }
+      // Terminal-floor: tail must stay ≥ SAFE_TERMINAL_FIRE_RATIO_STRATEGY × FIRE balance.
+      const fireRow = traj.find(r => r && r.age === fireAge);
+      const fireBal = fireRow && typeof fireRow.total === 'number' ? fireRow.total : 0;
+      if (fireBal > 0 && endBal < SAFE_TERMINAL_FIRE_RATIO_STRATEGY * fireBal) {
+        return { feasible: false, endBalance: endBal };
       }
       return { feasible: true, endBalance: endBal };
     } catch (_e) {
@@ -12114,6 +12222,10 @@ const _fireDrag = {
   lastRenderTime: 0,
   throttleMs: 50, // ~20fps during drag for smooth feel
   rendering: false, // true while chart is being recreated
+  // 'growth' (main chart) | 'sidebar' (mirror chart). The mouseup handler
+  // routes the confirm overlay to whichever canvas the drag started on so the
+  // user sees the dialog where their attention already is.
+  source: null,
 };
 // Preview state — kept distinct from chartState so downstream charts never
 // update during a raw drag. `previewAge` is consulted by renderGrowthChart;
@@ -12176,6 +12288,7 @@ function setupFireDragListeners() {
     const y = e.clientY - rect.top;
     if (_isNearFireMarker(x, y)) {
       _fireDrag.active = true;
+      _fireDrag.source = 'growth';
       canvas.style.cursor = 'grabbing';
       // T026: if a confirm overlay is already visible, starting a new drag
       // supersedes it (Edge Case E-5 / INT-7). Hide it AND clear any stale
@@ -12232,6 +12345,8 @@ function setupFireDragListeners() {
         _fireDrag.rendering = true;
         _previewFireAge = clamped;
         try { renderGrowthChart(inp); } catch (_e) {}
+        // Mirror the preview to the sidebar so both charts move together.
+        try { renderLifecycleSidebarChart(null); } catch (_e) {}
         _fireDrag.rendering = false;
       }
     } else {
@@ -12246,8 +12361,12 @@ function setupFireDragListeners() {
   document.addEventListener('mouseup', () => {
     if (_fireDrag.active) {
       _fireDrag.active = false;
-      const c = document.getElementById('growthChart');
-      if (c) c.style.cursor = 'default';
+      const source = _fireDrag.source;
+      _fireDrag.source = null;
+      const cMain = document.getElementById('growthChart');
+      const cSide = document.getElementById('lifecycleSidebarCanvas');
+      if (cMain) cMain.style.cursor = 'default';
+      if (cSide) cSide.style.cursor = 'default';
       const preview = _dragPreview.previewAge;
       const startAge = _dragPreview.dragStartAge;
       _dragPreview.active = false;
@@ -12257,13 +12376,123 @@ function setupFireDragListeners() {
         globalThis._userDraggedFireAgeValue = undefined;
       }, 500);
       if (preview != null && startAge != null && preview !== startAge) {
-        _showConfirmOverlay(preview);
+        if (source === 'sidebar') _showSidebarConfirmOverlay(preview);
+        else _showConfirmOverlay(preview);
       } else {
-        // No real movement — discard preview and snap the chart back.
+        // No real movement — discard preview and snap both charts back.
         _cancelPreviewAndRevert();
       }
     }
   });
+}
+
+// ==================== SIDEBAR DRAG (mirror of main-chart drag) ====================
+// The sidebar mirrors the main lifecycle chart — including the draggable FIRE
+// marker. Helpers below operate on _sidebarLifecycleChart in place of
+// charts.growth, and reuse the same _fireDrag / _dragPreview / _previewFireAge
+// state so both surfaces stay coherent.
+function _getSidebarFireMarkerPosition() {
+  const chart = _sidebarLifecycleChart;
+  if (!chart) return null;
+  const meta = chart.getDatasetMeta(3); // FIRE marker is dataset index 3 in the sidebar config
+  if (!meta || !meta.data) return null;
+  const ds = chart.data.datasets[3];
+  if (!ds) return null;
+  for (let i = 0; i < ds.data.length; i++) {
+    if (ds.data[i] !== null && ds.data[i] !== undefined) {
+      return { element: meta.data[i], idx: i };
+    }
+  }
+  return null;
+}
+
+function _isNearSidebarFireMarker(canvasX, canvasY) {
+  const fp = _getSidebarFireMarkerPosition();
+  if (!fp) return false;
+  const pos = fp.element.getCenterPoint();
+  return Math.sqrt(Math.pow(pos.x - canvasX, 2) + Math.pow(pos.y - canvasY, 2)) < 28;
+}
+
+function _getSidebarAgeAtPixelX(pixelX) {
+  const chart = _sidebarLifecycleChart;
+  if (!chart || !chart.data.labels.length) return null;
+  const xScale = chart.scales.x;
+  let closest = 0, minDist = Infinity;
+  for (let i = 0; i < chart.data.labels.length; i++) {
+    const px = xScale.getPixelForValue(i);
+    const dist = Math.abs(px - pixelX);
+    if (dist < minDist) { minDist = dist; closest = i; }
+  }
+  // Sidebar labels are plain numeric ages (not "year (age)" like the main chart).
+  const label = chart.data.labels[closest];
+  const n = typeof label === 'number' ? label : parseInt(label, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function setupSidebarFireDragListeners() {
+  const canvas = document.getElementById('lifecycleSidebarCanvas');
+  if (!canvas || canvas.dataset.fireDragBound === '1') return;
+  canvas.dataset.fireDragBound = '1';
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (!calculatedFireAge || _fireDrag.rendering) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (_isNearSidebarFireMarker(x, y)) {
+      _fireDrag.active = true;
+      _fireDrag.source = 'sidebar';
+      canvas.style.cursor = 'grabbing';
+      _hideConfirmOverlay();
+      _previewFireAge = null;
+      globalThis._userDraggedFireAge = true;
+      const startAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null)
+        ? fireAgeOverride
+        : calculatedFireAge;
+      globalThis._userDraggedFireAgeValue = startAge;
+      _dragPreview.active = true;
+      _dragPreview.dragStartAge = startAge;
+      _dragPreview.previewAge = startAge;
+      e.preventDefault();
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (_fireDrag.rendering) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (_fireDrag.active && _fireDrag.source === 'sidebar') {
+      e.preventDefault();
+      canvas.style.cursor = 'grabbing';
+      const age = _getSidebarAgeAtPixelX(x);
+      if (age == null || !calculatedFireAge) return;
+      const inp = getInputs();
+      const maxAge = Math.min(70, inp.ssClaimAge - 1);
+      const clamped = Math.max(calculatedFireAge, Math.min(age, maxAge));
+      if (clamped !== _dragPreview.previewAge) {
+        const now = Date.now();
+        if (now - _fireDrag.lastRenderTime < _fireDrag.throttleMs) return;
+        _fireDrag.lastRenderTime = now;
+        _dragPreview.previewAge = clamped;
+        if (!cachedOriginalLifecycle) {
+          const scenario = scenarios.find(s => s.id === selectedScenario);
+          cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge);
+        }
+        _fireDrag.rendering = true;
+        _previewFireAge = clamped;
+        try { renderGrowthChart(inp); } catch (_e) {}
+        try { renderLifecycleSidebarChart(null); } catch (_e) {}
+        _fireDrag.rendering = false;
+      }
+    } else if (!_fireDrag.active) {
+      canvas.style.cursor = _isNearSidebarFireMarker(x, y) ? 'grab' : 'default';
+    }
+  });
+  // Note: mouseup is handled by the document-level listener registered in
+  // setupFireDragListeners, which inspects _fireDrag.source to route the
+  // confirm overlay to the right canvas.
 }
 
 // ==================== CONFIRM-OVERLAY HELPERS (T025/T026) ====================
@@ -12298,20 +12527,61 @@ function _hideConfirmOverlay() {
     overlay.hidden = true;
     delete overlay.dataset.previewAge;
   }
+  const sidebarOverlay = document.getElementById('sidebarOverrideConfirm');
+  if (sidebarOverlay) {
+    sidebarOverlay.hidden = true;
+    delete sidebarOverlay.dataset.previewAge;
+  }
 }
 
-// Revert the growth-chart preview to the real effectiveFireAge without
+// Position + show the confirm overlay anchored over the SIDEBAR canvas.
+// Used when the drag originated on #lifecycleSidebarCanvas so the user sees
+// the confirmation where their attention already is.
+function _showSidebarConfirmOverlay(previewAge) {
+  const overlay = document.getElementById('sidebarOverrideConfirm');
+  const labelEl = document.getElementById('sidebarOverrideConfirmLabel');
+  const chart = _sidebarLifecycleChart;
+  if (!overlay || !chart) return;
+  const idx = chart.data.labels.findIndex(l => {
+    if (typeof l === 'number') return l === previewAge;
+    const n = parseInt(l, 10);
+    return Number.isFinite(n) && n === previewAge;
+  });
+  if (idx >= 0) {
+    const xPx = chart.scales.x.getPixelForValue(idx);
+    overlay.style.left = `${xPx}px`;
+    overlay.style.transform = 'translateX(-50%)';
+  }
+  if (labelEl) {
+    const tmpl = (typeof t === 'function')
+      ? t('override.confirmLabel', previewAge)
+      : `Recalculate for retirement at age ${previewAge}?`;
+    labelEl.textContent = tmpl;
+  }
+  overlay.hidden = false;
+  overlay.dataset.previewAge = String(previewAge);
+}
+
+// Revert the chart previews to the real effectiveFireAge without
 // mutating chartState. Used when the user dismisses the confirm overlay
 // or releases the drag without moving the marker.
 function _cancelPreviewAndRevert() {
   _previewFireAge = null;
   try { renderGrowthChart(getInputs()); } catch (_e) {}
+  try { renderLifecycleSidebarChart(null); } catch (_e) {}
 }
 
 // Apply-click: promote the preview into an actual override via chartState.
 // All subscribers registered in T022 fan out automatically from here.
 function _applyConfirmedOverride() {
-  const overlay = document.getElementById('overrideConfirm');
+  const main = document.getElementById('overrideConfirm');
+  const side = document.getElementById('sidebarOverrideConfirm');
+  // Pick whichever overlay is currently visible and has a valid previewAge.
+  // Either the main-chart overlay or the sidebar mirror could be the source
+  // depending on where the user dragged the marker.
+  const overlay = (side && !side.hidden && side.dataset && side.dataset.previewAge)
+    ? side
+    : main;
   if (!overlay) {
     console.warn('[applyOverride] overlay element not found');
     return;
@@ -15385,6 +15655,15 @@ if (window.__calcBootstrapReady) {
   </div>
   <div class="sidebar__chart">
     <canvas id="lifecycleSidebarCanvas"></canvas>
+    <!-- Sibling of #overrideConfirm in the main chart wrap; positioned via the
+         same .override-confirm CSS but anchored over the sidebar's canvas. -->
+    <div class="override-confirm" id="sidebarOverrideConfirm" hidden role="dialog" aria-live="polite" aria-label="Confirm retirement age override">
+      <span class="override-confirm__label" id="sidebarOverrideConfirmLabel" data-i18n="override.confirmLabel">Recalculate for retirement at age {0}?</span>
+      <button class="override-confirm__apply" id="sidebarOverrideConfirmApply" type="button"
+              onclick="_applyConfirmedOverride()" data-i18n="override.applyButton">Recalculate</button>
+      <button class="override-confirm__cancel" id="sidebarOverrideConfirmCancel" type="button" aria-label="Cancel"
+              onclick="_hideConfirmOverlay(); _cancelPreviewAndRevert();" data-i18n="override.cancelButton">✕</button>
+    </div>
   </div>
   <div class="sidebar__caption">
     <span data-i18n="sidebar.fireAgeLabel">FIRE age</span>
