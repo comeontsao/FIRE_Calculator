@@ -7153,6 +7153,15 @@ function setFireMode(mode) {
     try { cs.clearOverride(); } catch (_e) {}
     _clearOverrideFire();
   }
+  // Drag-state leak fix: an unconfirmed drag preview (user dragged the FIRE
+  // marker but never clicked Recalculate/Cancel) leaves _previewFireAge set.
+  // Mode buttons must wipe that preview too — otherwise the new mode renders
+  // its chart at the dragged age instead of the freshly-computed one.
+  _previewFireAge = null;
+  _dragPreview.active = false;
+  _dragPreview.previewAge = null;
+  _dragPreview.dragStartAge = null;
+  _hideConfirmOverlay();
   recalcAll();
 }
 
@@ -8706,6 +8715,17 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
 
   let balanceAtUnlock = null;
   let balanceAtSS = null;
+  // Captured on the first iteration so the Safe gate's signed-sim fallback
+  // can enforce endBalance ≥ SAFE_TERMINAL_FIRE_RATIO × balanceAtFire when
+  // the FIRE-number binary-search feeds this sim into isFireAgeFeasible
+  // without a fireAge argument (i.e. the chart-consistent path is skipped).
+  let balanceAtFire = null;
+  // Per-phase trajectory minimums — same fields as signedLifecycleEndBalance
+  // so the signed-sim fallback can enforce per-year buffer floors during the
+  // Safe FIRE-number binary search.
+  let minBalancePhase1 = Infinity;
+  let minBalancePhase2 = Infinity;
+  let minBalancePhase3 = Infinity;
   const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
 
   for (let age = fireAge; age < endAge; age++) {
@@ -8714,6 +8734,15 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     const ssActive = age >= inp.ssClaimAge;
     const ssThisYear = ssActive ? ssAnnual : 0;
 
+    const _ebStart = effBal();
+    if (balanceAtFire === null) balanceAtFire = _ebStart;
+    if (!is401kUnlocked) {
+      if (_ebStart < minBalancePhase1) minBalancePhase1 = _ebStart;
+    } else if (!ssActive) {
+      if (_ebStart < minBalancePhase2) minBalancePhase2 = _ebStart;
+    } else {
+      if (_ebStart < minBalancePhase3) minBalancePhase3 = _ebStart;
+    }
     if (balanceAtUnlock === null && is401kUnlocked) balanceAtUnlock = effBal();
     if (balanceAtSS === null && ssActive) balanceAtSS = effBal();
 
@@ -8751,7 +8780,8 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
   const endBalance = effBal();
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
   if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
-  return { endBalance, balanceAtUnlock, balanceAtSS };
+  if (balanceAtFire === null) balanceAtFire = endBalance;
+  return { endBalance, balanceAtUnlock, balanceAtSS, balanceAtFire, minBalancePhase1, minBalancePhase2, minBalancePhase3 };
 }
 
 // ==================== MIN ACCESSIBLE AT FIRE (NUMERICAL) ====================
@@ -10924,6 +10954,15 @@ function recalcAll() {
   const locked = calcLocked(inp);
   const scenario = scenarios.find(s => s.id === selectedScenario);
   const effectiveSpend = getScenarioEffectiveSpend(scenario);
+  // Click-to-converge fix: yearsToFIRE / isFireAgeFeasible read
+  // _lastStrategyResults via getActiveChartStrategyOptions(). Letting the
+  // PRIOR run's winner gate THIS run's FIRE-age search makes successive
+  // mode-switch clicks chase a moving target — same input, different
+  // output. Pin the FIRE-age search to bracket-fill (Architecture B) so
+  // the search is deterministic; we re-evaluate feasibility under the
+  // freshly-picked winner AFTER scoreAndRank below.
+  _lastStrategyResults = null;
+  _previewStrategyId = null;
   const yrsToFire = yearsToFIRE(inp, effectiveSpend);
   yearsToFIREcache = yrsToFire;
   const fireAge = inp.agePerson1 + yrsToFire;
