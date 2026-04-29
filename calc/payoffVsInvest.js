@@ -1,21 +1,32 @@
 /*
  * =============================================================================
- * MODULE: calc/payoffVsInvest.js
+ * MODULE: calc/payoffVsInvest.js (v2)
  *
- * Feature: 016-mortgage-payoff-vs-invest
- * Contract: specs/016-mortgage-payoff-vs-invest/contracts/payoffVsInvest-calc.contract.md
+ * Feature: 016-mortgage-payoff-vs-invest (v1) → 017-payoff-vs-invest-stages-and-lumpsum (v2)
+ * Contract (v1): specs/016-mortgage-payoff-vs-invest/contracts/payoffVsInvest-calc.contract.md
+ * Contract (v2): specs/017-payoff-vs-invest-stages-and-lumpsum/contracts/payoffVsInvest-calc-v2.contract.md
  *
  * Inputs : PrepayInvestComparisonInputs (see data-model.md). Pure record;
  *          assembled by the renderer from existing dashboard state.
+ *          v2 adds: lumpSumPayoff?: boolean (default false). When true, the
+ *          Invest strategy fires a lump-sum payoff the first month its
+ *          real-dollar brokerage equals the remaining real-dollar mortgage
+ *          balance.
  * Outputs: PrepayInvestComparisonOutputs — { prepayPath, investPath,
  *          amortizationSplit, verdict, factors, crossover, refiAnnotation,
- *          subSteps, disabledReason? }.
+ *          subSteps, disabledReason?,
+ *          lumpSumEvent (v2), stageBoundaries (v2) }.
  * Consumers:
- *   - FIRE-Dashboard.html → renderPayoffVsInvestWealthChart
+ *   - FIRE-Dashboard.html → renderPayoffVsInvestBrokerageChart
+ *       (reads liquidNetWorth, mortgageNaturalPayoff, mortgageFreedom.buyInAge,
+ *        refiAnnotation, stageBoundaries (v2), lumpSumEvent (v2))
  *   - FIRE-Dashboard.html → renderPayoffVsInvestAmortizationChart
+ *       (reads amortizationSplit)
  *   - FIRE-Dashboard.html → renderPayoffVsInvestVerdictBanner
+ *       (reads mortgageNaturalPayoff, liquidNetWorth, lumpSumEvent (v2))
  *   - FIRE-Dashboard.html → renderPayoffVsInvestFactorBreakdown
- *   - FIRE-Dashboard-Generic.html → same four renderers (lockstep)
+ *       (reads factors)
+ *   - FIRE-Dashboard-Generic.html → same four renderers (lockstep — Principle I)
  *   - tests/unit/payoffVsInvest.test.js → fixture-locked unit tests
  *
  * Policy : NO DOM access. NO Chart.js. NO localStorage. NO global mutable
@@ -27,10 +38,32 @@
  *   V   — UMD-style classic-script load (no `export` keyword).
  *   VI  — Consumers list above is canonical.
  *
+ * v2 backwards compatibility (Inv-1): when `lumpSumPayoff === false` AND
+ * `ownership !== 'buying-in'`, every output field is byte-identical to v1.
+ * Locked by tests/unit/payoffVsInvest.test.js parity snapshots.
+ *
  * The 20% terminal-floor / Safe-mode logic in the rest of the project is
  * unrelated to this module — Payoff-vs-Invest is a side analysis that does
  * NOT participate in FIRE-age search or strategy ranking.
  * =============================================================================
+ */
+
+/**
+ * @typedef {Object} LumpSumEvent
+ * @property {number} age              The age (years) at which the trigger fired.
+ * @property {number} monthInYear      0..11 — which month within the age year.
+ * @property {number} brokerageBefore  Real $, rounded; brokerage immediately before the check.
+ * @property {number} paidOff          Real $, rounded; remaining real-dollar mortgage balance at trigger.
+ * @property {number} brokerageAfter   Real $, rounded; brokerage post-check (≥ 0 by construction).
+ */
+
+/**
+ * @typedef {Object} StageBoundaries
+ * @property {number} windowStartAge       The age the comparison window begins at.
+ * @property {number} firstPayoffAge       The age the first strategy becomes debt-free.
+ * @property {'prepay'|'invest'} firstPayoffWinner  Which strategy got there first.
+ * @property {number|null} secondPayoffAge The age the second strategy becomes debt-free, or null
+ *                                         if it never reaches zero balance within the horizon.
  */
 
 const SAFE_TIE_FRACTION = 0.005; // 0.5% tie threshold per FR-007 / Verdict.isTie*
@@ -309,6 +342,15 @@ function computePayoffVsInvest(inputs) {
     };
   }
 
+  // Window-start rule (v2, T008): for ownership='buying-in' with buyInYears>0,
+  // the comparison window begins at currentAge + buyInYears (the age the user
+  // actually takes on the mortgage). For all other cases it begins at currentAge.
+  const isBuyingInDeferred = inputs.mortgage.ownership === 'buying-in' && (inputs.mortgage.buyInYears || 0) > 0;
+  const windowStartAge = inputs.currentAge + (isBuyingInDeferred ? (inputs.mortgage.buyInYears || 0) : 0);
+  if (isBuyingInDeferred) {
+    subSteps.push('window starts at buy-in age (year offset ' + (inputs.mortgage.buyInYears || 0) + ')');
+  }
+
   // Refi clamping: refiYear cannot precede mortgage start (buyInYears).
   let refi = null;
   let refiClampedNote = null;
@@ -326,6 +368,8 @@ function computePayoffVsInvest(inputs) {
     };
   }
 
+  const lumpSumPayoff = inputs.lumpSumPayoff === true;  // strict, defaults to false
+
   const monthlyRealReturn = _monthlyRealReturn(inputs.stocksReturn, inputs.inflation);
 
   const extraMonthly = Math.max(0, Math.min(5000, inputs.extraMonthly || 0));
@@ -334,6 +378,8 @@ function computePayoffVsInvest(inputs) {
   let mortgageStateI = stateI;
   let investedP = 0; // Prepay path's investment balance
   let investedI = 0; // Invest path's investment balance
+
+  let lumpSumEvent = null; // v2 (feature 017): lump-sum trigger record, null until fired
 
   // Track cumulative interest per strategy (for verdict + factor breakdown).
   let cumInterestP = 0;
@@ -359,7 +405,9 @@ function computePayoffVsInvest(inputs) {
   if (refi) subSteps.push('apply planned refi at year ' + refi.refiYear);
 
   // Iterate by year (snapshot annually) but step monthly internally.
-  for (let age = inputs.currentAge; age <= inputs.endAge; age++) {
+  // v2 (T008): start at windowStartAge (= currentAge + buyInYears for
+  // deferred buying-in; = currentAge for all other ownership types).
+  for (let age = windowStartAge; age <= inputs.endAge; age++) {
     const yearOffset = age - inputs.currentAge;
 
     let yearInterestP = 0;
@@ -412,10 +460,6 @@ function computePayoffVsInvest(inputs) {
         yearBrokerageP += leftover;
         // Compound any existing invested balance (post-payoff this won't be entered)
         investedP = _compoundInvested(investedP, 0, monthlyRealReturn);
-      } else if (!mortgageActiveThisMonth) {
-        // Pre-buy-in: the extra cash goes to investments under both strategies
-        yearBrokerageP += extraMonthly;
-        investedP = _compoundInvested(investedP, extraMonthly, monthlyRealReturn);
       } else {
         // Mortgage paid off — redirect (former P&I + extraMonthly) to investments
         const freedCashFlow = mortgageStateP.contractualMonthlyPI + extraMonthly;
@@ -424,6 +468,28 @@ function computePayoffVsInvest(inputs) {
       }
 
       // ----- Invest strategy -----
+      // v2 (feature 017): lump-sum trigger — Invest writes a check the moment its
+      // real-dollar brokerage equals the remaining real-dollar mortgage balance.
+      // See specs/017-.../data-model.md §"Lump-sum trigger algorithm".
+      if (lumpSumPayoff && lumpSumEvent === null && mortgageActiveThisMonth && mortgageStateI.balance > 0) {
+        const yearOffsetForTrigger = age - inputs.currentAge;
+        const inflationFactorAtTrigger = Math.pow(1 + (inputs.inflation || 0), yearOffsetForTrigger);
+        const realBalance = mortgageStateI.balance / inflationFactorAtTrigger;
+        if (investedI >= realBalance) {
+          const brokerageBefore = investedI;
+          const paidOff = realBalance;
+          investedI = investedI - realBalance;
+          mortgageStateI = Object.assign({}, mortgageStateI, { balance: 0 });
+          lumpSumEvent = {
+            age: age,
+            monthInYear: monthInYear,
+            brokerageBefore: Math.round(brokerageBefore),
+            paidOff: Math.round(paidOff),
+            brokerageAfter: Math.round(investedI),
+          };
+          // Fall through into the existing else branch (mortgage paid off → redirect freed cash flow + extra).
+        }
+      }
       if (mortgageActiveThisMonth && mortgageStateI.balance > 0) {
         const stepI = _stepMonth(mortgageStateI, 0);
         mortgageStateI = Object.assign({}, mortgageStateI, { balance: stepI.balance });
@@ -433,10 +499,6 @@ function computePayoffVsInvest(inputs) {
         // Brokerage contrib this month: extraMonthly (mortgage gets only contractual P&I).
         yearBrokerageI += extraMonthly;
         // Deposit extra to brokerage AND compound
-        investedI = _compoundInvested(investedI, extraMonthly, monthlyRealReturn);
-      } else if (!mortgageActiveThisMonth) {
-        // Pre-buy-in: extra goes to investments
-        yearBrokerageI += extraMonthly;
         investedI = _compoundInvested(investedI, extraMonthly, monthlyRealReturn);
       } else {
         // Mortgage paid off — redirect freed cash flow + extra to investments
@@ -490,28 +552,67 @@ function computePayoffVsInvest(inputs) {
     const freeAndClearP = Math.round(investedP - effectiveMortgageRealP);
     const freeAndClearI = Math.round(investedI - effectiveMortgageRealI);
 
-    prepayPath.push({
-      age,
-      year: yearOffset,
-      mortgageBalance: Math.round(mortgageStateP.balance),         // nominal (what user owes the bank)
-      mortgageBalanceReal: Math.round(realMortgageBalanceP),       // real (today's purchasing power)
-      homeEquity: Math.round(homeEquityP),
-      invested: Math.round(investedP),
-      totalNetWorth: Math.round(totalP),
-      liquidNetWorth: Math.round(investedP),
-      freeAndClearWealth: freeAndClearP,
-    });
-    investPath.push({
-      age,
-      year: yearOffset,
-      mortgageBalance: Math.round(mortgageStateI.balance),         // nominal
-      mortgageBalanceReal: Math.round(realMortgageBalanceI),       // real
-      homeEquity: Math.round(homeEquityI),
-      invested: Math.round(investedI),
-      totalNetWorth: Math.round(totalI),
-      liquidNetWorth: Math.round(investedI),
-      freeAndClearWealth: freeAndClearI,
-    });
+    // v2 (T008): for the deferred buying-in case, the first path row at
+    // windowStartAge is the OPENING snapshot (initial conditions before any
+    // processing). This makes both strategies start at invested=0 on the chart,
+    // which is the user-facing expectation: "at the moment you buy in, both
+    // strategies have $0 in brokerage." The amort rows still capture the real
+    // activity that happened during that year.
+    // For all other cases (and all subsequent years), use the normal end-of-year
+    // snapshot (post-processing). stateP / stateI are the ORIGINAL init states
+    // (unchanged by Object.assign reassignments of mortgageStateP/I), so
+    // stateP.balance is always the initial nominal balance at comparison start.
+    if (isBuyingInDeferred && age === windowStartAge) {
+      const openingRealBalP = stateP.balance / inflationFactor;
+      const openingRealBalI = stateI.balance / inflationFactor;
+      const openingHomeEquityP = Math.max(0, homeValueReal - openingRealBalP);
+      const openingHomeEquityI = Math.max(0, homeValueReal - openingRealBalI);
+      prepayPath.push({
+        age,
+        year: yearOffset,
+        mortgageBalance: Math.round(stateP.balance),
+        mortgageBalanceReal: Math.round(openingRealBalP),
+        homeEquity: Math.round(openingHomeEquityP),
+        invested: 0,
+        totalNetWorth: Math.round(openingHomeEquityP),
+        liquidNetWorth: 0,
+        freeAndClearWealth: Math.round(0 - openingRealBalP),
+      });
+      investPath.push({
+        age,
+        year: yearOffset,
+        mortgageBalance: Math.round(stateI.balance),
+        mortgageBalanceReal: Math.round(openingRealBalI),
+        homeEquity: Math.round(openingHomeEquityI),
+        invested: 0,
+        totalNetWorth: Math.round(openingHomeEquityI),
+        liquidNetWorth: 0,
+        freeAndClearWealth: Math.round(0 - openingRealBalI),
+      });
+    } else {
+      prepayPath.push({
+        age,
+        year: yearOffset,
+        mortgageBalance: Math.round(mortgageStateP.balance),         // nominal (what user owes the bank)
+        mortgageBalanceReal: Math.round(realMortgageBalanceP),       // real (today's purchasing power)
+        homeEquity: Math.round(homeEquityP),
+        invested: Math.round(investedP),
+        totalNetWorth: Math.round(totalP),
+        liquidNetWorth: Math.round(investedP),
+        freeAndClearWealth: freeAndClearP,
+      });
+      investPath.push({
+        age,
+        year: yearOffset,
+        mortgageBalance: Math.round(mortgageStateI.balance),         // nominal
+        mortgageBalanceReal: Math.round(realMortgageBalanceI),       // real
+        homeEquity: Math.round(homeEquityI),
+        invested: Math.round(investedI),
+        totalNetWorth: Math.round(totalI),
+        liquidNetWorth: Math.round(investedI),
+        freeAndClearWealth: freeAndClearI,
+      });
+    }
     amortPrepay.push({
       age,
       year: yearOffset,
@@ -541,6 +642,12 @@ function computePayoffVsInvest(inputs) {
     amortInvest[i].cumulativePrincipal = Math.round(cumPI);
   }
 
+  if (lumpSumPayoff) {
+    subSteps.push('check lump-sum payoff trigger each month for Invest');
+  }
+  if (lumpSumEvent !== null) {
+    subSteps.push('lump-sum fires at age ' + lumpSumEvent.age + ': brokerage drops from ' + lumpSumEvent.brokerageBefore + ' to ' + lumpSumEvent.brokerageAfter);
+  }
   subSteps.push('aggregate monthly accruals into annual WealthPath rows');
 
   // ----- Detect crossover -----
@@ -608,8 +715,17 @@ function computePayoffVsInvest(inputs) {
   subSteps.push('record natural mortgage payoff ages for both strategies');
   const mortgageNaturalPayoff = {
     prepayAge: _firstNaturalPayoffAge(prepayPath),
-    investAge: _firstNaturalPayoffAge(investPath),
+    investAge: lumpSumEvent !== null ? lumpSumEvent.age : _firstNaturalPayoffAge(investPath),
   };
+
+  // ----- Stage Boundaries (v2, T016) -----
+  // stageBoundaries is always computed; the subStep entry is only emitted when
+  // lumpSumPayoff===true to preserve Inv-1 backwards compatibility (v1 subSteps
+  // array must be byte-identical when the switch is off).
+  if (lumpSumPayoff) {
+    subSteps.push('compute stageBoundaries from path inflection points');
+  }
+  const stageBoundaries = _findStageBoundaries(prepayPath, investPath, windowStartAge, lumpSumEvent);
 
   // ----- Factors -----
   subSteps.push('score factors and assign favoredStrategy / magnitude');
@@ -634,6 +750,8 @@ function computePayoffVsInvest(inputs) {
     refiClampedNote,
     mortgageFreedom,
     mortgageNaturalPayoff,
+    lumpSumEvent,
+    stageBoundaries,
     subSteps,
   };
 }
@@ -666,6 +784,60 @@ function _firstFreedomAge(path, buyInMonth) {
 // gate home-equity inclusion before buy-in.
 function mortgageActiveOrPostStarted(buyInMonth, yearOffset) {
   return yearOffset * 12 >= buyInMonth;
+}
+
+/**
+ * Compute event-driven stage boundaries from the two amortization paths plus the
+ * optional lump-sum event. Returns:
+ *   { windowStartAge, firstPayoffAge, firstPayoffWinner, secondPayoffAge }
+ * See specs/017-payoff-vs-invest-stages-and-lumpsum/data-model.md.
+ *
+ * @param {Array} prepayPath
+ * @param {Array} investPath
+ * @param {number} windowStartAge
+ * @param {LumpSumEvent|null} lumpSumEvent  - present means Invest's payoff is the lump-sum age
+ * @returns {StageBoundaries}
+ */
+function _findStageBoundaries(prepayPath, investPath, windowStartAge, lumpSumEvent) {
+  const prepayPayoff = _firstNaturalPayoffAge(prepayPath);    // already exists in module
+  var investPayoff;
+  if (lumpSumEvent && Number.isFinite(lumpSumEvent.age)) {
+    investPayoff = lumpSumEvent.age;                           // Invest pays off via lump sum
+  } else {
+    investPayoff = _firstNaturalPayoffAge(investPath);         // bank's amortization end
+  }
+
+  // Defensive: if both are null, still return a valid record (degenerate scenario).
+  // firstPayoffAge: smaller of the two (or whichever is non-null).
+  // firstPayoffWinner: 'prepay' or 'invest' based on who got there first; ties → 'prepay' (deterministic).
+  var firstPayoffAge, firstPayoffWinner, secondPayoffAge;
+
+  if (prepayPayoff !== null && investPayoff !== null) {
+    if (prepayPayoff <= investPayoff) {
+      firstPayoffAge = prepayPayoff;
+      firstPayoffWinner = 'prepay';
+      secondPayoffAge = (investPayoff > prepayPayoff) ? investPayoff : null;
+    } else {
+      firstPayoffAge = investPayoff;
+      firstPayoffWinner = 'invest';
+      secondPayoffAge = prepayPayoff;
+    }
+  } else if (prepayPayoff !== null) {
+    firstPayoffAge = prepayPayoff;
+    firstPayoffWinner = 'prepay';
+    secondPayoffAge = null;
+  } else if (investPayoff !== null) {
+    firstPayoffAge = investPayoff;
+    firstPayoffWinner = 'invest';
+    secondPayoffAge = null;
+  } else {
+    // Neither paid off in horizon — degenerate. Use windowStartAge for firstPayoffAge to avoid undefined.
+    firstPayoffAge = windowStartAge;
+    firstPayoffWinner = 'prepay';     // arbitrary deterministic default
+    secondPayoffAge = null;
+  }
+
+  return { windowStartAge: windowStartAge, firstPayoffAge: firstPayoffAge, firstPayoffWinner: firstPayoffWinner, secondPayoffAge: secondPayoffAge };
 }
 
 // ---------------------------------------------------------------------------
@@ -910,6 +1082,7 @@ const _payoffVsInvestApi = {
   _monthlyRealReturnAfterTax,
   _compoundInvested,
   _firstNaturalPayoffAge,
+  _findStageBoundaries,
   _initMortgageState,
   _applyRefi,
   _detectCrossover,

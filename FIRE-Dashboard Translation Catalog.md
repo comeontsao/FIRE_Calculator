@@ -1199,3 +1199,17 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | `pvi.verdict.brokerage.investPayoff` | Invest mortgage paid off at age {0} | 投资策略：房贷在 {0} 岁还清 |
 | `pvi.verdict.brokerage.compare` | By age {0}: Prepay ${1}, Invest ${2} · {3} ahead by ${4} | 到 {0} 岁：提前还贷 ${1}，投资 ${2} · {3} 多 ${4} |
 | `pvi.verdict.brokerage.tie` | By age {0}: brokerage balances effectively tie | 到 {0} 岁：两策略账户余额基本持平 |
+
+## Feature 017 — Payoff vs Invest — Stage bands + Lump-sum payoff (9)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `pvi.stageBand.bothPaying` | Stage I — both strategies still paying mortgage | 階段 I — 兩種策略仍在償還貸款 |
+| `pvi.stageBand.firstPayoffPrepay` | Stage II-P — Prepay debt-free, Invest still paying | 階段 II-P — Prepay 已清償，Invest 仍在償還 |
+| `pvi.stageBand.firstPayoffInvest` | Stage II-I — Invest debt-free via lump sum, Prepay still paying | 階段 II-I — Invest 已透過一次清償還清，Prepay 仍在償還 |
+| `pvi.stageBand.bothFree` | Stage III — both strategies debt-free, both investing | 階段 III — 兩種策略均已清償，皆全力投資 |
+| `pvi.lumpSum.label` | Pay off mortgage in lump sum once Invest can afford it | 投資組合足以清償房貸時一次清償 |
+| `pvi.lumpSum.help` | Compare what happens if Invest writes a check the moment its brokerage equals the remaining mortgage (today's dollars). | 比較投資策略在組合餘額（今日購買力）達到剩餘貸款時一次清償的情境。 |
+| `pvi.lumpSum.bannerLine` | Lump-sum payoff fires at age {0} · brokerage drops from ${1} to ${2}, then resumes investing. | 一次清償於 {0} 歲觸發 · 投資組合由 ${1} 降至 ${2}，之後重新累積。 |
+| `pvi.lumpSum.notReached` | Invest never reaches the lump-sum threshold in this horizon. | 投資策略在此期間未達一次清償門檻。 |
+| `pvi.chart.brokerage.investLumpSumMarker` | Invest pays lump sum at age {0} | Invest 於 {0} 歲一次清償 |

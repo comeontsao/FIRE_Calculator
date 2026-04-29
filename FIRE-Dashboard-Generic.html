@@ -3357,11 +3357,21 @@
               <input type="range" id="pviExtraMonthly" min="0" max="5000" step="50" value="500"
                      oninput="document.getElementById('pviExtraMonthlyVal').textContent='$'+Number(this.value).toLocaleString();recomputePayoffVsInvest();_pviSaveState();">
             </div>
+            <!-- v2 (feature 017) — Lump-sum payoff switch (US3) -->
+            <div class="pvi-input-group pvi-lumpsum-row" style="margin-top:12px;display:flex;align-items:flex-start;gap:8px;">
+              <input type="checkbox" id="pviLumpSumPayoff" style="margin-top:4px;cursor:pointer;"
+                     onchange="recomputePayoffVsInvest();_pviSaveState();">
+              <label for="pviLumpSumPayoff" style="cursor:pointer;flex:1;">
+                <div style="font-weight:600;" data-i18n="pvi.lumpSum.label">Pay off mortgage in lump sum once Invest can afford it</div>
+                <div style="font-size:0.85em;color:var(--text-dim);margin-top:2px;" data-i18n="pvi.lumpSum.help">Compare what happens if Invest writes a check the moment its brokerage equals the remaining mortgage (today's dollars).</div>
+              </label>
+            </div>
           </div>
 
           <div class="pvi-verdict-banner" id="pviVerdictBanner" hidden>
             <div class="pvi-verdict-line" id="pviVerdictAtFire">—</div>
             <div class="pvi-verdict-line" id="pviVerdictAtEnd">—</div>
+            <div class="pvi-verdict-line" id="pviVerdictAtLumpSum" style="display:none;">—</div>
           </div>
 
           <div class="pvi-explainer" id="pviExplainerCard" hidden>
@@ -6353,6 +6363,17 @@ const TRANSLATIONS = {
     'pvi.refi.clamped': 'Refi-year was clamped to your home purchase year.',
     'pvi.prepay': 'Prepay',
     'pvi.invest': 'Invest',
+    // v2 (feature 017) — Stage bands (US2)
+    'pvi.stageBand.bothPaying': 'Stage I — both strategies still paying mortgage',
+    'pvi.stageBand.firstPayoffPrepay': 'Stage II-P — Prepay debt-free, Invest still paying',
+    'pvi.stageBand.firstPayoffInvest': 'Stage II-I — Invest debt-free via lump sum, Prepay still paying',
+    'pvi.stageBand.bothFree': 'Stage III — both strategies debt-free, both investing',
+    // v2 (feature 017) — Lump-sum payoff (US3)
+    'pvi.lumpSum.label': 'Pay off mortgage in lump sum once Invest can afford it',
+    'pvi.lumpSum.help': "Compare what happens if Invest writes a check the moment its brokerage equals the remaining mortgage (today's dollars).",
+    'pvi.lumpSum.bannerLine': 'Lump-sum payoff fires at age {0} · brokerage drops from ${1} to ${2}, then resumes investing.',
+    'pvi.lumpSum.notReached': 'Invest never reaches the lump-sum threshold in this horizon.',
+    'pvi.chart.brokerage.investLumpSumMarker': 'Invest pays lump sum at age {0}',
     'country.card.budget': 'Budget',
     'country.card.bridgeAtFire': 'Bridge $ at FIRE',
     'country.card.target25x': '25× total target',
@@ -7364,6 +7385,17 @@ const TRANSLATIONS = {
     'pvi.refi.clamped': '再融資年份已對齊到你買房的年份。',
     'pvi.prepay': '還貸',
     'pvi.invest': '投資',
+    // v2 (feature 017) — Stage bands (US2)
+    'pvi.stageBand.bothPaying': '階段 I — 兩種策略仍在償還貸款',
+    'pvi.stageBand.firstPayoffPrepay': '階段 II-P — Prepay 已清償，Invest 仍在償還',
+    'pvi.stageBand.firstPayoffInvest': '階段 II-I — Invest 已透過一次清償還清，Prepay 仍在償還',
+    'pvi.stageBand.bothFree': '階段 III — 兩種策略均已清償，皆全力投資',
+    // v2 (feature 017) — Lump-sum payoff (US3)
+    'pvi.lumpSum.label': '投資組合足以清償房貸時一次清償',
+    'pvi.lumpSum.help': '比較投資策略在組合餘額（今日購買力）達到剩餘貸款時一次清償的情境。',
+    'pvi.lumpSum.bannerLine': '一次清償於 {0} 歲觸發 · 投資組合由 ${1} 降至 ${2}，之後重新累積。',
+    'pvi.lumpSum.notReached': '投資策略在此期間未達一次清償門檻。',
+    'pvi.chart.brokerage.investLumpSumMarker': 'Invest 於 {0} 歲一次清償',
     'exp.row.misc': '其他',
     'country.card.budget': '預算',
     'country.card.bridgeAtFire': 'FIRE 橋樑資金',
@@ -13533,6 +13565,7 @@ function _assemblePayoffVsInvestInputs() {
   const refiNewTermEl = document.getElementById('pviRefiNewTerm');
   const ovrEnabledEl = document.getElementById('pviEffRateOverrideEnabled');
   const ovrEl = document.getElementById('pviEffRateOverride');
+  const lumpSumEl = document.getElementById('pviLumpSumPayoff'); // v2 (feature 017) — US3 switch
 
   const plannedRefi = (refiEnabledEl && refiEnabledEl.checked) ? {
     refiYear: parseInt(refiYearEl ? refiYearEl.value : '5', 10) || 5,
@@ -13558,6 +13591,7 @@ function _assemblePayoffVsInvestInputs() {
     framing: 'liquidNetWorth', // hardcoded — framing toggle removed; calc module's crossover logic still consumes this input.
     effectiveRateOverride,
     plannedRefi,
+    lumpSumPayoff: !!(lumpSumEl && lumpSumEl.checked), // v2 (feature 017) — US3
   };
 }
 
@@ -13601,11 +13635,58 @@ function _hidePayoffVsInvestExplainer() {
 // Module: calc/payoffVsInvest.js (computePayoffVsInvest)
 // Reads : outputs.prepayPath[].liquidNetWorth, outputs.investPath[] same,
 //         outputs.mortgageNaturalPayoff { prepayAge, investAge },
-//         outputs.mortgageFreedom.buyInAge, outputs.refiAnnotation.
+//         outputs.mortgageFreedom.buyInAge, outputs.refiAnnotation,
+//         outputs.stageBoundaries (v2 feature 017 — for shaded stage bands),
+//         outputs.lumpSumEvent (v2 feature 017 — swaps blue X → down-arrow when fired).
 // Plots two lines per strategy of brokerage balance (liquidNetWorth = invested),
-// each strategy's natural mortgage-payoff age (red/blue X), and an optional
-// home-purchase diamond for buying-in ownership.
+// each strategy's natural mortgage-payoff age (red/blue X or down-arrow), and an
+// optional home-purchase diamond for buying-in ownership. Stage bands paint
+// faintly tinted rectangles for Stage I (both paying) → II (first-payoff) → III
+// (both debt-free) using --chart-phase1/2/3 CSS variables at 6% opacity.
 // =============================================================================
+
+// v2 (feature 017): Stage-band background plugin for the Payoff-vs-Invest
+// brokerage chart. Paints three faintly tinted rectangles corresponding to
+// Stage I (Both paying) → Stage II (First-payoff) → Stage III (Both debt-free).
+// Colors derive from --chart-phase1/2/3 CSS variables; opacity ≈ 6%.
+const pviStageBandsPlugin = {
+  id: 'pviStageBands',
+  beforeDatasetsDraw(chart) {
+    const opts = chart.options.plugins && chart.options.plugins.pviStageBands;
+    if (!opts || !opts.boundaries) return;
+    const { ctx, chartArea, scales } = chart;
+    if (!scales.x || !chartArea) return;
+    const { windowStartAge, firstPayoffAge, secondPayoffAge } = opts.boundaries;
+
+    const safePx = (age, fallback) => {
+      if (age === null || age === undefined) return fallback;
+      const px = scales.x.getPixelForValue('age ' + age);
+      return Number.isFinite(px) ? px : fallback;
+    };
+    const xAtStart = safePx(windowStartAge, chartArea.left);
+    const xAtFirst = safePx(firstPayoffAge, chartArea.right);
+    const xAtEnd = chartArea.right;
+    const xAtSecond = safePx(secondPayoffAge, xAtEnd);
+
+    ctx.save();
+    const css = getComputedStyle(document.documentElement);
+    const stageI   = (css.getPropertyValue('--chart-phase1') || '#999').trim();
+    const stageII  = (css.getPropertyValue('--chart-phase2') || '#999').trim();
+    const stageIII = (css.getPropertyValue('--chart-phase3') || '#999').trim();
+
+    function paint(xL, xR, color) {
+      if (!Number.isFinite(xL) || !Number.isFinite(xR) || xR <= xL) return;
+      ctx.fillStyle = `color-mix(in oklch, ${color} 6%, transparent)`;
+      ctx.fillRect(xL, chartArea.top, xR - xL, chartArea.bottom - chartArea.top);
+    }
+
+    paint(xAtStart, xAtFirst,  stageI);
+    paint(xAtFirst, xAtSecond, stageII);
+    if (xAtSecond < xAtEnd) paint(xAtSecond, xAtEnd, stageIII);
+    ctx.restore();
+  },
+};
+
 function renderPayoffVsInvestBrokerageChart(outputs) {
   const canvas = document.getElementById('payoffVsInvestWealthChart');
   if (!canvas) return;
@@ -13633,11 +13714,16 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
     },
   ];
 
-  // Buy-in marker (yellow diamond on the brokerage line at the buy-in age)
+  // Buy-in marker (yellow diamond on the brokerage line at the buy-in age).
+  // v2 (feature 017): with the window-start adjustment, the buy-in age is the
+  // very first x-tick for ownership='buying-in', so the diamond is redundant.
+  // Gate on buyInIdx > 0 so the marker only renders when the buy-in is NOT at
+  // the path's leading edge. Today this means the marker is suppressed for
+  // every realistic scenario; the gating preserves the code path defensively.
   const buyInAge = outputs.mortgageFreedom && outputs.mortgageFreedom.buyInAge;
   if (buyInAge !== null && buyInAge !== undefined) {
     const buyInIdx = outputs.prepayPath.findIndex((r) => r.age === buyInAge);
-    if (buyInIdx >= 0) {
+    if (buyInIdx > 0) {
       datasets.push({
         label: t('pvi.chart.brokerage.buyInMarker', buyInAge),
         data: outputs.prepayPath.map((_r, i) => i === buyInIdx ? prepayData[buyInIdx] : null),
@@ -13667,17 +13753,26 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
     }
   }
 
-  // Invest's natural mortgage payoff (blue X on Invest line)
+  // Invest's mortgage payoff. v2 (feature 017): when lumpSumEvent fires, swap
+  // the blue X (`crossRot`) for a blue down-arrow triangle (`triangle` rotated
+  // 180°) and use the lump-sum-aware label key.
+  const lumpFired = !!outputs.lumpSumEvent;
   if (mp.investAge !== null && mp.investAge !== undefined) {
     const idx = outputs.investPath.findIndex((r) => r.age === mp.investAge);
     if (idx >= 0) {
+      const investMarkerStyle    = lumpFired ? 'triangle' : 'crossRot';
+      const investMarkerRotation = lumpFired ? 180 : 0;
+      const investMarkerLabelKey = lumpFired
+        ? 'pvi.chart.brokerage.investLumpSumMarker'
+        : 'pvi.chart.brokerage.investPayoffMarker';
       datasets.push({
-        label: t('pvi.chart.brokerage.investPayoffMarker', mp.investAge),
+        label: t(investMarkerLabelKey, mp.investAge),
         data: outputs.investPath.map((_r, i) => i === idx ? investData[idx] : null),
         borderColor: 'rgba(108,99,255,1)',
         backgroundColor: 'rgba(108,99,255,1)',
-        pointRadius: 8,
-        pointStyle: 'crossRot',
+        pointRadius: 9,
+        pointStyle: investMarkerStyle,
+        rotation: investMarkerRotation,
         showLine: false,
       });
     }
@@ -13697,6 +13792,7 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
   charts_pviWealth = new Chart(ctx, {
     type: 'line',
     data: { labels: ageLabels, datasets },
+    plugins: [pviStageBandsPlugin], // v2 (feature 017) — stage bands behind the lines
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -13711,6 +13807,11 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
               return tCtx.dataset.label + ': $' + Math.round(tCtx.parsed.y).toLocaleString();
             },
           },
+        },
+        // v2 (feature 017) — config the stage-band plugin reads.
+        pviStageBands: {
+          boundaries: outputs.stageBoundaries || null,
+          winner: (outputs.stageBoundaries && outputs.stageBoundaries.firstPayoffWinner) || 'prepay',
         },
       },
       scales: {
@@ -13812,10 +13913,20 @@ function renderPayoffVsInvestAmortizationChart(outputs) {
   if (window.tabRouter) window.tabRouter.registerChart('payoff-invest', charts_pviAmort);
 }
 
+// =============================================================================
+// renderPayoffVsInvestVerdictBanner
+// Reads : outputs.mortgageNaturalPayoff, outputs.prepayPath[*].liquidNetWorth,
+//         outputs.investPath[*].liquidNetWorth, inputs.endAge,
+//         outputs.lumpSumEvent (v2 feature 017 — banner Line 3 status),
+//         inputs.lumpSumPayoff (v2 feature 017 — gates Line 3 visibility).
+// Writes: text content of #pviVerdictAtFire, #pviVerdictAtEnd,
+//         and #pviVerdictAtLumpSum (v2 feature 017).
+// =============================================================================
 function renderPayoffVsInvestVerdictBanner(outputs, inputs) {
   const banner = document.getElementById('pviVerdictBanner');
   const lineFire = document.getElementById('pviVerdictAtFire');
   const lineEnd  = document.getElementById('pviVerdictAtEnd');
+  const lineLump = document.getElementById('pviVerdictAtLumpSum'); // v2 (feature 017)
   if (!banner || !lineFire || !lineEnd) return;
   banner.hidden = false;
   const winnerLabel = (w) => w === 'prepay' ? t('pvi.prepay') : (w === 'invest' ? t('pvi.invest') : '');
@@ -13854,6 +13965,29 @@ function renderPayoffVsInvestVerdictBanner(outputs, inputs) {
     }
   }
   lineEnd.textContent = (investBase && comparison) ? (investBase + ' · ' + comparison) : (investBase || comparison);
+
+  // Line 3 — v2 (feature 017) — lump-sum status. Only visible when the switch is ON.
+  if (lineLump) {
+    let line3 = '';
+    if (inputs && inputs.lumpSumPayoff === true) {
+      if (outputs && outputs.lumpSumEvent) {
+        const ev = outputs.lumpSumEvent;
+        line3 = t('pvi.lumpSum.bannerLine',
+          ev.age,
+          Math.round(ev.brokerageBefore).toLocaleString(),
+          Math.round(ev.brokerageAfter).toLocaleString());
+      } else {
+        line3 = t('pvi.lumpSum.notReached');
+      }
+    }
+    if (line3) {
+      lineLump.textContent = line3;
+      lineLump.style.display = '';
+    } else {
+      lineLump.textContent = '';
+      lineLump.style.display = 'none';
+    }
+  }
 }
 
 function renderPayoffVsInvestFactorBreakdown(factors) {
@@ -14980,6 +15114,7 @@ function saveState() {
     const _pviRefiNewTerm = document.getElementById('pviRefiNewTerm');
     const _pviOvrEnabled = document.getElementById('pviEffRateOverrideEnabled');
     const _pviOvr = document.getElementById('pviEffRateOverride');
+    const _pviLumpSum = document.getElementById('pviLumpSumPayoff'); // v2 (feature 017) — US3
     state._payoffVsInvest = {
       extraMonthly: _pviExtra ? (parseFloat(_pviExtra.value) || 500) : 500,
       refiEnabled: _pviRefiEnabled ? !!_pviRefiEnabled.checked : false,
@@ -14988,6 +15123,7 @@ function saveState() {
       refiNewTerm: _pviRefiNewTerm ? (parseInt(_pviRefiNewTerm.value, 10) || 30) : 30,
       effRateOverrideEnabled: _pviOvrEnabled ? !!_pviOvrEnabled.checked : false,
       effRateOverride: _pviOvr ? ((parseFloat(_pviOvr.value) || 0) / 100) : 0,
+      lumpSumPayoff: _pviLumpSum ? !!_pviLumpSum.checked : false, // v2 (feature 017) — US3
     };
   } catch (_e) { /* swallow */ }
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -15216,6 +15352,7 @@ function restoreState() {
         if (Number.isFinite(pvi.refiNewTerm)) setVal('pviRefiNewTerm', String(pvi.refiNewTerm));
         setChk('pviEffRateOverrideEnabled', pvi.effRateOverrideEnabled);
         if (Number.isFinite(pvi.effRateOverride)) setVal('pviEffRateOverride', (pvi.effRateOverride * 100).toFixed(2));
+        setChk('pviLumpSumPayoff', pvi.lumpSumPayoff); // v2 (feature 017) — US3
         if (typeof _pviUpdateRefiVisibility === 'function') _pviUpdateRefiVisibility();
         if (typeof _pviUpdateOverrideVisibility === 'function') _pviUpdateOverrideVisibility();
       } catch (_e) { /* swallow */ }

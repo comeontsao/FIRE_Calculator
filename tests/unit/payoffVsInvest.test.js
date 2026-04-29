@@ -3,6 +3,12 @@
 // Contract: specs/016-mortgage-payoff-vs-invest/contracts/payoffVsInvest-calc.contract.md
 // Locks in SC-002 (monotonicity), SC-003 (tie calibration), SC-008 (winner
 // detection), SC-009 (refi visible jump), SC-010 (override shifts toward invest).
+//
+// Feature 017 addendum (T003): Inv-1 regression lock.
+// lumpSumPayoff: false is now EXPLICIT on every existing fixture call so future
+// readers can see the v1-parity contract at a glance. The assertV1ParityWhenSwitchOff
+// helper + parity test block at the bottom enforce that no v2 change drifts the
+// output when lumpSumPayoff is false and ownership !== 'buying-in'.
 // ==================================================================================
 
 import { test } from 'node:test';
@@ -38,6 +44,9 @@ function baseMortgage(overrides) {
 }
 
 function baseInputs(overrides) {
+  // lumpSumPayoff: false is explicit here to document the v1-parity contract.
+  // Inv-1 (feature 017): when lumpSumPayoff===false AND ownership!=='buying-in',
+  // every v2 output field must be byte-for-byte identical to this v1 baseline.
   return Object.assign({
     currentAge: 42,
     fireAge: 51,
@@ -52,7 +61,81 @@ function baseInputs(overrides) {
     framing: 'totalNetWorth',
     effectiveRateOverride: null,
     plannedRefi: null,
+    lumpSumPayoff: false,
   }, overrides || {});
+}
+
+// ---------------------------------------------------------------------------
+// Inv-1 regression helpers (feature 017 / T003)
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the v1 snapshot fixtures captured before any v2 changes were made.
+ * The JSON file is the ground truth that v2 must reproduce when the switch
+ * is off (lumpSumPayoff: false, ownership !== 'buying-in').
+ */
+const V1_SNAPSHOTS = require(path.resolve(__dirname, 'fixtures', 'payoffVsInvest_v1Snapshots.json'));
+
+/**
+ * Assert that computing `inputs` with the CURRENT module produces output
+ * byte-for-byte identical to `capturedV1Output` (every top-level field).
+ * Reports specific field paths on mismatch so diffs are easy to diagnose.
+ *
+ * @param {string} label              human-readable name for the fixture
+ * @param {object} inputs             inputs to run through computePayoffVsInvest
+ * @param {object} capturedV1Output   the v1 ground-truth output
+ */
+function assertV1ParityWhenSwitchOff(label, inputs, capturedV1Output) {
+  const current = computePayoffVsInvest(inputs);
+
+  // Compare every top-level key present in the captured snapshot.
+  const topKeys = Object.keys(capturedV1Output);
+  for (const key of topKeys) {
+    const v1Val = capturedV1Output[key];
+    const curVal = current[key];
+    const v1Json = JSON.stringify(v1Val);
+    const curJson = JSON.stringify(curVal);
+    if (v1Json !== curJson) {
+      // Produce a precise diff for array fields: find first diverging index.
+      if (Array.isArray(v1Val) && Array.isArray(curVal)) {
+        for (let i = 0; i < Math.max(v1Val.length, curVal.length); i++) {
+          const v1Item = JSON.stringify(v1Val[i]);
+          const curItem = JSON.stringify(curVal[i]);
+          if (v1Item !== curItem) {
+            // Dig into object fields for the first row mismatch.
+            if (v1Val[i] && curVal[i] && typeof v1Val[i] === 'object') {
+              for (const field of Object.keys(v1Val[i])) {
+                if (v1Val[i][field] !== curVal[i][field]) {
+                  assert.fail(
+                    `[Inv-1 parity] "${label}" — ${key}[${i}].${field} mismatch: ` +
+                    `v1=${v1Val[i][field]} vs current=${curVal[i] ? curVal[i][field] : 'MISSING'}`
+                  );
+                }
+              }
+            }
+            assert.fail(
+              `[Inv-1 parity] "${label}" — ${key}[${i}] mismatch:\n  v1=${v1Item}\n  cur=${curItem}`
+            );
+          }
+        }
+      }
+      // For objects, find first diverging property.
+      if (v1Val && curVal && typeof v1Val === 'object' && !Array.isArray(v1Val)) {
+        for (const field of Object.keys(v1Val)) {
+          if (JSON.stringify(v1Val[field]) !== JSON.stringify(curVal[field])) {
+            assert.fail(
+              `[Inv-1 parity] "${label}" — ${key}.${field} mismatch: ` +
+              `v1=${JSON.stringify(v1Val[field])} vs current=${JSON.stringify(curVal[field])}`
+            );
+          }
+        }
+      }
+      // Scalar or anything else.
+      assert.fail(
+        `[Inv-1 parity] "${label}" — top-level field "${key}" mismatch:\n  v1=${v1Json}\n  cur=${curJson}`
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -345,27 +428,35 @@ test('invest brokerage contrib equals 12 × extraMonthly during mortgage-active 
   }
 });
 
-test('buying-in path: pre-buy-in years, both strategies contribute 12 × extraMonthly to brokerage', () => {
+test('buying-in path: no pre-buy-in rows — path starts at windowStartAge = currentAge + buyInYears', () => {
+  // v2 (T008): pre-buy-in rows are excluded entirely. The comparison window
+  // starts at the buy-in age. This test was updated from its v1 form (which
+  // checked that pre-buy-in rows had 12×extra brokerage contrib) to verify the
+  // absence of those rows and the correct window start.
   const extra = 1500;
+  const buyInYears = 3;
   const inputs = baseInputs({
-    mortgage: baseMortgage({ ownership: 'buying-in', buyInYears: 3 }),
+    mortgage: baseMortgage({ ownership: 'buying-in', buyInYears }),
     extraMonthly: extra,
   });
   const out = computePayoffVsInvest(inputs);
-  const expected = 12 * extra;
-  // Years 0, 1, 2 are pre-buy-in (buyInYears=3 → buy-in begins at month 36 == start of year 3).
-  for (let i = 0; i < 3; i++) {
-    const p = out.amortizationSplit.prepay[i];
-    const ii = out.amortizationSplit.invest[i];
-    assert.ok(Math.abs(p.brokerageContribThisYear - expected) <= 1,
-      `pre-buy-in prepay row ${i}: expected ${expected}, got ${p.brokerageContribThisYear}`);
-    assert.ok(Math.abs(ii.brokerageContribThisYear - expected) <= 1,
-      `pre-buy-in invest row ${i}: expected ${expected}, got ${ii.brokerageContribThisYear}`);
-    // And during pre-buy-in there's no mortgage interest/principal at all.
-    assert.strictEqual(p.interestPaidThisYear, 0);
-    assert.strictEqual(p.principalPaidThisYear, 0);
-    assert.strictEqual(ii.interestPaidThisYear, 0);
-    assert.strictEqual(ii.principalPaidThisYear, 0);
+  const expectedStartAge = inputs.currentAge + buyInYears; // 45
+  // Path starts at windowStartAge — no pre-buy-in rows.
+  assert.strictEqual(out.prepayPath[0].age, expectedStartAge,
+    `prepayPath[0].age should be ${expectedStartAge}, got ${out.prepayPath[0].age}`);
+  assert.strictEqual(out.investPath[0].age, expectedStartAge,
+    `investPath[0].age should be ${expectedStartAge}, got ${out.investPath[0].age}`);
+  assert.strictEqual(out.amortizationSplit.prepay[0].age, expectedStartAge,
+    `amortizationSplit.prepay[0].age should be ${expectedStartAge}`);
+  assert.strictEqual(out.amortizationSplit.invest[0].age, expectedStartAge,
+    `amortizationSplit.invest[0].age should be ${expectedStartAge}`);
+  // Invest path: brokerage contrib equals 12 × extra during mortgage-active years.
+  const amortInvest = out.amortizationSplit.invest;
+  for (let i = 0; i < out.investPath.length; i++) {
+    if (out.investPath[i].mortgageBalance > 0) {
+      assert.ok(Math.abs(amortInvest[i].brokerageContribThisYear - 12 * extra) <= 1,
+        `invest row ${i} (age ${amortInvest[i].age}) during mortgage-active year: expected ${12 * extra}, got ${amortInvest[i].brokerageContribThisYear}`);
+    }
   }
 });
 
@@ -480,21 +571,24 @@ test('Both freedom ages fall within [currentAge, endAge]', () => {
 // "lines start at −$467K" bug under ownership='buying-in', buyInYears>0.
 // ---------------------------------------------------------------------------
 
-test('buying-in: pre-buy-in years have freeAndClearWealth equal to invested (mortgage gated to 0)', () => {
+test('buying-in: no pre-buy-in rows; all path rows start at or after windowStartAge', () => {
+  // v2 (T008): pre-buy-in rows are excluded. The test was updated from its v1
+  // form (which checked freeAndClearWealth ≈ invested for rows before buy-in)
+  // to verify that no rows exist before windowStartAge = currentAge + buyInYears.
   const inputs = baseInputs({
     mortgage: baseMortgage({ ownership: 'buying-in', buyInYears: 2 }),
     extraMonthly: 1500,
   });
   const out = computePayoffVsInvest(inputs);
-  // Ages 42 and 43 are pre-buy-in (buyInMonth=24). Both rows must satisfy
-  // freeAndClearWealth ≈ invested (the mortgage doesn't exist yet).
-  for (const i of [0, 1]) {
-    const rowP = out.prepayPath[i];
-    const rowI = out.investPath[i];
-    assert.ok(Math.abs(rowP.freeAndClearWealth - rowP.invested) <= 1,
-      `pre-buy-in prepay row ${i} (age ${rowP.age}): freeAndClearWealth=${rowP.freeAndClearWealth}, invested=${rowP.invested}`);
-    assert.ok(Math.abs(rowI.freeAndClearWealth - rowI.invested) <= 1,
-      `pre-buy-in invest row ${i} (age ${rowI.age}): freeAndClearWealth=${rowI.freeAndClearWealth}, invested=${rowI.invested}`);
+  const windowStartAge = inputs.currentAge + inputs.mortgage.buyInYears; // 44
+  // Every row in both paths must be at or after windowStartAge.
+  for (const row of out.prepayPath) {
+    assert.ok(row.age >= windowStartAge,
+      `prepayPath row age ${row.age} is before windowStartAge ${windowStartAge}`);
+  }
+  for (const row of out.investPath) {
+    assert.ok(row.age >= windowStartAge,
+      `investPath row age ${row.age} is before windowStartAge ${windowStartAge}`);
   }
 });
 
@@ -504,10 +598,12 @@ test('buying-in: at buy-in year (age = currentAge + buyInYears), freeAndClearWea
     extraMonthly: 1500,
   });
   const out = computePayoffVsInvest(inputs);
-  // Age 44 is yearOffset 2; buyInMonth=24 so monthIndex=24 is at yearOffset=2,
-  // monthInYear=0 → mortgage active starting that month.
-  const rowP = out.prepayPath[2];
-  const rowI = out.investPath[2];
+  // v2 (T008): with the window starting at buy-in age (44), the first row is
+  // index 0 (age 44), not index 2 (which would now be age 46).
+  // buyInMonth=24 so monthIndex=24 is at yearOffset=2, monthInYear=0 → mortgage
+  // active starting that month. freeAndClearWealth = invested − mortgageBalanceReal.
+  const rowP = out.prepayPath[0];
+  const rowI = out.investPath[0];
   assert.strictEqual(rowP.age, inputs.currentAge + inputs.mortgage.buyInYears);
   const expectedP = rowP.invested - rowP.mortgageBalanceReal;
   const expectedI = rowI.invested - rowI.mortgageBalanceReal;
@@ -667,4 +763,481 @@ test('Output shape: all required fields present and aligned', () => {
   // subSteps populated
   assert.ok(Array.isArray(out.subSteps));
   assert.ok(out.subSteps.length >= 5);
+});
+
+// ---------------------------------------------------------------------------
+// Inv-1 regression lock (feature 017 / T003)
+// "v1 parity: lumpSumPayoff=false produces byte-identical output to v1"
+//
+// CONTRACT: when lumpSumPayoff===false AND ownership!=='buying-in', every
+// top-level output field in v2 must be identical to the v1 ground-truth
+// snapshots captured below (tests/unit/fixtures/payoffVsInvest_v1Snapshots.json).
+//
+// If this test block fails after a v2 change, the v2 implementation has
+// drifted from its backward-compatibility commitment. Either:
+//   (a) Fix the regression so the switch-off path is truly unchanged, OR
+//   (b) If the change is intentional, re-capture the snapshots by running the
+//       snapshot generator script (node scripts/capture-pvi-v1-snapshots.js)
+//       and committing the updated fixture file with a clear explanation.
+// ---------------------------------------------------------------------------
+
+test('v1 parity regression — switch=false produces v1 output (5 fixtures)', () => {
+  for (const snapshot of V1_SNAPSHOTS) {
+    assertV1ParityWhenSwitchOff(snapshot.label, snapshot.inputs, snapshot.output);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T006 (feature 017): Inv-2 — Window start for buying-in
+// CONTRACT: when ownership='buying-in' with buyInYears>0, both paths and both
+// amortization arrays must start at (currentAge + buyInYears), not at
+// currentAge. Path length = endAge - (currentAge + buyInYears) + 1.
+//
+// STATUS: EXPECTED TO FAIL until T008/T009 implements the v2 window-start fix.
+// ---------------------------------------------------------------------------
+
+test('Inv-2 window start: buying-in paths start at buy-in age with $0 brokerage', () => {
+  const buyInYears = 2;
+  const currentAge = 42;
+  const fireAge = 51;
+  const endAge = 99;
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'buying-in', buyInYears }),
+    currentAge,
+    fireAge,
+    endAge,
+  });
+  const out = computePayoffVsInvest(inputs);
+  const expectedStartAge = currentAge + buyInYears; // 44
+  const expectedLength = endAge - expectedStartAge + 1; // 56
+
+  // Inv-2, condition 1: prepayPath[0].age === currentAge + buyInYears
+  assert.strictEqual(
+    out.prepayPath[0].age,
+    expectedStartAge,
+    `[Inv-2] prepayPath[0].age should be ${expectedStartAge} (currentAge + buyInYears), ` +
+    `but got ${out.prepayPath[0].age}. ` +
+    `Full prepayPath[0]: ${JSON.stringify(out.prepayPath[0])}`
+  );
+
+  // Inv-2, condition 2: investPath[0].age === currentAge + buyInYears
+  assert.strictEqual(
+    out.investPath[0].age,
+    expectedStartAge,
+    `[Inv-2] investPath[0].age should be ${expectedStartAge}, but got ${out.investPath[0].age}. ` +
+    `Full investPath[0]: ${JSON.stringify(out.investPath[0])}`
+  );
+
+  // Inv-2, condition 3: prepayPath[0].invested === 0
+  assert.strictEqual(
+    out.prepayPath[0].invested,
+    0,
+    `[Inv-2] prepayPath[0].invested should be 0 at window start (age ${expectedStartAge}), ` +
+    `but got ${out.prepayPath[0].invested}. ` +
+    `Full prepayPath[0]: ${JSON.stringify(out.prepayPath[0])}`
+  );
+
+  // Inv-2, condition 4: investPath[0].invested === 0
+  assert.strictEqual(
+    out.investPath[0].invested,
+    0,
+    `[Inv-2] investPath[0].invested should be 0 at window start (age ${expectedStartAge}), ` +
+    `but got ${out.investPath[0].invested}. ` +
+    `Full investPath[0]: ${JSON.stringify(out.investPath[0])}`
+  );
+
+  // Inv-2, condition 5: amortizationSplit.prepay[0].age === currentAge + buyInYears
+  assert.strictEqual(
+    out.amortizationSplit.prepay[0].age,
+    expectedStartAge,
+    `[Inv-2] amortizationSplit.prepay[0].age should be ${expectedStartAge}, ` +
+    `but got ${out.amortizationSplit.prepay[0].age}`
+  );
+
+  // Inv-2, condition 6: amortizationSplit.invest[0].age === currentAge + buyInYears
+  assert.strictEqual(
+    out.amortizationSplit.invest[0].age,
+    expectedStartAge,
+    `[Inv-2] amortizationSplit.invest[0].age should be ${expectedStartAge}, ` +
+    `but got ${out.amortizationSplit.invest[0].age}`
+  );
+
+  // Path lengths must span from buy-in age to endAge (not from currentAge).
+  assert.strictEqual(
+    out.prepayPath.length,
+    expectedLength,
+    `[Inv-2] prepayPath.length should be ${expectedLength} (endAge ${endAge} − startAge ${expectedStartAge} + 1), ` +
+    `but got ${out.prepayPath.length}`
+  );
+  assert.strictEqual(
+    out.investPath.length,
+    expectedLength,
+    `[Inv-2] investPath.length should be ${expectedLength}, but got ${out.investPath.length}`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T007 (feature 017): backwards-compat regression lock for ownership='already-own'
+// CONTRACT (Inv-1): when lumpSumPayoff===false AND ownership==='already-own',
+// v2 output must be byte-identical to the captured v1 snapshot.
+//
+// STATUS: EXPECTED TO PASS now (calc is still v1; already-own never triggers
+// any v2 code path). Locks no-regression intent for this ownership branch.
+// ---------------------------------------------------------------------------
+
+test('Inv-1 backwards compat: already-own yearsPaid=5 with switch=false produces v1 output', () => {
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'already-own', yearsPaid: 5 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+  });
+  const snapshot = V1_SNAPSHOTS.find((s) => s.label === 'already-own-5yrs');
+  assert.ok(
+    snapshot,
+    'already-own-5yrs snapshot must exist in payoffVsInvest_v1Snapshots.json'
+  );
+  assertV1ParityWhenSwitchOff('already-own-5yrs (T007)', inputs, snapshot.output);
+});
+
+// ---------------------------------------------------------------------------
+// T014 (feature 017): Inv-5 — Stage boundaries consistency
+// CONTRACT (Inv-5): stageBoundaries must be present; firstPayoffAge <
+// secondPayoffAge when both exist; firstPayoffWinner matches the strategy
+// whose path has a zero-balance row at firstPayoffAge.
+//
+// STATUS: EXPECTED TO FAIL until Backend agent adds _findStageBoundaries
+// and wires stageBoundaries into outputs (T015+).
+// ---------------------------------------------------------------------------
+
+test('Inv-5 stage boundaries: firstPayoffAge < secondPayoffAge; firstPayoffWinner matches first zero-balance row', () => {
+  // Typical buying-now: rate=0.06, stocks=0.07, extra=$1000 → Prepay finishes
+  // its accelerated payoff well before Invest's natural amortization end.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.06 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    stocksReturn: 0.07,
+    extraMonthly: 1000,
+    lumpSumPayoff: false,
+  });
+  const out = computePayoffVsInvest(inputs);
+
+  // Inv-5, condition 1: stageBoundaries exists with the four expected fields.
+  assert.ok(
+    out.stageBoundaries !== undefined && out.stageBoundaries !== null,
+    '[Inv-5] stageBoundaries must be present in outputs; got undefined/null. ' +
+    'Backend has not yet added _findStageBoundaries() (T015+).'
+  );
+  const sb = out.stageBoundaries;
+  assert.ok(
+    typeof sb.windowStartAge === 'number',
+    `[Inv-5] stageBoundaries.windowStartAge must be a number; got ${JSON.stringify(sb.windowStartAge)}`
+  );
+  assert.ok(
+    typeof sb.firstPayoffAge === 'number',
+    `[Inv-5] stageBoundaries.firstPayoffAge must be a number; got ${JSON.stringify(sb.firstPayoffAge)}`
+  );
+  assert.ok(
+    'firstPayoffWinner' in sb,
+    `[Inv-5] stageBoundaries.firstPayoffWinner must be present; got ${JSON.stringify(sb)}`
+  );
+  assert.ok(
+    'secondPayoffAge' in sb,
+    `[Inv-5] stageBoundaries.secondPayoffAge field must be present (may be null); got ${JSON.stringify(sb)}`
+  );
+
+  // Inv-5, condition 2: windowStartAge === currentAge (buying-now has no delay).
+  assert.strictEqual(
+    sb.windowStartAge,
+    42,
+    `[Inv-5] windowStartAge should be 42 (currentAge) for buying-now; got ${sb.windowStartAge}`
+  );
+
+  // Inv-5, condition 3: firstPayoffAge < secondPayoffAge (when secondPayoffAge is not null).
+  if (sb.secondPayoffAge !== null) {
+    assert.ok(
+      sb.firstPayoffAge < sb.secondPayoffAge,
+      `[Inv-5] firstPayoffAge (${sb.firstPayoffAge}) must be < secondPayoffAge (${sb.secondPayoffAge}). ` +
+      'Scenario: buying-now, rate=0.06, stocks=0.07, extra=$1000.'
+    );
+  }
+
+  // Inv-5, condition 4: firstPayoffWinner === 'prepay' for this scenario.
+  // At rate=0.06 vs stocks=0.07 with extra=$1000 applied to principal, Prepay's
+  // accelerated payoff finishes well before Invest's natural amortization end.
+  assert.strictEqual(
+    sb.firstPayoffWinner,
+    'prepay',
+    `[Inv-5] firstPayoffWinner should be 'prepay' for rate=0.06/stocks=0.07/extra=$1000; ` +
+    `got '${sb.firstPayoffWinner}'. ` +
+    `stageBoundaries: ${JSON.stringify(sb)}`
+  );
+
+  // Inv-5, condition 5: the prepayPath row at firstPayoffAge has mortgageBalance === 0.
+  // (firstPayoffWinner='prepay', so verify Prepay's zero-balance row matches.)
+  const winnerPath = sb.firstPayoffWinner === 'prepay' ? out.prepayPath : out.investPath;
+  const winnerRow = winnerPath.find((r) => r.age === sb.firstPayoffAge);
+  assert.ok(
+    winnerRow !== undefined,
+    `[Inv-5] No row found in ${sb.firstPayoffWinner}Path at age ${sb.firstPayoffAge}. ` +
+    `Path ages: ${winnerPath.map((r) => r.age).join(',')}`
+  );
+  assert.strictEqual(
+    winnerRow.mortgageBalance,
+    0,
+    `[Inv-5] ${sb.firstPayoffWinner}Path row at firstPayoffAge (${sb.firstPayoffAge}) ` +
+    `must have mortgageBalance === 0; got ${winnerRow.mortgageBalance}`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T025, T026, T027 — Lump-sum payoff cluster (Inv-3, Inv-4, Inv-6)
+// These tests verify behavior when lumpSumPayoff=true is enabled.
+// STATUS: ALL EXPECTED TO FAIL until Backend agent lands the lump-sum
+// trigger in T028+ (calc module does not yet implement lumpSumEvent).
+// ---------------------------------------------------------------------------
+
+// T025: Lump-sum fires after Prepay payoff (typical case)
+// Inv-3: lumpSumEvent fires at most once.
+// Inv-4: brokerageAfter === brokerageBefore − paidOff (within $2 rounding).
+
+test('Inv-3/Inv-4 lump-sum after Prepay payoff: Prepay-first stage ordering, brokerage drops by realMortgageBalance', () => {
+  // High-rate scenario: rate=0.09, stocks=0.07, extra=$1000, switch ON.
+  // With a 9% mortgage rate, Prepay's accelerated payoff is fast (high interest
+  // means extra payments save a lot). Invest's brokerage catches the real balance
+  // ONE YEAR after Prepay has already reached zero — giving Prepay-first ordering.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.09 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    stocksReturn: 0.07,
+    extraMonthly: 1000,
+    lumpSumPayoff: true,
+  });
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion 1: lumpSumEvent is non-null and has the expected shape.
+  assert.ok(
+    out.lumpSumEvent !== null && out.lumpSumEvent !== undefined,
+    '[Inv-3] lumpSumEvent must be non-null for rate=0.09/stocks=0.07/extra=$1000/lumpSumPayoff=true. ' +
+    'The Invest brokerage should grow to exceed the real mortgage balance within the 99-year horizon. ' +
+    `Got: ${JSON.stringify(out.lumpSumEvent)}`
+  );
+  const ev = out.lumpSumEvent;
+  assert.ok(
+    typeof ev.age === 'number',
+    `[Inv-3] lumpSumEvent.age must be a number; got ${JSON.stringify(ev.age)}`
+  );
+  assert.ok(
+    typeof ev.monthInYear === 'number' && ev.monthInYear >= 0 && ev.monthInYear <= 11,
+    `[Inv-3] lumpSumEvent.monthInYear must be 0..11; got ${ev.monthInYear}`
+  );
+  assert.ok(
+    typeof ev.brokerageBefore === 'number' && ev.brokerageBefore > 0,
+    `[Inv-3] lumpSumEvent.brokerageBefore must be a positive number; got ${ev.brokerageBefore}`
+  );
+  assert.ok(
+    typeof ev.paidOff === 'number' && ev.paidOff > 0,
+    `[Inv-3] lumpSumEvent.paidOff must be a positive number; got ${ev.paidOff}`
+  );
+  assert.ok(
+    typeof ev.brokerageAfter === 'number' && ev.brokerageAfter >= 0,
+    `[Inv-3] lumpSumEvent.brokerageAfter must be >= 0; got ${ev.brokerageAfter}`
+  );
+
+  // Assertion 2: lumpSumEvent.age is between Prepay's natural payoff age and the
+  // 30-year upper bound (currentAge + 30 = 72). The trigger fires after Prepay has
+  // already paid off (Prepay-first ordering in this typical scenario).
+  const prepayNaturalPayoffAge = out.mortgageNaturalPayoff.prepayAge;
+  assert.ok(
+    ev.age > prepayNaturalPayoffAge,
+    `[Inv-3] lumpSumEvent.age (${ev.age}) must be > Prepay's natural payoff age (${prepayNaturalPayoffAge}) ` +
+    'for this rate=0.09/stocks=0.07 scenario (Prepay finishes first due to high mortgage rate).'
+  );
+  assert.ok(
+    ev.age < inputs.currentAge + 30,
+    `[Inv-3] lumpSumEvent.age (${ev.age}) must be < ${inputs.currentAge + 30} (30-year mortgage upper bound). ` +
+    'A 9% mortgage with extra=$1000 should be paid off well within 30 years.'
+  );
+
+  // Assertion 3: Inv-4 — brokerageAfter === brokerageBefore − paidOff within $2 rounding.
+  const diff = Math.abs(ev.brokerageAfter - (ev.brokerageBefore - ev.paidOff));
+  assert.ok(
+    diff <= 2,
+    `[Inv-4] lumpSumEvent rounding: brokerageAfter (${ev.brokerageAfter}) should equal ` +
+    `brokerageBefore (${ev.brokerageBefore}) − paidOff (${ev.paidOff}) ± $2. ` +
+    `Got difference of $${diff}.`
+  );
+
+  // Assertion 4: stageBoundaries.firstPayoffWinner === 'prepay' for this typical scenario.
+  assert.ok(
+    out.stageBoundaries !== null && out.stageBoundaries !== undefined,
+    '[Inv-5] stageBoundaries must be present when lumpSumPayoff=true'
+  );
+  assert.strictEqual(
+    out.stageBoundaries.firstPayoffWinner,
+    'prepay',
+    `[Inv-3/Inv-5] stageBoundaries.firstPayoffWinner should be 'prepay' for rate=0.09/stocks=0.07/extra=$1000; ` +
+    `got '${out.stageBoundaries.firstPayoffWinner}'. ` +
+    "High mortgage rate (9%) means Prepay finishes accelerated payoff before Invest's lump-sum trigger fires."
+  );
+});
+
+// T026: Lump-sum fires before Prepay payoff (high-return, Invest-first case)
+// Inv-3: lumpSumEvent fires before Prepay's natural payoff.
+// Inv-5: firstPayoffWinner === 'invest' when returns are high.
+
+test("Inv-3 lump-sum before Prepay payoff: Invest-first stage ordering when returns are high", () => {
+  // High-return scenario: stocks=0.12, extra=$3000. The brokerage grows rapidly
+  // and crosses the real mortgage balance before Prepay finishes its accelerated
+  // payoff. This flips the stage ordering: firstPayoffWinner = 'invest'.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.06 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    stocksReturn: 0.12,
+    extraMonthly: 3000,
+    lumpSumPayoff: true,
+  });
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion 1: lumpSumEvent is non-null.
+  assert.ok(
+    out.lumpSumEvent !== null && out.lumpSumEvent !== undefined,
+    '[Inv-3] lumpSumEvent must be non-null for stocks=0.12/extra=$3000/lumpSumPayoff=true. ' +
+    'The Invest brokerage compounds rapidly and should meet the real mortgage balance well ' +
+    `before the mortgage is naturally paid off. Got: ${JSON.stringify(out.lumpSumEvent)}`
+  );
+
+  // Assertion 2: firstPayoffWinner === 'invest' (high returns flip the order).
+  assert.ok(
+    out.stageBoundaries !== null && out.stageBoundaries !== undefined,
+    '[Inv-5] stageBoundaries must be present when lumpSumPayoff=true'
+  );
+  assert.strictEqual(
+    out.stageBoundaries.firstPayoffWinner,
+    'invest',
+    `[Inv-3/Inv-5] stageBoundaries.firstPayoffWinner should be 'invest' for stocks=0.12/extra=$3000; ` +
+    `got '${out.stageBoundaries.firstPayoffWinner}'. ` +
+    "High-return scenario: Invest's compounding brokerage crosses real mortgage balance before Prepay's accelerated payoff."
+  );
+
+  // Assertion 3: lumpSumEvent.age < Prepay's natural payoff age.
+  const prepayNaturalPayoffAge = out.mortgageNaturalPayoff.prepayAge;
+  assert.ok(
+    out.lumpSumEvent.age < prepayNaturalPayoffAge,
+    `[Inv-3] lumpSumEvent.age (${out.lumpSumEvent.age}) must be < Prepay's natural payoff age ` +
+    `(${prepayNaturalPayoffAge}) for stocks=0.12/extra=$3000. ` +
+    "Invest's lump-sum trigger fires BEFORE Prepay finishes accelerated payoff in this high-return scenario."
+  );
+
+  // Assertion 4: stageBoundaries.firstPayoffAge === lumpSumEvent.age
+  // (Invest's lump-sum is the first payoff event, so firstPayoffAge should match).
+  assert.strictEqual(
+    out.stageBoundaries.firstPayoffAge,
+    out.lumpSumEvent.age,
+    `[Inv-3/Inv-5] stageBoundaries.firstPayoffAge (${out.stageBoundaries.firstPayoffAge}) ` +
+    `should equal lumpSumEvent.age (${out.lumpSumEvent.age}) when Invest fires first. ` +
+    'The stage boundary is defined by whichever strategy becomes debt-free first.'
+  );
+});
+
+// T027(a): Lump-sum never fires (low-return horizon)
+// T027(b): Inv-6 interest invariant — prepay < invest_lumpSum < invest_keepPaying
+
+test('Lump-sum never fires (low-return horizon): trigger never met', () => {
+  // Zero-extra scenario: stocks=0.04, extra=$0.
+  // Invest directs no extra cash to brokerage during the mortgage period;
+  // the brokerage stays at $0 throughout the mortgage life, so the trigger
+  // condition (brokerage >= realMortgageBalance) is never met.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.06 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    stocksReturn: 0.04,
+    extraMonthly: 0,
+    lumpSumPayoff: true,
+  });
+  const out = computePayoffVsInvest(inputs);
+
+  // Assert: lumpSumEvent === null (trigger never met).
+  assert.strictEqual(
+    out.lumpSumEvent,
+    null,
+    `[Inv-3] lumpSumEvent should be null for stocks=0.04/extra=$0/lumpSumPayoff=true. ` +
+    'Invest brokerage stays at $0 throughout the mortgage period (no extra contributions), so trigger never fires. ' +
+    `Got: ${JSON.stringify(out.lumpSumEvent)}`
+  );
+
+  // Assert: calc completes normally — no disabledReason, no thrown error.
+  assert.strictEqual(
+    out.disabledReason,
+    undefined,
+    `[Inv-3] calc should complete with no disabledReason when lumpSumPayoff=true and extra=$0; ` +
+    `got disabledReason='${out.disabledReason}'`
+  );
+});
+
+test('Inv-6 interest invariant: prepay < invest_lumpSum < invest_keepPaying', () => {
+  // Run the same scenario three ways to verify the interest ordering.
+  // Scenario: buying-now, rate=0.06, stocks=0.07, extra=$1000 — the "typical" case
+  // where the lump-sum trigger fires for Invest but after Prepay.
+  const baseScenario = {
+    mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.06 }),
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    stocksReturn: 0.07,
+    extraMonthly: 1000,
+  };
+
+  // Run 1: lumpSumPayoff=false (Invest keeps paying on schedule → most interest).
+  const outKeepPaying = computePayoffVsInvest(baseInputs({ ...baseScenario, lumpSumPayoff: false }));
+
+  // Run 2: lumpSumPayoff=true (Invest fires lump-sum → saves late-stage interest).
+  const outLumpSum = computePayoffVsInvest(baseInputs({ ...baseScenario, lumpSumPayoff: true }));
+
+  // Helper: sum all interestPaidThisYear values in an amortization array.
+  function totalInterest(amortRows) {
+    return amortRows.reduce((sum, r) => sum + r.interestPaidThisYear, 0);
+  }
+
+  const prepayInterest = totalInterest(outKeepPaying.amortizationSplit.prepay);
+  const investKeepPayingInterest = totalInterest(outKeepPaying.amortizationSplit.invest);
+  const investLumpSumInterest = totalInterest(outLumpSum.amortizationSplit.invest);
+
+  // Inv-6, sub-assertion A: Prepay's cumulative interest is unaffected by lumpSumPayoff.
+  // (Prepay's behavior is purely determined by its accelerated principal payments;
+  //  the lumpSumPayoff flag only affects the Invest strategy.)
+  const prepayInterestLumpSumRun = totalInterest(outLumpSum.amortizationSplit.prepay);
+  assert.ok(
+    Math.abs(prepayInterest - prepayInterestLumpSumRun) <= 1,
+    `[Inv-6] Prepay's cumulative interest must be unaffected by lumpSumPayoff flag. ` +
+    `keepPaying run: ${prepayInterest.toFixed(2)}, lumpSum run: ${prepayInterestLumpSumRun.toFixed(2)}, ` +
+    `diff: ${Math.abs(prepayInterest - prepayInterestLumpSumRun).toFixed(2)} (must be ≤ $1 rounding).`
+  );
+
+  // Inv-6, sub-assertion B: prepay < invest_lumpSum (Prepay still pays least interest overall).
+  assert.ok(
+    prepayInterest < investLumpSumInterest,
+    `[Inv-6] Prepay cumulative interest (${prepayInterest.toFixed(2)}) must be < ` +
+    `Invest-with-lumpSum cumulative interest (${investLumpSumInterest.toFixed(2)}). ` +
+    'Prepay always pays less total interest because extra cash goes straight to principal.'
+  );
+
+  // Inv-6, sub-assertion C: invest_lumpSum < invest_keepPaying (lump-sum saves interest).
+  // When lumpSumPayoff fires, Invest kills the remaining loan balance early, eliminating
+  // all future interest payments that would have accrued on the natural amortization schedule.
+  assert.ok(
+    investLumpSumInterest < investKeepPayingInterest,
+    `[Inv-6] Invest-with-lumpSum cumulative interest (${investLumpSumInterest.toFixed(2)}) must be < ` +
+    `Invest-keepPaying cumulative interest (${investKeepPayingInterest.toFixed(2)}). ` +
+    'Lump-sum payoff eliminates future interest by killing the mortgage balance early. ' +
+    'If equal, the lump-sum trigger may not have fired (check outLumpSum.lumpSumEvent).'
+  );
 });
