@@ -126,6 +126,30 @@ function _compoundInvested(balance, contributionThisMonth, monthlyRealReturn) {
 }
 
 /**
+ * Find the first age in a wealth-path where the mortgage just hit zero (i.e.,
+ * the row's `mortgageBalance <= 0` and the previous row was still positive).
+ * Returns null if the mortgage never naturally pays off within the path's
+ * horizon. Pure helper used by `_evaluateFactors` (cash-flow-head-start row)
+ * and surfaced top-level as `mortgageNaturalPayoff` for the renderer.
+ *
+ * "Natural" here means "first time the row's nominal balance drops to zero" —
+ * for the Prepay path this is the accelerated payoff age; for the Invest path
+ * it's the bank's standard amortization end. Distinct from `mortgageFreedom`,
+ * which uses `freeAndClearWealth >= 0` (cash-out crossover, not balance hit).
+ *
+ * @param {Array} path  wealth-path rows (prepayPath or investPath)
+ * @returns {number|null} age at first natural payoff, or null
+ */
+function _firstNaturalPayoffAge(path) {
+  for (let i = 0; i < path.length; i++) {
+    if (path[i].mortgageBalance <= 0 && (i === 0 || path[i - 1].mortgageBalance > 0)) {
+      return path[i].age;
+    }
+  }
+  return null;
+}
+
+/**
  * Initialize a strategy's mortgage state from MortgageInputs at the start of
  * the comparison window (currentAge). Returns null if there's no mortgage to
  * simulate at all (e.g., already paid off).
@@ -342,6 +366,17 @@ function computePayoffVsInvest(inputs) {
     let yearInterestI = 0;
     let yearPrincipalP = 0;
     let yearPrincipalI = 0;
+    // v1.4 (2026-04-28): track per-year brokerage contribution for the
+    // "Where each dollar goes" chart. Captures the cash that goes to the
+    // brokerage account each month, mirroring the same conditional branches
+    // used by the existing `_compoundInvested` calls below. The apples-to-
+    // apples invariant is:
+    //   interest + principal + brokerageContrib (Prepay)
+    //     === interest + principal + brokerageContrib (Invest)
+    // for every row, because both strategies spend the same total cash each
+    // month — only the destination (mortgage principal vs brokerage) differs.
+    let yearBrokerageP = 0;
+    let yearBrokerageI = 0;
 
     for (let monthInYear = 0; monthInYear < 12; monthInYear++) {
       const monthIndex = yearOffset * 12 + monthInYear;
@@ -362,14 +397,29 @@ function computePayoffVsInvest(inputs) {
         yearInterestP += stepP.interestPaid;
         yearPrincipalP += stepP.principalPaid;
         cumInterestP += stepP.interestPaid;
+        // Brokerage contrib this month: 0 in normal active months (extra goes to
+        // principal). EXCEPTION: in the payoff month itself, _stepMonth caps the
+        // principal payment at the remaining balance, so the user's intended
+        // monthly cash outlay (contractualPI + extraMonthly) overshoots the
+        // actual mortgage payment by `(contractualPI + extraMonthly) - (interest
+        // + principal_paid)`. That leftover cash is unspent on mortgage and is
+        // attributed to the brokerage so that the apples-to-apples cash-outlay
+        // invariant holds: P&I + brokerage_contrib (Prepay) ===
+        // P&I + brokerage_contrib (Invest) for every row.
+        const intendedOutlay = mortgageStateP.contractualMonthlyPI + extraMonthly;
+        const actualMortgageOutlay = stepP.interestPaid + stepP.principalPaid;
+        const leftover = Math.max(0, intendedOutlay - actualMortgageOutlay);
+        yearBrokerageP += leftover;
         // Compound any existing invested balance (post-payoff this won't be entered)
         investedP = _compoundInvested(investedP, 0, monthlyRealReturn);
       } else if (!mortgageActiveThisMonth) {
         // Pre-buy-in: the extra cash goes to investments under both strategies
+        yearBrokerageP += extraMonthly;
         investedP = _compoundInvested(investedP, extraMonthly, monthlyRealReturn);
       } else {
         // Mortgage paid off — redirect (former P&I + extraMonthly) to investments
         const freedCashFlow = mortgageStateP.contractualMonthlyPI + extraMonthly;
+        yearBrokerageP += freedCashFlow;
         investedP = _compoundInvested(investedP, freedCashFlow, monthlyRealReturn);
       }
 
@@ -380,14 +430,18 @@ function computePayoffVsInvest(inputs) {
         yearInterestI += stepI.interestPaid;
         yearPrincipalI += stepI.principalPaid;
         cumInterestI += stepI.interestPaid;
+        // Brokerage contrib this month: extraMonthly (mortgage gets only contractual P&I).
+        yearBrokerageI += extraMonthly;
         // Deposit extra to brokerage AND compound
         investedI = _compoundInvested(investedI, extraMonthly, monthlyRealReturn);
       } else if (!mortgageActiveThisMonth) {
         // Pre-buy-in: extra goes to investments
+        yearBrokerageI += extraMonthly;
         investedI = _compoundInvested(investedI, extraMonthly, monthlyRealReturn);
       } else {
         // Mortgage paid off — redirect freed cash flow + extra to investments
         const freedCashFlow = mortgageStateI.contractualMonthlyPI + extraMonthly;
+        yearBrokerageI += freedCashFlow;
         investedI = _compoundInvested(investedI, freedCashFlow, monthlyRealReturn);
       }
     }
@@ -412,6 +466,30 @@ function computePayoffVsInvest(inputs) {
     const totalP = homeEquityP + investedP;
     const totalI = homeEquityI + investedI;
 
+    // freeAndClearWealth (v1.5, 2026-04-28): real-dollar measure of
+    // "could the user pay off the mortgage today and still have something
+    // left over?". Computed as `invested - mortgageBalanceReal` so both
+    // operands are in today's purchasing power. Crosses ≥ 0 the moment a
+    // strategy reaches mortgage freedom — used for the new payoff-age
+    // comparison chart and the `mortgageFreedom` summary below.
+    //
+    // v1.6 (2026-04-28): gate the mortgage subtraction on whether the
+    // mortgage has actually started. For ownership='buying-in' with
+    // buyInYears>0, the user has NOT yet taken on the loan during pre-buy-in
+    // years — subtracting the (already-initialized) $400K balance produces
+    // false negatives that show the chart starting at -$467K. Once the
+    // mortgage is active (yearOffset*12 >= buyInMonth), the subtraction
+    // applies as before. Note: we deliberately leave `mortgageBalance` and
+    // `mortgageBalanceReal` row fields untouched — they are still the
+    // truthful nominal/real liability and are consumed by `_computeVerdict`
+    // (naturalPayoffYear) and `_evaluateFactors` (payoff-age detection).
+    // Only freeAndClearWealth changes.
+    const mortgageHasStarted = mortgageActiveOrPostStarted(buyInMonth, yearOffset);
+    const effectiveMortgageRealP = mortgageHasStarted ? realMortgageBalanceP : 0;
+    const effectiveMortgageRealI = mortgageHasStarted ? realMortgageBalanceI : 0;
+    const freeAndClearP = Math.round(investedP - effectiveMortgageRealP);
+    const freeAndClearI = Math.round(investedI - effectiveMortgageRealI);
+
     prepayPath.push({
       age,
       year: yearOffset,
@@ -421,6 +499,7 @@ function computePayoffVsInvest(inputs) {
       invested: Math.round(investedP),
       totalNetWorth: Math.round(totalP),
       liquidNetWorth: Math.round(investedP),
+      freeAndClearWealth: freeAndClearP,
     });
     investPath.push({
       age,
@@ -431,12 +510,14 @@ function computePayoffVsInvest(inputs) {
       invested: Math.round(investedI),
       totalNetWorth: Math.round(totalI),
       liquidNetWorth: Math.round(investedI),
+      freeAndClearWealth: freeAndClearI,
     });
     amortPrepay.push({
       age,
       year: yearOffset,
       interestPaidThisYear: Math.round(yearInterestP),
       principalPaidThisYear: Math.round(yearPrincipalP),
+      brokerageContribThisYear: Math.round(yearBrokerageP),
       cumulativeInterest: Math.round(cumInterestP),
       cumulativePrincipal: 0, // computed below
     });
@@ -445,6 +526,7 @@ function computePayoffVsInvest(inputs) {
       year: yearOffset,
       interestPaidThisYear: Math.round(yearInterestI),
       principalPaidThisYear: Math.round(yearPrincipalI),
+      brokerageContribThisYear: Math.round(yearBrokerageI),
       cumulativeInterest: Math.round(cumInterestI),
       cumulativePrincipal: 0,
     });
@@ -468,11 +550,66 @@ function computePayoffVsInvest(inputs) {
 
   // ----- Verdict -----
   subSteps.push('compute verdict at fireAge + endAge');
+  subSteps.push('compute mortgage-freedom age for each strategy (freeAndClearWealth ≥ 0 crossing)');
   const fireRowP = prepayPath.find((r) => r.age === inputs.fireAge);
   const fireRowI = investPath.find((r) => r.age === inputs.fireAge);
   const endRowP = prepayPath[prepayPath.length - 1];
   const endRowI = investPath[investPath.length - 1];
   const verdict = _computeVerdict(fireRowP, fireRowI, endRowP, endRowI, framingKey, prepayPath, investPath);
+
+  // ----- Mortgage Freedom (v1.5) -----
+  // The age each strategy first reaches "mortgage freedom" — defined as the
+  // first row where freeAndClearWealth (= invested - mortgageBalanceReal) is
+  // non-negative. For Prepay this is the natural payoff age (mortgage hits 0
+  // and brokerage is non-negative). For Invest it's the age the brokerage
+  // first equals or exceeds the remaining mortgage balance — i.e., the user
+  // could sell stocks and write a check to retire the loan.
+  const prepayFreedomAge = _firstFreedomAge(prepayPath, buyInMonth);
+  const investFreedomAge = _firstFreedomAge(investPath, buyInMonth);
+  let freedomWinner = 'tie';
+  let freedomMarginYears = 0;
+  if (prepayFreedomAge !== null && investFreedomAge !== null) {
+    if (prepayFreedomAge < investFreedomAge) {
+      freedomWinner = 'prepay';
+      freedomMarginYears = investFreedomAge - prepayFreedomAge;
+    } else if (investFreedomAge < prepayFreedomAge) {
+      freedomWinner = 'invest';
+      freedomMarginYears = prepayFreedomAge - investFreedomAge;
+    }
+  } else if (prepayFreedomAge !== null) {
+    freedomWinner = 'prepay';
+    freedomMarginYears = null; // invest never reaches freedom in horizon
+  } else if (investFreedomAge !== null) {
+    freedomWinner = 'invest';
+    freedomMarginYears = null;
+  }
+  // v1.6 (2026-04-28): expose buyInAge so the chart can render an annotation
+  // at the moment the mortgage actually appears in the comparison. Null for
+  // ownership types where the loan starts at currentAge ('buying-now',
+  // 'already-own').
+  const buyInAge = (inputs.mortgage.ownership === 'buying-in' && inputs.mortgage.buyInYears > 0)
+    ? inputs.currentAge + inputs.mortgage.buyInYears
+    : null;
+  subSteps.push('record buy-in age (or null) for chart annotation');
+  const mortgageFreedom = {
+    prepayAge: prepayFreedomAge,
+    investAge: investFreedomAge,
+    winner: freedomWinner,
+    marginYears: freedomMarginYears,
+    buyInAge,
+  };
+
+  // ----- Natural Mortgage Payoff (v1.7, 2026-04-28) -----
+  // The age at which each strategy's mortgage balance naturally hits zero.
+  // Distinct from mortgageFreedom (which is the freeAndClearWealth ≥ 0
+  // crossover): this is purely "when did the bank stamp the loan PAID?".
+  // Surfaced top-level so the brokerage-only chart can mark "house fully paid
+  // off" events without recomputing.
+  subSteps.push('record natural mortgage payoff ages for both strategies');
+  const mortgageNaturalPayoff = {
+    prepayAge: _firstNaturalPayoffAge(prepayPath),
+    investAge: _firstNaturalPayoffAge(investPath),
+  };
 
   // ----- Factors -----
   subSteps.push('score factors and assign favoredStrategy / magnitude');
@@ -495,8 +632,34 @@ function computePayoffVsInvest(inputs) {
     crossover,
     refiAnnotation,
     refiClampedNote,
+    mortgageFreedom,
+    mortgageNaturalPayoff,
     subSteps,
   };
+}
+
+/**
+ * Find the first age in `path` where freeAndClearWealth >= 0. Returns null if
+ * the path never crosses the threshold within its horizon. Pure helper used by
+ * the mortgageFreedom summary.
+ *
+ * v1.6 (2026-04-28): skip pre-buy-in years. Without this guard, ownership=
+ * 'buying-in' with buyInYears>0 would falsely report `currentAge` as the
+ * freedom age — the gating fix above makes pre-buy-in `freeAndClearWealth`
+ * equal to `invested` (≥ 0 immediately), but those years aren't truly
+ * "mortgage-free", they're "pre-mortgage". The buy-in is a future obligation
+ * the user has chosen to take on; freedom should be measured from it.
+ *
+ * @param {Array} path        wealth-path rows
+ * @param {number} buyInMonth months from currentAge until the mortgage activates
+ */
+function _firstFreedomAge(path, buyInMonth) {
+  const safeBuyInMonth = Number.isFinite(buyInMonth) && buyInMonth > 0 ? buyInMonth : 0;
+  for (let i = 0; i < path.length; i++) {
+    if (path[i].year * 12 < safeBuyInMonth) continue; // pre-buy-in: mortgage doesn't exist yet
+    if (path[i].freeAndClearWealth >= 0) return path[i].age;
+  }
+  return null;
 }
 
 // Helper for "is the mortgage active or post-payoff this year" — used to
@@ -695,20 +858,8 @@ function _evaluateFactors(inputs, prepayPath, investPath, cumInterestP, cumInter
   //
   // We surface it explicitly so the user understands what's pushing the
   // plan-end verdict when the rate-spread factors all favor Invest.
-  let prepayPayoffAge = null;
-  for (let i = 0; i < prepayPath.length; i++) {
-    if (prepayPath[i].mortgageBalance <= 0 && (i === 0 || prepayPath[i - 1].mortgageBalance > 0)) {
-      prepayPayoffAge = prepayPath[i].age;
-      break;
-    }
-  }
-  let investPayoffAge = null;
-  for (let i = 0; i < investPath.length; i++) {
-    if (investPath[i].mortgageBalance <= 0 && (i === 0 || investPath[i - 1].mortgageBalance > 0)) {
-      investPayoffAge = investPath[i].age;
-      break;
-    }
-  }
+  const prepayPayoffAge = _firstNaturalPayoffAge(prepayPath);
+  const investPayoffAge = _firstNaturalPayoffAge(investPath);
   if (prepayPayoffAge !== null && investPayoffAge !== null) {
     const headStartYears = investPayoffAge - prepayPayoffAge;
     let mag = 'minor';
@@ -758,6 +909,7 @@ const _payoffVsInvestApi = {
   _stepMonth,
   _monthlyRealReturnAfterTax,
   _compoundInvested,
+  _firstNaturalPayoffAge,
   _initMortgageState,
   _applyRefi,
   _detectCrossover,

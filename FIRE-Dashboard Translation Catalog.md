@@ -1177,3 +1177,25 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | Key | EN | zh-TW |
 |---|---|---|
 | `withdraw.strategy.label` | Withdraw Strategy: | 提領策略： |
+
+## Feature 016 — Mortgage Payoff vs Invest — Amortization "To brokerage" segment (2)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `pvi.amort.prepay.brokerage` | Prepay — To brokerage | 還貸 — 投入券商 |
+| `pvi.amort.invest.brokerage` | Invest — To brokerage | 投資 — 投入券商 |
+
+## Feature 016 — Payoff vs Invest — Brokerage chart (10)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `pvi.chart.brokerage.title` | Investment account balance — Prepay vs Invest | 投资账户余额 — 提前还贷 vs 投资 |
+| `pvi.chart.brokerage.prepay` | Prepay (brokerage) | 提前还贷（投资账户） |
+| `pvi.chart.brokerage.invest` | Invest (brokerage) | 投资（投资账户） |
+| `pvi.chart.brokerage.buyInMarker` | Home purchase at age {0} | 在 {0} 岁购房 |
+| `pvi.chart.brokerage.prepayPayoffMarker` | Prepay mortgage paid off at age {0} | 提前还贷 — 房贷在 {0} 岁还清 |
+| `pvi.chart.brokerage.investPayoffMarker` | Invest mortgage paid off at age {0} | 投资策略 — 房贷在 {0} 岁还清 |
+| `pvi.verdict.brokerage.prepayPayoff` | Prepay mortgage paid off at age {0} | 提前还贷策略：房贷在 {0} 岁还清 |
+| `pvi.verdict.brokerage.investPayoff` | Invest mortgage paid off at age {0} | 投资策略：房贷在 {0} 岁还清 |
+| `pvi.verdict.brokerage.compare` | By age {0}: Prepay ${1}, Invest ${2} · {3} ahead by ${4} | 到 {0} 岁：提前还贷 ${1}，投资 ${2} · {3} 多 ${4} |
+| `pvi.verdict.brokerage.tie` | By age {0}: brokerage balances effectively tie | 到 {0} 岁：两策略账户余额基本持平 |

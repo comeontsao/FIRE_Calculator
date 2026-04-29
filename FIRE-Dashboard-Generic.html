@@ -2617,8 +2617,6 @@
   .pvi-input-group label { display: block; font-size: 0.82em; color: var(--text-dim); margin-bottom: 6px; }
   .pvi-input-value { color: var(--accent2); font-weight: 600; margin-left: 6px; }
   .pvi-input-group input[type="range"] { width: 100%; }
-  .pvi-framing-radios { display: flex; gap: 14px; flex-wrap: wrap; }
-  .pvi-framing-radios label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.88em; color: var(--text); margin-bottom: 0; cursor: pointer; }
 
   .pvi-verdict-banner {
     padding: 12px 14px;
@@ -3359,17 +3357,6 @@
               <input type="range" id="pviExtraMonthly" min="0" max="5000" step="50" value="500"
                      oninput="document.getElementById('pviExtraMonthlyVal').textContent='$'+Number(this.value).toLocaleString();recomputePayoffVsInvest();_pviSaveState();">
             </div>
-            <div class="pvi-input-group">
-              <label data-i18n="pvi.input.framing">Net-worth framing</label>
-              <div class="pvi-framing-radios">
-                <label><input type="radio" name="pviFraming" id="pviFramingTotal" value="totalNetWorth" checked
-                              onchange="recomputePayoffVsInvest();_pviSaveState()">
-                  <span data-i18n="pvi.input.framing.total">Total (incl. home equity)</span></label>
-                <label><input type="radio" name="pviFraming" id="pviFramingLiquid" value="liquidNetWorth"
-                              onchange="recomputePayoffVsInvest();_pviSaveState()">
-                  <span data-i18n="pvi.input.framing.liquid">Liquid only (investments + cash)</span></label>
-              </div>
-            </div>
           </div>
 
           <div class="pvi-verdict-banner" id="pviVerdictBanner" hidden>
@@ -3382,7 +3369,7 @@
           </div>
 
           <div class="pvi-chart-wrap" id="pviChartWrapWealth">
-            <div class="pvi-chart-title" data-i18n="pvi.chart.wealth.title">Wealth trajectory — Prepay vs Invest</div>
+            <div class="pvi-chart-title" data-i18n="pvi.chart.brokerage.title">Investment account balance — Prepay vs Invest</div>
             <div class="chart-container">
               <canvas id="payoffVsInvestWealthChart"></canvas>
             </div>
@@ -6321,29 +6308,29 @@ const TRANSLATIONS = {
     'pvi.section.title': 'Mortgage payoff vs. invest extra cash',
     'pvi.section.subtitle': 'At your current numbers, which path leaves you wealthier?',
     'pvi.input.extraMonthly': 'Extra monthly cash to allocate',
-    'pvi.input.framing': 'Net-worth framing',
-    'pvi.input.framing.total': 'Total (incl. home equity)',
-    'pvi.input.framing.liquid': 'Liquid only (investments + cash)',
     'pvi.input.refi.enable': 'Plan a refinance',
     'pvi.input.refi.year': 'Refi in N years',
     'pvi.input.refi.newRate': 'New rate (%)',
     'pvi.input.refi.newTerm': 'New term',
     'pvi.input.effRate.title': 'Effective mortgage rate (after-tax)',
     'pvi.input.effRate.hint': "Lower this if your state lets you deduct mortgage interest. Adjusts the verdict only — not the bank's amortization.",
-    'pvi.chart.wealth.title': 'Wealth trajectory — Prepay vs Invest',
-    'pvi.chart.wealth.prepay': 'Prepay Mortgage',
-    'pvi.chart.wealth.invest': 'Invest Extra',
-    'pvi.chart.wealth.crossover': 'Lines cross',
-    'pvi.chart.wealth.callout': 'At {0} (age {1}): {2} wins by {3}',
+    'pvi.chart.brokerage.title': 'Investment account balance — Prepay vs Invest',
+    'pvi.chart.brokerage.prepay': 'Prepay (brokerage)',
+    'pvi.chart.brokerage.invest': 'Invest (brokerage)',
+    'pvi.chart.brokerage.buyInMarker': 'Home purchase at age {0}',
+    'pvi.chart.brokerage.prepayPayoffMarker': 'Prepay mortgage paid off at age {0}',
+    'pvi.chart.brokerage.investPayoffMarker': 'Invest mortgage paid off at age {0}',
     'pvi.chart.amort.title': 'Where each dollar goes',
     'pvi.amort.prepay.interest': 'Prepay — Interest paid',
     'pvi.amort.prepay.principal': 'Prepay — Principal paid',
+    'pvi.amort.prepay.brokerage': 'Prepay — To brokerage',
     'pvi.amort.invest.interest': 'Invest — Interest paid',
     'pvi.amort.invest.principal': 'Invest — Principal paid',
-    'pvi.verdict.winsBy': '{0} wins by ${1} at {2}',
-    'pvi.verdict.tie': 'Effectively tied at {0}',
-    'pvi.verdict.atFire': 'FIRE (age {0})',
-    'pvi.verdict.atEnd': 'plan-end (age {0})',
+    'pvi.amort.invest.brokerage': 'Invest — To brokerage',
+    'pvi.verdict.brokerage.prepayPayoff': 'Prepay mortgage paid off at age {0}',
+    'pvi.verdict.brokerage.investPayoff': 'Invest mortgage paid off at age {0}',
+    'pvi.verdict.brokerage.compare': 'By age {0}: Prepay ${1}, Invest ${2} · {3} ahead by ${4}',
+    'pvi.verdict.brokerage.tie': 'By age {0}: brokerage balances effectively tie',
     'pvi.factor.heading': 'Factors driving the verdict',
     'pvi.factor.realSpread.label': 'Real return spread (after tax & inflation)',
     'pvi.factor.nominalRate.label': 'Nominal mortgage rate',
@@ -7332,29 +7319,29 @@ const TRANSLATIONS = {
     'pvi.section.title': '提早還清房貸 vs. 投入市場',
     'pvi.section.subtitle': '以你目前的數字,哪條路會讓你更有錢？',
     'pvi.input.extraMonthly': '每月額外可用現金',
-    'pvi.input.framing': '淨資產計算方式',
-    'pvi.input.framing.total': '總計（含房屋淨值）',
-    'pvi.input.framing.liquid': '流動資產（投資＋現金）',
     'pvi.input.refi.enable': '規劃再融資',
     'pvi.input.refi.year': 'N 年後再融資',
     'pvi.input.refi.newRate': '新利率（%）',
     'pvi.input.refi.newTerm': '新還款年限',
     'pvi.input.effRate.title': '實質房貸利率（稅後）',
     'pvi.input.effRate.hint': '如果你的州可抵扣房貸利息,請調低此值。僅影響結論,不影響實際攤還。',
-    'pvi.chart.wealth.title': '財富軌跡 — 還貸 vs 投資',
-    'pvi.chart.wealth.prepay': '提早還清房貸',
-    'pvi.chart.wealth.invest': '投入市場',
-    'pvi.chart.wealth.crossover': '交叉點',
-    'pvi.chart.wealth.callout': '在 {0}（{1} 歲）:{2} 多 {3}',
+    'pvi.chart.brokerage.title': '投资账户余额 — 提前还贷 vs 投资',
+    'pvi.chart.brokerage.prepay': '提前还贷（投资账户）',
+    'pvi.chart.brokerage.invest': '投资（投资账户）',
+    'pvi.chart.brokerage.buyInMarker': '在 {0} 岁购房',
+    'pvi.chart.brokerage.prepayPayoffMarker': '提前还贷 — 房贷在 {0} 岁还清',
+    'pvi.chart.brokerage.investPayoffMarker': '投资策略 — 房贷在 {0} 岁还清',
     'pvi.chart.amort.title': '每塊錢的去向',
     'pvi.amort.prepay.interest': '還貸 — 利息支出',
     'pvi.amort.prepay.principal': '還貸 — 本金支出',
+    'pvi.amort.prepay.brokerage': '還貸 — 投入券商',
     'pvi.amort.invest.interest': '投資 — 利息支出',
     'pvi.amort.invest.principal': '投資 — 本金支出',
-    'pvi.verdict.winsBy': '{0} 在 {2} 多 ${1}',
-    'pvi.verdict.tie': '在 {0} 大致打平',
-    'pvi.verdict.atFire': 'FIRE（{0} 歲）',
-    'pvi.verdict.atEnd': '計畫終點（{0} 歲）',
+    'pvi.amort.invest.brokerage': '投資 — 投入券商',
+    'pvi.verdict.brokerage.prepayPayoff': '提前还贷策略：房贷在 {0} 岁还清',
+    'pvi.verdict.brokerage.investPayoff': '投资策略：房贷在 {0} 岁还清',
+    'pvi.verdict.brokerage.compare': '到 {0} 岁：提前还贷 ${1}，投资 ${2} · {3} 多 ${4}',
+    'pvi.verdict.brokerage.tie': '到 {0} 岁：两策略账户余额基本持平',
     'pvi.factor.heading': '影響結論的因素',
     'pvi.factor.realSpread.label': '實質報酬利差（稅後＋通膨後）',
     'pvi.factor.nominalRate.label': '名目房貸利率',
@@ -13540,7 +13527,6 @@ function _assemblePayoffVsInvestInputs() {
     ? (typeof getMortgageInputs === 'function' ? getMortgageInputs() : null)
     : null;
   const extraEl = document.getElementById('pviExtraMonthly');
-  const framingTotalEl = document.getElementById('pviFramingTotal');
   const refiEnabledEl = document.getElementById('pviRefiEnabled');
   const refiYearEl = document.getElementById('pviRefiYear');
   const refiNewRateEl = document.getElementById('pviRefiNewRate');
@@ -13569,7 +13555,7 @@ function _assemblePayoffVsInvestInputs() {
     ltcgRate: inp.taxTrad ? Math.min(0.20, inp.taxTrad) : 0.15,
     stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
     extraMonthly: extraEl ? (parseFloat(extraEl.value) || 0) : 500,
-    framing: (framingTotalEl && framingTotalEl.checked) ? 'totalNetWorth' : 'liquidNetWorth',
+    framing: 'liquidNetWorth', // hardcoded — framing toggle removed; calc module's crossover logic still consumes this input.
     effectiveRateOverride,
     plannedRefi,
   };
@@ -13610,39 +13596,100 @@ function _hidePayoffVsInvestExplainer() {
   if (factorWrap) factorWrap.style.display = '';
 }
 
-function renderPayoffVsInvestWealthChart(outputs, framing) {
+// =============================================================================
+// CHART: Payoff vs Invest — Brokerage balance
+// Module: calc/payoffVsInvest.js (computePayoffVsInvest)
+// Reads : outputs.prepayPath[].liquidNetWorth, outputs.investPath[] same,
+//         outputs.mortgageNaturalPayoff { prepayAge, investAge },
+//         outputs.mortgageFreedom.buyInAge, outputs.refiAnnotation.
+// Plots two lines per strategy of brokerage balance (liquidNetWorth = invested),
+// each strategy's natural mortgage-payoff age (red/blue X), and an optional
+// home-purchase diamond for buying-in ownership.
+// =============================================================================
+function renderPayoffVsInvestBrokerageChart(outputs) {
   const canvas = document.getElementById('payoffVsInvestWealthChart');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if (charts_pviWealth) { try { charts_pviWealth.destroy(); } catch (_e) {} }
-  const key = framing === 'liquidNetWorth' ? 'liquidNetWorth' : 'totalNetWorth';
+
   const ageLabels = outputs.prepayPath.map((r) => 'age ' + r.age);
-  const prepayData = outputs.prepayPath.map((r) => r[key]);
-  const investData = outputs.investPath.map((r) => r[key]);
+  const prepayData = outputs.prepayPath.map((r) => r.liquidNetWorth);
+  const investData = outputs.investPath.map((r) => r.liquidNetWorth);
 
   const datasets = [
-    { label: t('pvi.chart.wealth.prepay'), data: prepayData,
-      borderColor: 'rgba(255,107,107,0.85)', backgroundColor: 'rgba(255,107,107,0.10)',
-      fill: false, tension: 0, pointRadius: 0, borderWidth: 2 },
-    { label: t('pvi.chart.wealth.invest'), data: investData,
-      borderColor: 'rgba(108,99,255,0.85)', backgroundColor: 'rgba(108,99,255,0.10)',
-      fill: false, tension: 0, pointRadius: 0, borderWidth: 2 },
+    {
+      label: t('pvi.chart.brokerage.prepay'),
+      data: prepayData,
+      borderColor: 'rgba(255,107,107,0.85)',
+      backgroundColor: 'rgba(255,107,107,0.10)',
+      fill: false, tension: 0, pointRadius: 0, borderWidth: 2,
+    },
+    {
+      label: t('pvi.chart.brokerage.invest'),
+      data: investData,
+      borderColor: 'rgba(108,99,255,0.85)',
+      backgroundColor: 'rgba(108,99,255,0.10)',
+      fill: false, tension: 0, pointRadius: 0, borderWidth: 2,
+    },
   ];
-  if (outputs.crossover) {
-    const idx = Math.max(0, Math.min(outputs.prepayPath.length - 1, outputs.crossover.ageRoundedDisplay - outputs.prepayPath[0].age));
-    datasets.push({
-      label: t('pvi.chart.wealth.crossover'),
-      data: outputs.prepayPath.map((_r, i) => i === idx ? outputs.crossover.totalNetWorth : null),
-      borderColor: '#ffd93d', backgroundColor: '#ffd93d',
-      pointRadius: 8, pointStyle: 'crossRot', showLine: false,
-    });
+
+  // Buy-in marker (yellow diamond on the brokerage line at the buy-in age)
+  const buyInAge = outputs.mortgageFreedom && outputs.mortgageFreedom.buyInAge;
+  if (buyInAge !== null && buyInAge !== undefined) {
+    const buyInIdx = outputs.prepayPath.findIndex((r) => r.age === buyInAge);
+    if (buyInIdx >= 0) {
+      datasets.push({
+        label: t('pvi.chart.brokerage.buyInMarker', buyInAge),
+        data: outputs.prepayPath.map((_r, i) => i === buyInIdx ? prepayData[buyInIdx] : null),
+        borderColor: '#ffd93d',
+        backgroundColor: '#ffd93d',
+        pointRadius: 9,
+        pointStyle: 'rectRot',
+        showLine: false,
+      });
+    }
   }
+
+  // Prepay's natural mortgage payoff (red X on Prepay line)
+  const mp = outputs.mortgageNaturalPayoff || {};
+  if (mp.prepayAge !== null && mp.prepayAge !== undefined) {
+    const idx = outputs.prepayPath.findIndex((r) => r.age === mp.prepayAge);
+    if (idx >= 0) {
+      datasets.push({
+        label: t('pvi.chart.brokerage.prepayPayoffMarker', mp.prepayAge),
+        data: outputs.prepayPath.map((_r, i) => i === idx ? prepayData[idx] : null),
+        borderColor: 'rgba(255,107,107,1)',
+        backgroundColor: 'rgba(255,107,107,1)',
+        pointRadius: 8,
+        pointStyle: 'crossRot',
+        showLine: false,
+      });
+    }
+  }
+
+  // Invest's natural mortgage payoff (blue X on Invest line)
+  if (mp.investAge !== null && mp.investAge !== undefined) {
+    const idx = outputs.investPath.findIndex((r) => r.age === mp.investAge);
+    if (idx >= 0) {
+      datasets.push({
+        label: t('pvi.chart.brokerage.investPayoffMarker', mp.investAge),
+        data: outputs.investPath.map((_r, i) => i === idx ? investData[idx] : null),
+        borderColor: 'rgba(108,99,255,1)',
+        backgroundColor: 'rgba(108,99,255,1)',
+        pointRadius: 8,
+        pointStyle: 'crossRot',
+        showLine: false,
+      });
+    }
+  }
+
   if (outputs.refiAnnotation) {
     const refiIdx = Math.max(0, Math.min(outputs.prepayPath.length - 1, outputs.refiAnnotation.refiAge - outputs.prepayPath[0].age));
     datasets.push({
       label: 'Refi (' + (outputs.refiAnnotation.newRate * 100).toFixed(2) + '%)',
       data: outputs.prepayPath.map((_r, i) => i === refiIdx ? prepayData[refiIdx] : null),
-      borderColor: '#00d4aa', backgroundColor: '#00d4aa',
+      borderColor: '#00d4aa',
+      backgroundColor: '#00d4aa',
       pointRadius: 7, pointStyle: 'rect', showLine: false,
     });
   }
@@ -13669,6 +13716,7 @@ function renderPayoffVsInvestWealthChart(outputs, framing) {
       scales: {
         x: { ticks: { color: '#8b8fa3', maxTicksLimit: 15, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
         y: {
+          beginAtZero: true,
           ticks: {
             color: '#8b8fa3',
             callback: (v) => v >= 1000000 ? '$' + (v / 1000000).toFixed(1) + 'M' : '$' + Math.round(v / 1000) + 'K',
@@ -13686,21 +13734,48 @@ function renderPayoffVsInvestAmortizationChart(outputs) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if (charts_pviAmort) { try { charts_pviAmort.destroy(); } catch (_e) {} }
+
   const ageLabels = outputs.amortizationSplit.prepay.map((r) => 'age ' + r.age);
+
   const datasets = [
-    { label: t('pvi.amort.prepay.interest'),
+    {
+      label: t('pvi.amort.prepay.interest'),
       data: outputs.amortizationSplit.prepay.map((r) => r.interestPaidThisYear),
-      backgroundColor: 'rgba(255,107,107,0.45)', stack: 'prepay' },
-    { label: t('pvi.amort.prepay.principal'),
+      backgroundColor: 'rgba(255,107,107,0.45)',
+      stack: 'prepay',
+    },
+    {
+      label: t('pvi.amort.prepay.principal'),
       data: outputs.amortizationSplit.prepay.map((r) => r.principalPaidThisYear),
-      backgroundColor: 'rgba(255,107,107,0.85)', stack: 'prepay' },
-    { label: t('pvi.amort.invest.interest'),
+      backgroundColor: 'rgba(255,107,107,0.85)',
+      stack: 'prepay',
+    },
+    {
+      label: t('pvi.amort.prepay.brokerage'),
+      data: outputs.amortizationSplit.prepay.map((r) => r.brokerageContribThisYear || 0),
+      backgroundColor: 'rgba(46,213,115,0.55)',
+      stack: 'prepay',
+    },
+    {
+      label: t('pvi.amort.invest.interest'),
       data: outputs.amortizationSplit.invest.map((r) => r.interestPaidThisYear),
-      backgroundColor: 'rgba(108,99,255,0.45)', stack: 'invest' },
-    { label: t('pvi.amort.invest.principal'),
+      backgroundColor: 'rgba(108,99,255,0.45)',
+      stack: 'invest',
+    },
+    {
+      label: t('pvi.amort.invest.principal'),
       data: outputs.amortizationSplit.invest.map((r) => r.principalPaidThisYear),
-      backgroundColor: 'rgba(108,99,255,0.85)', stack: 'invest' },
+      backgroundColor: 'rgba(108,99,255,0.85)',
+      stack: 'invest',
+    },
+    {
+      label: t('pvi.amort.invest.brokerage'),
+      data: outputs.amortizationSplit.invest.map((r) => r.brokerageContribThisYear || 0),
+      backgroundColor: 'rgba(46,213,115,0.85)',
+      stack: 'invest',
+    },
   ];
+
   charts_pviAmort = new Chart(ctx, {
     type: 'bar',
     data: { labels: ageLabels, datasets },
@@ -13737,20 +13812,48 @@ function renderPayoffVsInvestAmortizationChart(outputs) {
   if (window.tabRouter) window.tabRouter.registerChart('payoff-invest', charts_pviAmort);
 }
 
-function renderPayoffVsInvestVerdictBanner(verdict, inputs) {
+function renderPayoffVsInvestVerdictBanner(outputs, inputs) {
   const banner = document.getElementById('pviVerdictBanner');
   const lineFire = document.getElementById('pviVerdictAtFire');
   const lineEnd  = document.getElementById('pviVerdictAtEnd');
-  if (!banner || !lineFire || !lineEnd || !verdict) return;
+  if (!banner || !lineFire || !lineEnd) return;
   banner.hidden = false;
-  const fmt$ = (n) => Math.round(n).toLocaleString();
   const winnerLabel = (w) => w === 'prepay' ? t('pvi.prepay') : (w === 'invest' ? t('pvi.invest') : '');
-  const fireMoment = t('pvi.verdict.atFire', inputs.fireAge);
-  const endMoment  = t('pvi.verdict.atEnd', inputs.endAge);
-  if (verdict.isTieAtFire) lineFire.textContent = t('pvi.verdict.tie', fireMoment);
-  else lineFire.textContent = t('pvi.verdict.winsBy', winnerLabel(verdict.winnerAtFire), fmt$(verdict.marginAtFire), fireMoment);
-  if (verdict.isTieAtEnd) lineEnd.textContent = t('pvi.verdict.tie', endMoment);
-  else lineEnd.textContent = t('pvi.verdict.winsBy', winnerLabel(verdict.winnerAtEnd), fmt$(verdict.marginAtEnd), endMoment);
+  const mp = (outputs && outputs.mortgageNaturalPayoff) || {};
+  // Line 1 — Prepay's natural mortgage payoff age
+  lineFire.textContent = (mp.prepayAge !== null && mp.prepayAge !== undefined)
+    ? t('pvi.verdict.brokerage.prepayPayoff', mp.prepayAge)
+    : '';
+  // Line 2 — Invest's natural mortgage payoff age + brokerage comparison at endAge
+  const investBase = (mp.investAge !== null && mp.investAge !== undefined)
+    ? t('pvi.verdict.brokerage.investPayoff', mp.investAge)
+    : '';
+  const prepayPath = outputs && outputs.prepayPath;
+  const investPath = outputs && outputs.investPath;
+  let comparison = '';
+  if (Array.isArray(prepayPath) && Array.isArray(investPath)
+      && prepayPath.length > 0 && investPath.length > 0) {
+    const lastP = prepayPath[prepayPath.length - 1].liquidNetWorth;
+    const lastI = investPath[investPath.length - 1].liquidNetWorth;
+    const endAge = (inputs && inputs.endAge !== undefined && inputs.endAge !== null)
+      ? inputs.endAge
+      : prepayPath[prepayPath.length - 1].age;
+    const max = Math.max(Math.abs(lastP), Math.abs(lastI), 1);
+    const isTie = Math.abs(lastP - lastI) / max < 0.005;
+    if (isTie) {
+      comparison = t('pvi.verdict.brokerage.tie', endAge);
+    } else {
+      const winner = lastP > lastI ? 'prepay' : 'invest';
+      const margin = Math.abs(lastP - lastI);
+      comparison = t('pvi.verdict.brokerage.compare',
+        endAge,
+        Math.round(lastP).toLocaleString(),
+        Math.round(lastI).toLocaleString(),
+        winnerLabel(winner),
+        Math.round(margin).toLocaleString());
+    }
+  }
+  lineEnd.textContent = (investBase && comparison) ? (investBase + ' · ' + comparison) : (investBase || comparison);
 }
 
 function renderPayoffVsInvestFactorBreakdown(factors) {
@@ -13799,9 +13902,9 @@ function recomputePayoffVsInvest() {
     return;
   }
   _hidePayoffVsInvestExplainer();
-  try { renderPayoffVsInvestWealthChart(outputs, inputs.framing); } catch (_e) { console.error('[pvi] wealth chart', _e); }
+  try { renderPayoffVsInvestBrokerageChart(outputs); } catch (_e) { console.error('[pvi] brokerage chart', _e); }
   try { renderPayoffVsInvestAmortizationChart(outputs); } catch (_e) { console.error('[pvi] amort chart', _e); }
-  try { renderPayoffVsInvestVerdictBanner(outputs.verdict, inputs); } catch (_e) { console.error('[pvi] verdict', _e); }
+  try { renderPayoffVsInvestVerdictBanner(outputs, inputs); } catch (_e) { console.error('[pvi] verdict', _e); }
   try { renderPayoffVsInvestFactorBreakdown(outputs.factors); } catch (_e) { console.error('[pvi] factors', _e); }
 }
 
@@ -14871,7 +14974,6 @@ function saveState() {
   // Feature 016 — Payoff vs Invest pill local state.
   try {
     const _pviExtra = document.getElementById('pviExtraMonthly');
-    const _pviFramingTotal = document.getElementById('pviFramingTotal');
     const _pviRefiEnabled = document.getElementById('pviRefiEnabled');
     const _pviRefiYear = document.getElementById('pviRefiYear');
     const _pviRefiNewRate = document.getElementById('pviRefiNewRate');
@@ -14880,7 +14982,6 @@ function saveState() {
     const _pviOvr = document.getElementById('pviEffRateOverride');
     state._payoffVsInvest = {
       extraMonthly: _pviExtra ? (parseFloat(_pviExtra.value) || 500) : 500,
-      framing: (_pviFramingTotal && _pviFramingTotal.checked) ? 'totalNetWorth' : 'liquidNetWorth',
       refiEnabled: _pviRefiEnabled ? !!_pviRefiEnabled.checked : false,
       refiYear: _pviRefiYear ? (parseInt(_pviRefiYear.value, 10) || 5) : 5,
       refiNewRate: _pviRefiNewRate ? ((parseFloat(_pviRefiNewRate.value) || 5) / 100) : 0.05,
@@ -15104,12 +15205,6 @@ function restoreState() {
           setVal('pviExtraMonthly', pvi.extraMonthly);
           const lbl = document.getElementById('pviExtraMonthlyVal');
           if (lbl) lbl.textContent = '$' + Number(pvi.extraMonthly).toLocaleString();
-        }
-        const totalEl = document.getElementById('pviFramingTotal');
-        const liquidEl = document.getElementById('pviFramingLiquid');
-        if (totalEl && liquidEl) {
-          if (pvi.framing === 'liquidNetWorth') { liquidEl.checked = true; totalEl.checked = false; }
-          else { totalEl.checked = true; liquidEl.checked = false; }
         }
         setChk('pviRefiEnabled', pvi.refiEnabled);
         if (Number.isFinite(pvi.refiYear)) {
