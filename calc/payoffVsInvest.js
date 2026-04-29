@@ -1,10 +1,11 @@
 /*
  * =============================================================================
- * MODULE: calc/payoffVsInvest.js (v2)
+ * MODULE: calc/payoffVsInvest.js (v3)
  *
- * Feature: 016-mortgage-payoff-vs-invest (v1) → 017-payoff-vs-invest-stages-and-lumpsum (v2)
+ * Feature: 016-mortgage-payoff-vs-invest (v1) → 017-payoff-vs-invest-stages-and-lumpsum (v2) → 018-lifecycle-payoff-merge (v3)
  * Contract (v1): specs/016-mortgage-payoff-vs-invest/contracts/payoffVsInvest-calc.contract.md
  * Contract (v2): specs/017-payoff-vs-invest-stages-and-lumpsum/contracts/payoffVsInvest-calc-v2.contract.md
+ * Contract (v3): specs/018-lifecycle-payoff-merge/contracts/payoffVsInvest-calc-v3.contract.md
  *
  * Inputs : PrepayInvestComparisonInputs (see data-model.md). Pure record;
  *          assembled by the renderer from existing dashboard state.
@@ -12,10 +13,15 @@
  *          Invest strategy fires a lump-sum payoff the first month its
  *          real-dollar brokerage equals the remaining real-dollar mortgage
  *          balance.
+ *          v3 adds: mortgageStrategy?: 'prepay-extra' | 'invest-keep-paying' | 'invest-lump-sum'
+ *          (canonical strategy, supersedes lumpSumPayoff). mfjStatus?: 'single' | 'mfj'.
+ *          originalPurchasePrice?: number.
  * Outputs: PrepayInvestComparisonOutputs — { prepayPath, investPath,
  *          amortizationSplit, verdict, factors, crossover, refiAnnotation,
  *          subSteps, disabledReason?,
  *          lumpSumEvent (v2), stageBoundaries (v2) }.
+ *          v3 adds: homeSaleEvent (HomeSaleEvent | null), postSaleBrokerageAtFire ({prepay, invest}),
+ *          mortgageActivePayoffAge ({prepay, invest}).
  * Consumers:
  *   - FIRE-Dashboard.html → renderPayoffVsInvestBrokerageChart
  *       (reads liquidNetWorth, mortgageNaturalPayoff, mortgageFreedom.buyInAge,
@@ -28,6 +34,9 @@
  *       (reads factors)
  *   - FIRE-Dashboard-Generic.html → same four renderers (lockstep — Principle I)
  *   - tests/unit/payoffVsInvest.test.js → fixture-locked unit tests
+ *   - Lifecycle simulator (FIRE-Dashboard.html / FIRE-Dashboard-Generic.html inline scripts)
+ *       — consumes mortgageActivePayoffAge for sidebar, postSaleBrokerageAtFire as
+ *         retirement-phase brokerage seed, lifecycle mortgage trajectory under active strategy.
  *
  * Policy : NO DOM access. NO Chart.js. NO localStorage. NO global mutable
  *          state. The renderer assembles inputs and consumes outputs; this
@@ -41,6 +50,11 @@
  * v2 backwards compatibility (Inv-1): when `lumpSumPayoff === false` AND
  * `ownership !== 'buying-in'`, every output field is byte-identical to v1.
  * Locked by tests/unit/payoffVsInvest.test.js parity snapshots.
+ *
+ * v3 backwards compatibility (Inv-1, extends v2 Inv-1): when mortgageStrategy === 'invest-keep-paying'
+ * (default) AND ownership !== 'buying-in' AND sellAtFire === false, every v2 output field is
+ * byte-identical to v2. New v3 output fields (homeSaleEvent, postSaleBrokerageAtFire,
+ * mortgageActivePayoffAge) are additive.
  *
  * The 20% terminal-floor / Safe-mode logic in the rest of the project is
  * unrelated to this module — Payoff-vs-Invest is a side analysis that does
@@ -64,6 +78,19 @@
  * @property {'prepay'|'invest'} firstPayoffWinner  Which strategy got there first.
  * @property {number|null} secondPayoffAge The age the second strategy becomes debt-free, or null
  *                                         if it never reaches zero balance within the horizon.
+ */
+
+/**
+ * @typedef {Object} HomeSaleEvent
+ * @property {number} age                    The FIRE age at which the sale fires.
+ * @property {number} homeValueAtFire        Real $, equal to homePrice under real-zero appreciation. Rounded.
+ * @property {number} proceeds               homeValueAtFire * (1 - sellingCostPct), rounded.
+ * @property {number} nominalGain            homeValueAtFire - originalPurchasePrice.
+ * @property {number} section121Exclusion    250000 (single) or 500000 (mfj).
+ * @property {number} taxableGain            max(0, nominalGain - section121Exclusion).
+ * @property {number} capGainsTax            taxableGain * ltcgRate, rounded.
+ * @property {number} netToBrokerage         proceeds - capGainsTax - remainingMortgageBalance, rounded.
+ * @property {number} remainingMortgageBalance  Mortgage balance at FIRE under active strategy, rounded.
  */
 
 const SAFE_TIE_FRACTION = 0.005; // 0.5% tie threshold per FR-007 / Verdict.isTie*
@@ -368,7 +395,13 @@ function computePayoffVsInvest(inputs) {
     };
   }
 
-  const lumpSumPayoff = inputs.lumpSumPayoff === true;  // strict, defaults to false
+  const strategy = _normalizeStrategy(inputs);
+  const lumpSumPayoff = strategy === 'invest-lump-sum';
+
+  // v3 (feature 018, T011): strategy-resolution subSteps — emitted early so
+  // the audit trail reflects what strategy drives the entire simulation below.
+  subSteps.push('resolve active mortgage strategy: ' + strategy + ' (from state._payoffVsInvest.mortgageStrategy)');
+  subSteps.push('compute lifecycle mortgage trajectory under ' + strategy);
 
   const monthlyRealReturn = _monthlyRealReturn(inputs.stocksReturn, inputs.inflation);
 
@@ -471,14 +504,23 @@ function computePayoffVsInvest(inputs) {
       // v2 (feature 017): lump-sum trigger — Invest writes a check the moment its
       // real-dollar brokerage equals the remaining real-dollar mortgage balance.
       // See specs/017-.../data-model.md §"Lump-sum trigger algorithm".
-      if (lumpSumPayoff && lumpSumEvent === null && mortgageActiveThisMonth && mortgageStateI.balance > 0) {
+      // v3 (feature 018, T028): Inv-3 extension — when sellAtFire===true, the trigger
+      // is inhibited at age >= fireAge (home sale at FIRE retires the mortgage instead).
+      var sellAtFireSet = inputs.mortgage && inputs.mortgage.sellAtFire === true && inputs.mortgageEnabled;
+      if (lumpSumPayoff && lumpSumEvent === null && mortgageActiveThisMonth && mortgageStateI.balance > 0
+          && (!sellAtFireSet || age < inputs.fireAge)) {
         const yearOffsetForTrigger = age - inputs.currentAge;
         const inflationFactorAtTrigger = Math.pow(1 + (inputs.inflation || 0), yearOffsetForTrigger);
         const realBalance = mortgageStateI.balance / inflationFactorAtTrigger;
         if (investedI >= realBalance) {
           const brokerageBefore = investedI;
+          // v3 (feature 018, T028): Inv-4 LTCG gross-up — brokerage drops by
+          // realBalance × (1 + ltcgRate × stockGainPct) to account for LTCG tax
+          // owed when liquidating shares to fund the lump-sum payoff.
+          const grossUpFactor = 1 + ((inputs.ltcgRate || 0) * (inputs.stockGainPct || 0));
+          const drawdown = realBalance * grossUpFactor;
           const paidOff = realBalance;
-          investedI = investedI - realBalance;
+          investedI = investedI - drawdown;
           mortgageStateI = Object.assign({}, mortgageStateI, { balance: 0 });
           lumpSumEvent = {
             age: age,
@@ -727,6 +769,83 @@ function computePayoffVsInvest(inputs) {
   }
   const stageBoundaries = _findStageBoundaries(prepayPath, investPath, windowStartAge, lumpSumEvent);
 
+  // v3 (feature 018, T010): per-strategy mortgage payoff age for the sidebar
+  // mortgage indicator (FR-005) and lifecycle simulator mortgage trajectory.
+  // Uses path-based natural-payoff detection — the first row where
+  // mortgageBalance hits 0. For invest-lump-sum, _firstNaturalPayoffAge already
+  // detects the payoff because the lump-sum trigger zeroes the path balance in
+  // the same month. Both fields can be null (never paid off in horizon).
+  const mortgageActivePayoffAge = {
+    prepay: _firstNaturalPayoffAge(prepayPath),
+    invest: _firstNaturalPayoffAge(investPath),
+  };
+
+  // v3 (feature 018, T027): homeSaleEvent — populated when the user plans to
+  // sell the home at FIRE. The mortgage's remaining balance under the active
+  // strategy is netted from the sale proceeds before crediting to brokerage.
+  var homeSaleEvent = null;
+  if (inputs.mortgageEnabled && inputs.mortgage && inputs.mortgage.sellAtFire === true) {
+    var homeValueAtFire = inputs.mortgage.homePrice || 0;
+    var originalPurchasePrice = (typeof inputs.originalPurchasePrice === 'number' && Number.isFinite(inputs.originalPurchasePrice))
+      ? inputs.originalPurchasePrice : (inputs.mortgage.homePrice || 0);
+    var mfjStatus = inputs.mfjStatus === 'single' ? 'single' : 'mfj';
+    var sellingCostPctHse = (typeof inputs.mortgage.sellingCostPct === 'number') ? inputs.mortgage.sellingCostPct : 0.06;
+    var ltcgRateHse = inputs.ltcgRate || 0;
+
+    var proceeds = Math.round(homeValueAtFire * (1 - sellingCostPctHse));
+    var taxHse = _section121Tax(homeValueAtFire, originalPurchasePrice, mfjStatus, ltcgRateHse);
+
+    // Active strategy's mortgage balance at fireAge determines remainingMortgageBalance.
+    var fireRowPHse = prepayPath.find(function(r) { return r.age === inputs.fireAge; });
+    var fireRowIHse = investPath.find(function(r) { return r.age === inputs.fireAge; });
+    var activeRow = (strategy === 'prepay-extra') ? fireRowPHse : fireRowIHse;
+    var remainingMortgageBalance = activeRow ? activeRow.mortgageBalance : 0;
+    var netToBrokerage = Math.round(proceeds - taxHse.capGainsTax - remainingMortgageBalance);
+
+    homeSaleEvent = {
+      age: inputs.fireAge,
+      homeValueAtFire: Math.round(homeValueAtFire),
+      proceeds: proceeds,
+      nominalGain: Math.round(taxHse.nominalGain),
+      section121Exclusion: taxHse.section121Exclusion,
+      taxableGain: Math.round(taxHse.taxableGain),
+      capGainsTax: taxHse.capGainsTax,
+      netToBrokerage: netToBrokerage,
+      remainingMortgageBalance: Math.round(remainingMortgageBalance),
+    };
+  }
+
+  // v3 (feature 018, T029): postSaleBrokerageAtFire — the lifecycle handoff value.
+  // Per-strategy: each strategy's brokerage at fireAge PLUS the strategy-specific
+  // net equity injection from the sale (when applicable). The lifecycle simulator
+  // reads this as the retirement-phase brokerage seed.
+  var fireRowPPost = prepayPath.find(function(r) { return r.age === inputs.fireAge; });
+  var fireRowIPost = investPath.find(function(r) { return r.age === inputs.fireAge; });
+  var prepayBrokerageAtFire = fireRowPPost ? fireRowPPost.invested : 0;
+  var investBrokerageAtFire = fireRowIPost ? fireRowIPost.invested : 0;
+
+  var postSaleBrokerageAtFire;
+  if (homeSaleEvent !== null) {
+    // Per-strategy net injection: recompute each strategy's remaining balance
+    // to derive per-strategy netToBrokerage.
+    var sellingCostPctPost = (typeof inputs.mortgage.sellingCostPct === 'number') ? inputs.mortgage.sellingCostPct : 0.06;
+    var proceedsPost = Math.round((inputs.mortgage.homePrice || 0) * (1 - sellingCostPctPost));
+    var capGainsTaxPost = homeSaleEvent.capGainsTax;
+    var remainingP = fireRowPPost ? fireRowPPost.mortgageBalance : 0;
+    var remainingI = fireRowIPost ? fireRowIPost.mortgageBalance : 0;
+    var netP = Math.round(proceedsPost - capGainsTaxPost - remainingP);
+    var netI = Math.round(proceedsPost - capGainsTaxPost - remainingI);
+    postSaleBrokerageAtFire = {
+      prepay: prepayBrokerageAtFire + netP,
+      invest: investBrokerageAtFire + netI,
+    };
+  } else {
+    postSaleBrokerageAtFire = {
+      prepay: prepayBrokerageAtFire,
+      invest: investBrokerageAtFire,
+    };
+  }
+
   // ----- Factors -----
   subSteps.push('score factors and assign favoredStrategy / magnitude');
   const factors = _evaluateFactors(inputs, prepayPath, investPath, cumInterestP, cumInterestI, verdict, refi);
@@ -738,6 +857,15 @@ function computePayoffVsInvest(inputs) {
     newRate: refi.newRate,
     newTerm: refi.newTerm,
   } : null;
+
+  // v3 (feature 018, T030): audit subSteps for sell-at-FIRE event.
+  if (homeSaleEvent !== null) {
+    subSteps.push('evaluate sell-at-FIRE event at age ' + inputs.fireAge);
+    subSteps.push('Section 121 exclusion: nominalGain=' + homeSaleEvent.nominalGain + ', exclusion=' + homeSaleEvent.section121Exclusion + ', taxableGain=' + homeSaleEvent.taxableGain);
+    subSteps.push('home-sale capital gains tax: taxableGain × ltcgRate = ' + homeSaleEvent.capGainsTax);
+  }
+  subSteps.push('credit post-sale brokerage at FIRE = prepay:' + postSaleBrokerageAtFire.prepay + ', invest:' + postSaleBrokerageAtFire.invest);
+  subSteps.push('lifecycle handoff: pre-FIRE simulator → retirement-phase simulator');
 
   return {
     prepayPath,
@@ -752,6 +880,9 @@ function computePayoffVsInvest(inputs) {
     mortgageNaturalPayoff,
     lumpSumEvent,
     stageBoundaries,
+    mortgageActivePayoffAge,
+    homeSaleEvent,
+    postSaleBrokerageAtFire,
     subSteps,
   };
 }
@@ -1071,6 +1202,56 @@ function _evaluateFactors(inputs, prepayPath, investPath, cumInterestP, cumInter
 }
 
 // ---------------------------------------------------------------------------
+// v3 helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute Section 121 capital-gains tax on home sale (US primary residence).
+ * @param {number} homeValueAtFire        Real $; the home's real-dollar value at sale.
+ * @param {number} originalPurchasePrice  Real $; the original purchase price.
+ * @param {string} mfjStatus              'single' | 'mfj'
+ * @param {number} ltcgRate               Long-term capital gains rate (e.g., 0.15)
+ * @returns {{ section121Exclusion: number, nominalGain: number, taxableGain: number, capGainsTax: number }}
+ */
+function _section121Tax(homeValueAtFire, originalPurchasePrice, mfjStatus, ltcgRate) {
+  var section121Exclusion = mfjStatus === 'mfj' ? 500000 : 250000;
+  var nominalGain = (homeValueAtFire || 0) - (originalPurchasePrice || 0);
+  var taxableGain = Math.max(0, nominalGain - section121Exclusion);
+  var capGainsTax = Math.round(taxableGain * (ltcgRate || 0));
+  return {
+    section121Exclusion: section121Exclusion,
+    nominalGain: nominalGain,
+    taxableGain: taxableGain,
+    capGainsTax: capGainsTax,
+  };
+}
+
+/**
+ * Normalize the mortgage strategy from v3 input shape, with v2 lumpSumPayoff fallback.
+ * @param {Object} inputs  PrepayInvestComparisonInputs (v2 or v3)
+ * @returns {'prepay-extra' | 'invest-keep-paying' | 'invest-lump-sum'}
+ */
+function _normalizeStrategy(inputs) {
+  // Inv-12 (v3 contract): when mortgageStrategy is present and valid, it WINS
+  // over lumpSumPayoff. The UI's input handler clears lumpSumPayoff when setting
+  // mortgageStrategy, so a "both-present" state from a deliberate v018 user
+  // action shouldn't occur. The lumpSumPayoff fallback below handles v017-era
+  // saved states that lack mortgageStrategy entirely.
+  if (inputs && typeof inputs.mortgageStrategy === 'string') {
+    if (inputs.mortgageStrategy === 'prepay-extra' ||
+        inputs.mortgageStrategy === 'invest-keep-paying' ||
+        inputs.mortgageStrategy === 'invest-lump-sum') {
+      return inputs.mortgageStrategy;
+    }
+    // Unknown value: fall through to lumpSumPayoff fallback
+  }
+  if (inputs && inputs.lumpSumPayoff === true) {
+    return 'invest-lump-sum';
+  }
+  return 'invest-keep-paying';   // v1 / v2 default
+}
+
+// ---------------------------------------------------------------------------
 // UMD-style export — Constitution Principle V file-protocol compatibility.
 // NO `export` keyword anywhere in this file.
 // ---------------------------------------------------------------------------
@@ -1088,6 +1269,8 @@ const _payoffVsInvestApi = {
   _detectCrossover,
   _computeVerdict,
   _evaluateFactors,
+  _normalizeStrategy,
+  _section121Tax,
 };
 
 if (typeof module !== 'undefined' && module && module.exports) {

@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
-**Active feature**: _none_ — feature 017 (payoff-vs-invest-stages-and-lumpsum) implemented 2026-04-29 on branch `017-payoff-vs-invest-stages-and-lumpsum`; awaiting browser-smoke verification (see [`CLOSEOUT.md`](./specs/017-payoff-vs-invest-stages-and-lumpsum/CLOSEOUT.md) checklist) and merge. 43/43 unit tests green. Constitution at v1.2.0. Feature 016 fast-forward-merged to main 2026-04-29 as the baseline for 017. Next `/speckit-specify` will overwrite this block.
+**Active feature**: 018 (lifecycle-payoff-merge) — IN PROGRESS, paused 2026-04-29 mid-implementation. Pickup notes: [`PICKUP.md`](./specs/018-lifecycle-payoff-merge/PICKUP.md). Status: Phase 1+2 done; Phase 3 (US1) done — radio replaces lump-sum checkbox in both HTMLs lockstep, all 13 `projectFullLifecycle` call sites threaded with `mortgageStrategyOverride`, lifecycle simulator scoped strategy-aware mortgage; Phase 4 (US4 calc T026-T030) ~90% done with ONE failing test (#40) on a known design conflict between v2 `paidOff` semantics and v3 LTCG gross-up — recommendation in PICKUP.md is Option B (add `actualDrawdown` field). Phase 4 UI (T031-T035), Phase 5 (US2), Phase 6 (US3), Phase 7 (Polish) NOT STARTED. Tests at checkpoint: 49/50 + 2/2.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)

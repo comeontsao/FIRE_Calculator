@@ -3384,15 +3384,28 @@
               <input type="range" id="pviExtraMonthly" min="0" max="5000" step="50" value="500"
                      oninput="document.getElementById('pviExtraMonthlyVal').textContent='$'+Number(this.value).toLocaleString();recomputePayoffVsInvest();_pviSaveState();">
             </div>
-            <!-- v2 (feature 017) — Lump-sum payoff switch (US3) -->
-            <div class="pvi-input-group pvi-lumpsum-row" style="margin-top:12px;display:flex;align-items:flex-start;gap:8px;">
-              <input type="checkbox" id="pviLumpSumPayoff" style="margin-top:4px;cursor:pointer;"
-                     onchange="recomputePayoffVsInvest();_pviSaveState();">
-              <label for="pviLumpSumPayoff" style="cursor:pointer;flex:1;">
-                <div style="font-weight:600;" data-i18n="pvi.lumpSum.label">Pay off mortgage in lump sum once Invest can afford it</div>
-                <div style="font-size:0.85em;color:var(--text-dim);margin-top:2px;" data-i18n="pvi.lumpSum.help">Compare what happens if Invest writes a check the moment its brokerage equals the remaining mortgage (today's dollars).</div>
+            <!-- v3 (feature 018, T012) — Active mortgage strategy radio group.
+                 Replaces the v017 single lump-sum checkbox with three explicit
+                 options that drive both the Payoff-vs-Invest panel AND the
+                 lifecycle simulator (FR-001, FR-002, Inv-12). The change handler
+                 (registered in JS) auto-clears any manual FIRE override per
+                 FR-012 / R3 and re-runs both pipelines so probe and chart stay
+                 in sync (LH-Inv-1). -->
+            <fieldset class="pvi-strategy-fieldset" style="border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-top:12px;">
+              <legend style="font-weight:600; padding:0 6px;" data-i18n="pvi.strategy.label">Active mortgage strategy</legend>
+              <label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer;">
+                <input type="radio" name="pviMortgageStrategy" id="pviStrategyPrepay" value="prepay-extra">
+                <span data-i18n="pvi.strategy.prepay">Prepay (extra → principal)</span>
               </label>
-            </div>
+              <label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer;">
+                <input type="radio" name="pviMortgageStrategy" id="pviStrategyInvestKeep" value="invest-keep-paying" checked>
+                <span data-i18n="pvi.strategy.investKeep">Invest, keep paying mortgage</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer;">
+                <input type="radio" name="pviMortgageStrategy" id="pviStrategyInvestLumpSum" value="invest-lump-sum">
+                <span data-i18n="pvi.strategy.investLumpSum">Invest, lump-sum payoff</span>
+              </label>
+            </fieldset>
           </div>
 
           <!-- Verdict banner -->
@@ -8772,6 +8785,33 @@ function getActiveChartStrategyOptions() {
     return undefined;
   }
 }
+
+// v3 (feature 018, T017): resolve the active mortgage strategy from the
+// Payoff-vs-Invest radio group and surface it as projectFullLifecycle options.
+// Mirrors getActiveChartStrategyOptions's pattern so the FIRE-age feasibility
+// probe and the chart renderer evaluate the SAME mortgage strategy. Without
+// this single source of truth, the probe could pass while the visible chart
+// (showing a different strategy) depletes — the LH-Inv-1 invariant from
+// specs/018-lifecycle-payoff-merge/contracts/lifecycle-mortgage-handoff.contract.md.
+// Returns `{ mortgageStrategyOverride: <id> }` always (no undefined sentinel)
+// so call sites can unconditionally Object.assign it. Defaults to
+// 'invest-keep-paying' when DOM isn't yet ready (Node tests, cold boot).
+function getActiveMortgageStrategyOptions() {
+  try {
+    if (typeof document === 'undefined' || !document) {
+      return { mortgageStrategyOverride: 'invest-keep-paying' };
+    }
+    const prepayEl = document.getElementById('pviStrategyPrepay');
+    const lumpSumEl = document.getElementById('pviStrategyInvestLumpSum');
+    const sel = (prepayEl && prepayEl.checked) ? 'prepay-extra'
+              : (lumpSumEl && lumpSumEl.checked) ? 'invest-lump-sum'
+              : 'invest-keep-paying';
+    return { mortgageStrategyOverride: sel };
+  } catch (_e) {
+    return { mortgageStrategyOverride: 'invest-keep-paying' };
+  }
+}
+
 function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
   if (mode === 'dieWithZero') {
     // Updated DWZ contract (was: endBalance >= 0 only).
@@ -8786,7 +8826,9 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
     const bufSSDWZ = (inp.bufferSS || 0) * annualSpend;
     if (typeof fireAge === 'number' && typeof projectFullLifecycle === 'function') {
       try {
-        const chartOpts = getActiveChartStrategyOptions();
+        // T017 (feature 018) — merge mortgageStrategyOverride so the DWZ gate
+        // evaluates the SAME mortgage strategy the chart renders (LH-Inv-1).
+        const chartOpts = Object.assign({}, getActiveChartStrategyOptions(), getActiveMortgageStrategyOptions());
         const chart = projectFullLifecycle(inp, annualSpend, fireAge, true, chartOpts);
         const last = chart[chart.length - 1];
         const endBal = last ? last.total : 0;
@@ -8830,7 +8872,9 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
       // the gate evaluates bracket-fill-smoothed while the chart may render
       // tax-optimized-search / roth-ladder / other - and the verdict drifts
       // out of sync with the visible trajectory.
-      const chartOpts = getActiveChartStrategyOptions();
+      // T017 (feature 018) — also merge mortgageStrategyOverride so the Safe
+      // gate evaluates the SAME mortgage strategy the chart renders (LH-Inv-1).
+      const chartOpts = Object.assign({}, getActiveChartStrategyOptions(), getActiveMortgageStrategyOptions());
       const chart = projectFullLifecycle(inp, annualSpend, fireAge, true, chartOpts);
       const unlockAge = 59.5;
       for (let i = 0; i < chart.length; i++) {
@@ -9158,7 +9202,11 @@ function coastFIRECheck(inp) {
 // consistently inside projectFullLifecycle. Args start401k/startAccessible
 // are kept for signature compatibility but NOT used (lifecycle computes them).
 function simulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge, withSS) {
-  const lifecycle = projectFullLifecycle(inp, annualSpend, fireAge, withSS);
+  // T017 (feature 018) — thread the active mortgage strategy through so the
+  // SS chart sees the same trajectory the main lifecycle chart shows (LH-Inv-1).
+  const _opts = (typeof getActiveMortgageStrategyOptions === 'function')
+    ? getActiveMortgageStrategyOptions() : undefined;
+  const lifecycle = projectFullLifecycle(inp, annualSpend, fireAge, withSS, _opts);
   return lifecycle
     .filter(d => d.age >= fireAge)
     .map(d => ({ age: d.age, portfolio: Math.max(0, d.total) }));
@@ -9222,6 +9270,21 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
+  // T018/T019 (feature 018) — Resolve active mortgage strategy. SCOPED change:
+  // - 'invest-keep-paying' (default) preserves the EXISTING behavior fully
+  //   (contractual P&I subtracted from contributions every year, no brokerage
+  //   drain). Same as v017 baseline. FR-002 compliance falls out for free.
+  // - 'prepay-extra' redirects the user's `extraMonthly` slider to mortgage
+  //   principal (already a drain on contributions via `effectiveAnnualSavings`
+  //   below). Mortgage P&I ends earlier per calc module's amortization, so we
+  //   look up the per-year P&I from `_pviAmort` rather than the contractual
+  //   value (which would over-subtract after the accelerated payoff).
+  // - 'invest-lump-sum' keeps contractual P&I until `_pviLumpSumEvent.age`,
+  //   then drops mortgage P&I to $0. At the lump-sum age, we drain
+  //   `brokerageBefore - brokerageAfter` (LTCG-grossed-up per FR-011) from
+  //   portfolioStocks (T019).
+  const _mortgageStrategy = (options && typeof options.mortgageStrategyOverride === 'string')
+    ? options.mortgageStrategyOverride : 'invest-keep-paying';
   const realReturnStocks = inp.returnRate - inp.inflationRate;
   const realReturn401k = inp.return401k - inp.inflationRate;
   const tradContrib = inp.contrib401kTrad + inp.empMatch; // employer match → Trad
@@ -9290,6 +9353,48 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   let relocationDeducted = false;
   const relocationCost = getSelectedRelocationCost();
   const data = [];
+
+  // T018/T019 (feature 018) — When a non-default mortgage strategy is active
+  // AND the calc module is loaded, pre-compute the strategy-specific amortization
+  // and lumpSumEvent so the per-year loop can swap contractual P&I for the
+  // strategy's actual P&I. Default strategy ('invest-keep-paying') skips this
+  // entirely and preserves the v017 baseline behavior to minimize blast radius.
+  let _pviAmort = null;        // age-keyed Map<age, {principalPaidThisYear, interestPaidThisYear}>
+  let _pviLumpSumEvent = null; // {age, brokerageBefore, brokerageAfter, ...} or null
+  let _pviLumpSumDrained = false; // single-shot guard
+  if (mortgageEnabled && mtg && _mortgageStrategy !== 'invest-keep-paying'
+      && typeof computePayoffVsInvest === 'function'
+      && typeof document !== 'undefined' && document) {
+    try {
+      const _pviExtraEl = document.getElementById('pviExtraMonthly');
+      const _pviExtra = _pviExtraEl ? (parseFloat(_pviExtraEl.value) || 0) : 0;
+      const _pviInputs = {
+        currentAge: inp.ageRoger,
+        fireAge: fireAge,
+        endAge: inp.endAge || 99,
+        mortgageEnabled: true,
+        mortgage: mtg,
+        stocksReturn: inp.returnRate,
+        inflation: inp.inflationRate,
+        ltcgRate: inp.taxTrad ? Math.min(0.20, inp.taxTrad) : 0.15,
+        stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
+        extraMonthly: _pviExtra,
+        framing: 'liquidNetWorth',
+        mortgageStrategy: _mortgageStrategy,
+        lumpSumPayoff: (_mortgageStrategy === 'invest-lump-sum'),
+      };
+      const _pviOut = computePayoffVsInvest(_pviInputs);
+      if (_pviOut && !_pviOut.disabledReason && _pviOut.amortizationSplit) {
+        const _amortKey = (_mortgageStrategy === 'prepay-extra') ? 'prepay' : 'invest';
+        const _rows = _pviOut.amortizationSplit[_amortKey] || [];
+        _pviAmort = new Map();
+        for (const r of _rows) {
+          if (r && typeof r.age === 'number') _pviAmort.set(r.age, r);
+        }
+        _pviLumpSumEvent = _pviOut.lumpSumEvent || null;
+      }
+    } catch (_e) { /* swallow — falls back to contractual P&I below */ }
+  }
 
   for (let age = inp.ageRoger; age <= endAge; age++) {
     const yearsFromNow = age - inp.ageRoger;
@@ -9371,16 +9476,43 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       withdrawal = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry - ssThisYear);
     }
 
+    // T018/T019 (feature 018) — Lump-sum drain. Fires once at lumpSumEvent.age,
+    // strictly when strategy === 'invest-lump-sum' AND calc module reported an
+    // event. Subtracts the LTCG-grossed-up amount from portfolioStocks so the
+    // chart visibly shows the brokerage drop the user already sees in the
+    // Payoff-vs-Invest panel. After this age, mortgage P&I is $0 (handled by
+    // the _pviAmort lookup below — calc rows after lumpSum payoff have $0 P&I).
+    if (_mortgageStrategy === 'invest-lump-sum' && _pviLumpSumEvent && !_pviLumpSumDrained
+        && typeof _pviLumpSumEvent.age === 'number' && age >= _pviLumpSumEvent.age) {
+      const _drain = (_pviLumpSumEvent.brokerageBefore || 0) - (_pviLumpSumEvent.brokerageAfter || 0);
+      if (_drain > 0) portfolioStocks = Math.max(0, portfolioStocks - _drain);
+      _pviLumpSumDrained = true;
+    }
+
     // Calculate current mortgage savings adjustment (per year, not once)
     let mtgSavingsAdjust = 0;
     if (mortgageEnabled && mtgPurchased && mtg) {
       const yearsIntoPurchase = yearsFromNow - mtgPurchaseYear;
       const rentEl = document.getElementById('exp_0');
       const rent = rentEl ? parseFloat(rentEl.value) || 0 : 2690;
-      if (yearsIntoPurchase < mtg.term) {
+      // T018 (feature 018) — strategy-aware mortgage P&I lookup. When _pviAmort
+      // is loaded (non-default strategy), use the calc module's actual per-year
+      // P&I (which reflects accelerated payoff under prepay or zero P&I after
+      // lump-sum). Otherwise fall back to contractual amortization. The
+      // "still paying" predicate also flips: rather than `yearsIntoPurchase <
+      // mtg.term`, it asks "did the strategy's amort row report any P&I?".
+      const _pviRow = _pviAmort ? _pviAmort.get(age) : null;
+      const _useStrategy = !!_pviRow;
+      const _strategyMonthlyPI = _useStrategy
+        ? ((_pviRow.principalPaidThisYear || 0) + (_pviRow.interestPaidThisYear || 0)) / 12
+        : null;
+      const _stillPayingStrategy = _useStrategy ? (_strategyMonthlyPI > 0) : (yearsIntoPurchase < mtg.term);
+      if (_stillPayingStrategy) {
         // Still paying P&I + tax + ins + HOA
         const loanAmount = mtg.homePrice - mtg.downPayment;
-        const monthlyPI = calcMortgagePayment(loanAmount, mtg.rate, mtg.term);
+        const monthlyPI = _useStrategy
+          ? _strategyMonthlyPI
+          : calcMortgagePayment(loanAmount, mtg.rate, mtg.term);
         const totalMonthly = monthlyPI + (mtg.propertyTax/12) + (mtg.insurance/12) + mtg.hoa;
         mtgSavingsAdjust = (totalMonthly - rent) * 12;
       } else {
@@ -10562,14 +10694,21 @@ function scoreAndRank(inp, fireAge, mode, objective) {
     // contract per CLAUDE.md FIRE-mode-gates rule.
     if (typeof projectFullLifecycle !== 'function') return null;
     try {
+      // T017 (feature 018) — merge mortgageStrategyOverride so per-strategy
+      // feasibility uses the SAME mortgage trajectory the chart shows (LH-Inv-1).
+      const _mortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+        ? getActiveMortgageStrategyOptions() : {};
       const traj = projectFullLifecycle(
         inp,
         inp.annualSpend || retireSpend,
         fireAge,
         true,
-        strategyId && strategyId !== 'bracket-fill-smoothed'
-          ? { strategyOverride: strategyId, thetaOverride: (typeof thetaOverride === 'number' ? thetaOverride : null) }
-          : undefined
+        Object.assign({},
+          strategyId && strategyId !== 'bracket-fill-smoothed'
+            ? { strategyOverride: strategyId, thetaOverride: (typeof thetaOverride === 'number' ? thetaOverride : null) }
+            : null,
+          _mortOpts
+        )
       );
       const last = traj[traj.length - 1];
       const endBal = last ? last.total : 0;
@@ -12654,7 +12793,8 @@ function setupFireDragListeners() {
         _dragPreview.previewAge = clamped;
         if (!cachedOriginalLifecycle) {
           const scenario = scenarios.find(s => s.id === selectedScenario);
-          cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge);
+          cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge, true,
+            (typeof getActiveMortgageStrategyOptions === 'function' ? getActiveMortgageStrategyOptions() : undefined)); // T017 (feature 018) — LH-Inv-1
         }
         _fireDrag.rendering = true;
         _previewFireAge = clamped;
@@ -12800,7 +12940,8 @@ function setupSidebarFireDragListeners() {
         _dragPreview.previewAge = clamped;
         if (!cachedOriginalLifecycle) {
           const scenario = scenarios.find(s => s.id === selectedScenario);
-          cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge);
+          cachedOriginalLifecycle = projectFullLifecycle(inp, getScenarioEffectiveSpend(scenario), calculatedFireAge, true,
+            (typeof getActiveMortgageStrategyOptions === 'function' ? getActiveMortgageStrategyOptions() : undefined)); // T017 (feature 018) — LH-Inv-1
         }
         _fireDrag.rendering = true;
         _previewFireAge = clamped;
@@ -13122,7 +13263,16 @@ function _assemblePayoffVsInvestInputs() {
   const refiNewTermEl = document.getElementById('pviRefiNewTerm');
   const ovrEnabledEl = document.getElementById('pviEffRateOverrideEnabled');
   const ovrEl = document.getElementById('pviEffRateOverride');
-  const lumpSumEl = document.getElementById('pviLumpSumPayoff'); // v2 (feature 017) — US3 switch
+  // v3 (feature 018, T016) — read selected strategy from the radio group.
+  // Inv-12: pass BOTH `mortgageStrategy` (canonical) and `lumpSumPayoff` (v2
+  // back-compat boolean). The calc module's `_normalizeStrategy` prefers
+  // `mortgageStrategy` when present and only falls back to `lumpSumPayoff`
+  // for legacy callers (FR-001).
+  const stratPrepayEl  = document.getElementById('pviStrategyPrepay');
+  const stratLumpSumEl = document.getElementById('pviStrategyInvestLumpSum');
+  const selectedStrategy = (stratPrepayEl && stratPrepayEl.checked) ? 'prepay-extra'
+                        : (stratLumpSumEl && stratLumpSumEl.checked) ? 'invest-lump-sum'
+                        : 'invest-keep-paying';
 
   const plannedRefi = (refiEnabledEl && refiEnabledEl.checked) ? {
     refiYear: parseInt(refiYearEl ? refiYearEl.value : '5', 10) || 5,
@@ -13148,7 +13298,8 @@ function _assemblePayoffVsInvestInputs() {
     framing: 'liquidNetWorth', // hardcoded — framing toggle removed; calc module's crossover logic still consumes this input.
     effectiveRateOverride,
     plannedRefi,
-    lumpSumPayoff: !!(lumpSumEl && lumpSumEl.checked), // v2 (feature 017) — US3
+    mortgageStrategy: selectedStrategy, // v3 (feature 018) — canonical (FR-001 / Inv-12)
+    lumpSumPayoff: (selectedStrategy === 'invest-lump-sum'), // v2 back-compat helper
   };
 }
 
@@ -13609,6 +13760,33 @@ function recomputePayoffVsInvest() {
   try { renderPayoffVsInvestFactorBreakdown(outputs.factors); } catch (_e) { console.error('[pvi] factors', _e); }
 }
 
+// v3 (feature 018, T014) — Bind change handler on the Active mortgage strategy
+// radio group. Replaces the v017 inline `onchange` on #pviLumpSumPayoff. Each
+// flip clears any manual FIRE override (FR-012 / R3 — auto-move marker), then
+// re-runs the Payoff-vs-Invest panel AND the main lifecycle pipeline so probe
+// and chart stay coherent (LH-Inv-1). Registered on DOMContentLoaded so the
+// radios exist by the time we attach.
+//
+// Note: `state.fireAgeOverride = null` is the FR-012 intent. The dashboard
+// uses the module-scoped `fireAgeOverride` global (no `state.` prefix), so we
+// reset that. If a future refactor introduces a state machine, swap accordingly.
+document.addEventListener('DOMContentLoaded', function _bindPviStrategyRadios() {
+  ['pviStrategyPrepay', 'pviStrategyInvestKeep', 'pviStrategyInvestLumpSum'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function () {
+      // FR-012 — auto-move FIRE marker on strategy change. Clear any manual
+      // user override so the next recalc pins to the freshly-computed FIRE age.
+      try { fireAgeOverride = null; } catch (_e) { /* swallow if not yet defined */ }
+      try { recomputePayoffVsInvest(); } catch (_e) {}
+      // Re-run the main pipeline so the lifecycle chart, KPI cards, and
+      // feasibility probe pick up the new mortgageStrategyOverride.
+      try { if (typeof recalcAll === 'function') recalcAll(); } catch (_e) {}
+      try { _pviSaveState(); } catch (_e) {}
+    });
+  });
+});
+
 // =============================================================================
 // MODULE: lifecycle asset breakdown table
 // Inputs : lifecycle[] (from projectFullLifecycle — each row carries
@@ -13683,8 +13861,15 @@ function renderGrowthChart(inp) {
       }
     }
   } catch (_e) { /* fall through to bracket-fill default */ }
-  const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true,
-    _chartStrategyId ? { strategyOverride: _chartStrategyId, thetaOverride: _chartThetaOverride } : undefined);
+  // T017 (feature 018) — always merge mortgageStrategyOverride so the chart
+  // reflects the active Payoff-vs-Invest radio. Probe and chart now share one
+  // strategy source, satisfying LH-Inv-1.
+  const _mortgageOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+    ? getActiveMortgageStrategyOptions() : {};
+  const _chartOpts = Object.assign({},
+    _chartStrategyId ? { strategyOverride: _chartStrategyId, thetaOverride: _chartThetaOverride } : null,
+    _mortgageOpts);
+  const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true, _chartOpts);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.ageRoger;
   // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
@@ -13702,7 +13887,8 @@ function renderGrowthChart(inp) {
 
   // Cache original lifecycle for comparison metrics
   if (!cachedOriginalLifecycle && calculatedFireAge) {
-    cachedOriginalLifecycle = projectFullLifecycle(inp, scenarioSpend, calculatedFireAge);
+    cachedOriginalLifecycle = projectFullLifecycle(inp, scenarioSpend, calculatedFireAge, true,
+      (typeof getActiveMortgageStrategyOptions === 'function' ? getActiveMortgageStrategyOptions() : undefined)); // T017 (feature 018) — LH-Inv-1
   }
 
   if (charts.growth) charts.growth.destroy();
@@ -14125,8 +14311,11 @@ function updateOverrideBanner(inp, scenarioSpend) {
   banner.classList.add('active');
   if (hint) hint.classList.add('hidden');
 
-  const overrideLifecycle = projectFullLifecycle(inp, scenarioSpend, fireAgeOverride);
-  const originalLifecycle = cachedOriginalLifecycle || projectFullLifecycle(inp, scenarioSpend, calculatedFireAge);
+  // T017 (feature 018) — both override + original use active mortgage strategy (LH-Inv-1).
+  const _overrideMortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+    ? getActiveMortgageStrategyOptions() : undefined;
+  const overrideLifecycle = projectFullLifecycle(inp, scenarioSpend, fireAgeOverride, true, _overrideMortOpts);
+  const originalLifecycle = cachedOriginalLifecycle || projectFullLifecycle(inp, scenarioSpend, calculatedFireAge, true, _overrideMortOpts);
 
   // Portfolio at FIRE (override vs original)
   const overrideFireData = overrideLifecycle.find(d => d.age === fireAgeOverride);
@@ -14734,7 +14923,14 @@ function saveState() {
     const _pviRefiNewTerm = document.getElementById('pviRefiNewTerm');
     const _pviOvrEnabled = document.getElementById('pviEffRateOverrideEnabled');
     const _pviOvr = document.getElementById('pviEffRateOverride');
-    const _pviLumpSum = document.getElementById('pviLumpSumPayoff'); // v2 (feature 017) — US3
+    // v3 (feature 018, T015) — Active mortgage strategy radio replaces v017's
+    // single lump-sum checkbox. We persist BOTH `mortgageStrategy` (v3 canonical)
+    // AND `lumpSumPayoff` (v2 back-compat boolean for older readers) per Inv-12.
+    const _pviStratPrepay  = document.getElementById('pviStrategyPrepay');
+    const _pviStratLumpSum = document.getElementById('pviStrategyInvestLumpSum');
+    const _pviMortgageStrategy = (_pviStratPrepay && _pviStratPrepay.checked) ? 'prepay-extra'
+                              : (_pviStratLumpSum && _pviStratLumpSum.checked) ? 'invest-lump-sum'
+                              : 'invest-keep-paying';
     state._payoffVsInvest = {
       extraMonthly: _pviExtra ? (parseFloat(_pviExtra.value) || 500) : 500,
       refiEnabled: _pviRefiEnabled ? !!_pviRefiEnabled.checked : false,
@@ -14743,7 +14939,8 @@ function saveState() {
       refiNewTerm: _pviRefiNewTerm ? (parseInt(_pviRefiNewTerm.value, 10) || 30) : 30,
       effRateOverrideEnabled: _pviOvrEnabled ? !!_pviOvrEnabled.checked : false,
       effRateOverride: _pviOvr ? ((parseFloat(_pviOvr.value) || 0) / 100) : 0,
-      lumpSumPayoff: _pviLumpSum ? !!_pviLumpSum.checked : false, // v2 (feature 017) — US3
+      mortgageStrategy: _pviMortgageStrategy, // v3 (feature 018) — canonical strategy id
+      lumpSumPayoff: _pviMortgageStrategy === 'invest-lump-sum', // v2 back-compat helper
     };
   } catch (_e) { /* swallow */ }
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -14956,7 +15153,21 @@ function restoreState() {
         if (Number.isFinite(pvi.refiNewTerm)) setVal('pviRefiNewTerm', String(pvi.refiNewTerm));
         setChk('pviEffRateOverrideEnabled', pvi.effRateOverrideEnabled);
         if (Number.isFinite(pvi.effRateOverride)) setVal('pviEffRateOverride', (pvi.effRateOverride * 100).toFixed(2));
-        setChk('pviLumpSumPayoff', pvi.lumpSumPayoff); // v2 (feature 017) — US3
+        // v3 (feature 018, T015) — Hydrate Active mortgage strategy radio.
+        // Inv-12 backwards-compat: prefer the explicit `mortgageStrategy` field
+        // when present (v3+ saves); fall back to the v2 `lumpSumPayoff` boolean
+        // for legacy state (true → invest-lump-sum, false/missing → invest-keep-paying).
+        const savedStrategy = (typeof pvi.mortgageStrategy === 'string'
+              && (pvi.mortgageStrategy === 'prepay-extra'
+               || pvi.mortgageStrategy === 'invest-keep-paying'
+               || pvi.mortgageStrategy === 'invest-lump-sum'))
+          ? pvi.mortgageStrategy
+          : (pvi.lumpSumPayoff === true ? 'invest-lump-sum' : 'invest-keep-paying');
+        const _radioId = savedStrategy === 'prepay-extra' ? 'pviStrategyPrepay'
+                      : savedStrategy === 'invest-lump-sum' ? 'pviStrategyInvestLumpSum'
+                      : 'pviStrategyInvestKeep';
+        const _radio = document.getElementById(_radioId);
+        if (_radio) _radio.checked = true;
         if (typeof _pviUpdateRefiVisibility === 'function') _pviUpdateRefiVisibility();
         if (typeof _pviUpdateOverrideVisibility === 'function') _pviUpdateOverrideVisibility();
       } catch (_e) { /* swallow */ }
@@ -16861,8 +17072,12 @@ function copyDebugInfo() {
         const winnerId = (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults) ? _lastStrategyResults.winnerId : null;
         const activeStrategyId = previewId || winnerId || null;
         const usingNonDefault = !!(activeStrategyId && activeStrategyId !== 'bracket-fill-smoothed');
+        // T017 (feature 018) — both probe charts thread the active mortgage
+        // strategy so feasibility metrics match the displayed trajectory (LH-Inv-1).
+        const _probeMortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+          ? getActiveMortgageStrategyOptions() : {};
         const defaultChart = (typeof projectFullLifecycle === 'function')
-          ? projectFullLifecycle(liveInp, spend, fa, true)
+          ? projectFullLifecycle(liveInp, spend, fa, true, _probeMortOpts)
           : null;
         // Use the SAME thetaOverride the displayed chart uses, otherwise
         // tax-optimized-search runs at a different theta from the rendered
@@ -16875,7 +17090,7 @@ function copyDebugInfo() {
           ? _activeRow.chosenTheta : null;
         const overrideChart = (typeof projectFullLifecycle === 'function' && usingNonDefault)
           ? projectFullLifecycle(liveInp, spend, fa, true,
-              { strategyOverride: activeStrategyId, thetaOverride: _activeTheta })
+              Object.assign({ strategyOverride: activeStrategyId, thetaOverride: _activeTheta }, _probeMortOpts))
           : null;
         const countViolations = (chart) => chart
           ? chart.filter(r => typeof r.age === 'number' && r.age >= fa &&
@@ -16891,10 +17106,14 @@ function copyDebugInfo() {
           && _lastStrategyResults && _lastStrategyResults.rows
           && typeof projectFullLifecycle === 'function')
           ? _lastStrategyResults.rows.map(row => {
-              const opts = row.strategyId === 'bracket-fill-smoothed'
-                ? undefined
-                : { strategyOverride: row.strategyId,
-                    thetaOverride: typeof row.chosenTheta === 'number' ? row.chosenTheta : null };
+              // T017 (feature 018) — merge mortgage opts into per-strategy probe
+              // so each row reflects the active mortgage trajectory (LH-Inv-1).
+              const opts = Object.assign({},
+                row.strategyId === 'bracket-fill-smoothed'
+                  ? null
+                  : { strategyOverride: row.strategyId,
+                      thetaOverride: typeof row.chosenTheta === 'number' ? row.chosenTheta : null },
+                _probeMortOpts);
               let chart = null;
               try { chart = projectFullLifecycle(liveInp, spend, fa, true, opts); } catch (_e) { chart = null; }
               if (!chart) return { strategyId: row.strategyId, error: 'projectFullLifecycle failed' };

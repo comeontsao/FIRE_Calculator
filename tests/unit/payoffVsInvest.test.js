@@ -9,6 +9,12 @@
 // readers can see the v1-parity contract at a glance. The assertV1ParityWhenSwitchOff
 // helper + parity test block at the bottom enforce that no v2 change drifts the
 // output when lumpSumPayoff is false and ownership !== 'buying-in'.
+//
+// Feature 018 addendum (T003): V3 backward-compat update.
+// mortgageStrategy: 'invest-keep-paying' is now EXPLICIT on the shared baseInputs()
+// factory so every existing test documents the v3 default it exercises.
+// The parity helper is renamed assertV2ParityForBackCompat and now compares only
+// the V2_PARITY_KEYS whitelist, so future v3 additive output keys do not break it.
 // ==================================================================================
 
 import { test } from 'node:test';
@@ -20,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
-const { computePayoffVsInvest } = require(path.resolve(__dirname, '..', '..', 'calc', 'payoffVsInvest.js'));
+const { computePayoffVsInvest, _normalizeStrategy } = require(path.resolve(__dirname, '..', '..', 'calc', 'payoffVsInvest.js'));
 
 // ---------------------------------------------------------------------------
 // Fixture builders
@@ -44,9 +50,14 @@ function baseMortgage(overrides) {
 }
 
 function baseInputs(overrides) {
-  // lumpSumPayoff: false is explicit here to document the v1-parity contract.
+  // lumpSumPayoff: false is explicit here to document the v2-parity contract.
   // Inv-1 (feature 017): when lumpSumPayoff===false AND ownership!=='buying-in',
-  // every v2 output field must be byte-for-byte identical to this v1 baseline.
+  // every v2 output field must be byte-for-byte identical to this v2 baseline.
+  //
+  // mortgageStrategy: 'invest-keep-paying' is explicit here to document the v3
+  // default. Feature 018 T003: when mortgageStrategy==='invest-keep-paying' AND
+  // ownership!=='buying-in' AND sellAtFire===false, every v2 output field must
+  // be byte-for-byte identical to the captured v2 ground-truth snapshots.
   return Object.assign({
     currentAge: 42,
     fireAge: 51,
@@ -62,81 +73,121 @@ function baseInputs(overrides) {
     effectiveRateOverride: null,
     plannedRefi: null,
     lumpSumPayoff: false,
+    mortgageStrategy: 'invest-keep-paying',
   }, overrides || {});
 }
 
 // ---------------------------------------------------------------------------
-// Inv-1 regression helpers (feature 017 / T003)
+// Inv-1 regression helpers (feature 017 / T003; updated feature 018 / T003)
 // ---------------------------------------------------------------------------
 
 /**
- * Load the v1 snapshot fixtures captured before any v2 changes were made.
- * The JSON file is the ground truth that v2 must reproduce when the switch
- * is off (lumpSumPayoff: false, ownership !== 'buying-in').
+ * Load the v2 snapshot fixtures captured before any v3 changes were made.
+ * The JSON file is the ground truth that v3 must reproduce when the switch
+ * is off (mortgageStrategy: 'invest-keep-paying', ownership !== 'buying-in',
+ * sellAtFire === false).
  */
 const V1_SNAPSHOTS = require(path.resolve(__dirname, 'fixtures', 'payoffVsInvest_v1Snapshots.json'));
 
 /**
+ * Whitelist of v2 output key names compared by the parity helper.
+ *
+ * These are the top-level fields present in payoffVsInvest_v1Snapshots.json.
+ * Future v3 (and later) additive keys — homeSaleEvent, postSaleBrokerageAtFire,
+ * mortgageActivePayoffAge — are intentionally excluded here so they do not
+ * break the backwards-compat diff when the Backend agent adds them.
+ *
+ * subSteps is excluded: per feature 017's existing approach, subSteps are
+ * observability-only and are not captured in the snapshot output payloads.
+ */
+const V2_PARITY_KEYS = [
+  'prepayPath',
+  'investPath',
+  'amortizationSplit',
+  'verdict',
+  'factors',
+  'crossover',
+  'refiAnnotation',
+  'refiClampedNote',
+  'mortgageFreedom',
+  'mortgageNaturalPayoff',
+  'lumpSumEvent',
+  'stageBoundaries',
+];
+
+/**
  * Assert that computing `inputs` with the CURRENT module produces output
- * byte-for-byte identical to `capturedV1Output` (every top-level field).
+ * identical to `capturedV2Output` for every key in V2_PARITY_KEYS.
+ *
+ * Using a whitelist (not iterating all keys in the snapshot) means that
+ * future additive v3/v4 output keys never cause spurious failures here —
+ * only the locked v2 surface is compared. A blacklist approach would require
+ * updating this helper every time a new key is added, which is error-prone.
+ *
  * Reports specific field paths on mismatch so diffs are easy to diagnose.
  *
- * @param {string} label              human-readable name for the fixture
- * @param {object} inputs             inputs to run through computePayoffVsInvest
- * @param {object} capturedV1Output   the v1 ground-truth output
+ * @param {string} label               human-readable name for the fixture
+ * @param {object} inputs              inputs to run through computePayoffVsInvest
+ * @param {object} capturedV2Output    the v2 ground-truth output from the snapshot
  */
-function assertV1ParityWhenSwitchOff(label, inputs, capturedV1Output) {
+function assertV2ParityForBackCompat(label, inputs, capturedV2Output) {
   const current = computePayoffVsInvest(inputs);
 
-  // Compare every top-level key present in the captured snapshot.
-  const topKeys = Object.keys(capturedV1Output);
-  for (const key of topKeys) {
-    const v1Val = capturedV1Output[key];
+  // Compare only the whitelisted v2 keys, not every key in the snapshot.
+  for (const key of V2_PARITY_KEYS) {
+    // Skip keys not present in the captured snapshot (e.g. lumpSumEvent /
+    // stageBoundaries were added in v2 and may be absent from older fixtures).
+    if (!(key in capturedV2Output)) continue;
+
+    const snapVal = capturedV2Output[key];
     const curVal = current[key];
-    const v1Json = JSON.stringify(v1Val);
+    const snapJson = JSON.stringify(snapVal);
     const curJson = JSON.stringify(curVal);
-    if (v1Json !== curJson) {
+    if (snapJson !== curJson) {
       // Produce a precise diff for array fields: find first diverging index.
-      if (Array.isArray(v1Val) && Array.isArray(curVal)) {
-        for (let i = 0; i < Math.max(v1Val.length, curVal.length); i++) {
-          const v1Item = JSON.stringify(v1Val[i]);
+      if (Array.isArray(snapVal) && Array.isArray(curVal)) {
+        for (let i = 0; i < Math.max(snapVal.length, curVal.length); i++) {
+          const snapItem = JSON.stringify(snapVal[i]);
           const curItem = JSON.stringify(curVal[i]);
-          if (v1Item !== curItem) {
+          if (snapItem !== curItem) {
             // Dig into object fields for the first row mismatch.
-            if (v1Val[i] && curVal[i] && typeof v1Val[i] === 'object') {
-              for (const field of Object.keys(v1Val[i])) {
-                if (v1Val[i][field] !== curVal[i][field]) {
+            if (snapVal[i] && curVal[i] && typeof snapVal[i] === 'object') {
+              for (const field of Object.keys(snapVal[i])) {
+                if (snapVal[i][field] !== curVal[i][field]) {
                   assert.fail(
                     `[Inv-1 parity] "${label}" — ${key}[${i}].${field} mismatch: ` +
-                    `v1=${v1Val[i][field]} vs current=${curVal[i] ? curVal[i][field] : 'MISSING'}`
+                    `snapshot=${snapVal[i][field]} vs current=${curVal[i] ? curVal[i][field] : 'MISSING'}`
                   );
                 }
               }
             }
             assert.fail(
-              `[Inv-1 parity] "${label}" — ${key}[${i}] mismatch:\n  v1=${v1Item}\n  cur=${curItem}`
+              `[Inv-1 parity] "${label}" — ${key}[${i}] mismatch:\n  snapshot=${snapItem}\n  cur=${curItem}`
             );
           }
         }
       }
       // For objects, find first diverging property.
-      if (v1Val && curVal && typeof v1Val === 'object' && !Array.isArray(v1Val)) {
-        for (const field of Object.keys(v1Val)) {
-          if (JSON.stringify(v1Val[field]) !== JSON.stringify(curVal[field])) {
+      if (snapVal && curVal && typeof snapVal === 'object' && !Array.isArray(snapVal)) {
+        for (const field of Object.keys(snapVal)) {
+          if (JSON.stringify(snapVal[field]) !== JSON.stringify(curVal[field])) {
             assert.fail(
               `[Inv-1 parity] "${label}" — ${key}.${field} mismatch: ` +
-              `v1=${JSON.stringify(v1Val[field])} vs current=${JSON.stringify(curVal[field])}`
+              `snapshot=${JSON.stringify(snapVal[field])} vs current=${JSON.stringify(curVal[field])}`
             );
           }
         }
       }
       // Scalar or anything else.
       assert.fail(
-        `[Inv-1 parity] "${label}" — top-level field "${key}" mismatch:\n  v1=${v1Json}\n  cur=${curJson}`
+        `[Inv-1 parity] "${label}" — top-level field "${key}" mismatch:\n  snapshot=${snapJson}\n  cur=${curJson}`
       );
     }
   }
 }
+
+// Backwards-compat alias — existing call sites using the v017 name still work.
+const assertV1ParityWhenSwitchOff = assertV2ParityForBackCompat;
 
 // ---------------------------------------------------------------------------
 // SC-008 — winner detection in clear cases
@@ -1015,7 +1066,7 @@ test('Inv-3/Inv-4 lump-sum after Prepay payoff: Prepay-first stage ordering, bro
     endAge: 99,
     stocksReturn: 0.07,
     extraMonthly: 1000,
-    lumpSumPayoff: true,
+    lumpSumPayoff: true, mortgageStrategy: 'invest-lump-sum',
   });
   const out = computePayoffVsInvest(inputs);
 
@@ -1101,7 +1152,7 @@ test("Inv-3 lump-sum before Prepay payoff: Invest-first stage ordering when retu
     endAge: 99,
     stocksReturn: 0.12,
     extraMonthly: 3000,
-    lumpSumPayoff: true,
+    lumpSumPayoff: true, mortgageStrategy: 'invest-lump-sum',
   });
   const out = computePayoffVsInvest(inputs);
 
@@ -1161,7 +1212,7 @@ test('Lump-sum never fires (low-return horizon): trigger never met', () => {
     endAge: 99,
     stocksReturn: 0.04,
     extraMonthly: 0,
-    lumpSumPayoff: true,
+    lumpSumPayoff: true, mortgageStrategy: 'invest-lump-sum',
   });
   const out = computePayoffVsInvest(inputs);
 
@@ -1200,7 +1251,7 @@ test('Inv-6 interest invariant: prepay < invest_lumpSum < invest_keepPaying', ()
   const outKeepPaying = computePayoffVsInvest(baseInputs({ ...baseScenario, lumpSumPayoff: false }));
 
   // Run 2: lumpSumPayoff=true (Invest fires lump-sum → saves late-stage interest).
-  const outLumpSum = computePayoffVsInvest(baseInputs({ ...baseScenario, lumpSumPayoff: true }));
+  const outLumpSum = computePayoffVsInvest(baseInputs({ ...baseScenario, lumpSumPayoff: true, mortgageStrategy: 'invest-lump-sum' }));
 
   // Helper: sum all interestPaidThisYear values in an amortization array.
   function totalInterest(amortRows) {
@@ -1239,5 +1290,513 @@ test('Inv-6 interest invariant: prepay < invest_lumpSum < invest_keepPaying', ()
     `Invest-keepPaying cumulative interest (${investKeepPayingInterest.toFixed(2)}). ` +
     'Lump-sum payoff eliminates future interest by killing the mortgage balance early. ' +
     'If equal, the lump-sum trigger may not have fired (check outLumpSum.lumpSumEvent).'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T007 (feature 018): v3 strategy normalization (Inv-12)
+// CONTRACT: _normalizeStrategy resolves to the canonical strategy enum value
+// according to the priority rules: explicit valid mortgageStrategy wins over
+// lumpSumPayoff; unknown values fall through to lumpSumPayoff; missing
+// mortgageStrategy or falsy lumpSumPayoff → 'invest-keep-paying' default.
+//
+// STATUS: EXPECTED TO PASS immediately — _normalizeStrategy is already
+// implemented in T006.
+// ---------------------------------------------------------------------------
+
+test('v3 strategy normalization: explicit mortgageStrategy wins over lumpSumPayoff (Inv-12)', () => {
+  // Case 1: mortgageStrategy wins even when it equals the default value,
+  // per Inv-12 strict — the presence of a valid mortgageStrategy key is
+  // authoritative regardless of lumpSumPayoff.
+  assert.strictEqual(
+    _normalizeStrategy({ mortgageStrategy: 'invest-keep-paying', lumpSumPayoff: true }),
+    'invest-keep-paying',
+    "[Inv-12] mortgageStrategy='invest-keep-paying' must win over lumpSumPayoff=true"
+  );
+
+  // Case 2: explicit 'invest-lump-sum' strategy — no ambiguity.
+  assert.strictEqual(
+    _normalizeStrategy({ mortgageStrategy: 'invest-lump-sum' }),
+    'invest-lump-sum',
+    "[Inv-12] mortgageStrategy='invest-lump-sum' must resolve directly"
+  );
+
+  // Case 3: explicit 'prepay-extra' strategy.
+  assert.strictEqual(
+    _normalizeStrategy({ mortgageStrategy: 'prepay-extra' }),
+    'prepay-extra',
+    "[Inv-12] mortgageStrategy='prepay-extra' must resolve directly"
+  );
+
+  // Case 4: no mortgageStrategy, lumpSumPayoff=true → v2 fallback path.
+  assert.strictEqual(
+    _normalizeStrategy({ lumpSumPayoff: true }),
+    'invest-lump-sum',
+    '[Inv-12] absent mortgageStrategy + lumpSumPayoff=true must fall back to invest-lump-sum'
+  );
+
+  // Case 5: no mortgageStrategy, lumpSumPayoff=false → default.
+  assert.strictEqual(
+    _normalizeStrategy({ lumpSumPayoff: false }),
+    'invest-keep-paying',
+    '[Inv-12] absent mortgageStrategy + lumpSumPayoff=false must fall back to invest-keep-paying'
+  );
+
+  // Case 6: empty object → default.
+  assert.strictEqual(
+    _normalizeStrategy({}),
+    'invest-keep-paying',
+    '[Inv-12] empty inputs must resolve to invest-keep-paying default'
+  );
+
+  // Case 7: unknown mortgageStrategy value falls through to lumpSumPayoff fallback.
+  assert.strictEqual(
+    _normalizeStrategy({ mortgageStrategy: 'unknown-value', lumpSumPayoff: true }),
+    'invest-lump-sum',
+    "[Inv-12] unknown mortgageStrategy must fall through to lumpSumPayoff=true fallback → invest-lump-sum"
+  );
+
+  // Case 8: defensive — undefined inputs.
+  assert.strictEqual(
+    _normalizeStrategy(undefined),
+    'invest-keep-paying',
+    '[Inv-12] _normalizeStrategy(undefined) must return invest-keep-paying default'
+  );
+
+  // Case 9: defensive — null inputs.
+  assert.strictEqual(
+    _normalizeStrategy(null),
+    'invest-keep-paying',
+    '[Inv-12] _normalizeStrategy(null) must return invest-keep-paying default'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T008 (feature 018): v3 Inv-11 — mortgageActivePayoffAge per strategy
+// CONTRACT (Inv-11): outputs must contain mortgageActivePayoffAge = { prepay,
+// invest } where each value is the age at which that strategy's mortgage
+// balance first reaches 0 in the simulated paths. Under prepay-extra with
+// extraMonthly > 0, prepay payoff finishes strictly before invest's natural
+// amortization end.
+//
+// STATUS: EXPECTED TO FAIL until T010 lands mortgageActivePayoffAge in outputs.
+// ---------------------------------------------------------------------------
+
+test('v3 Inv-11 mortgageActivePayoffAge: prepay\'s accelerated end < invest\'s natural end', () => {
+  // Scenario: 6% mortgage vs 7% stocks, extra=$1000/month, no sale at FIRE.
+  // With extraMonthly=1000 and rate=0.06, Prepay's accelerated payments retire
+  // the balance years before Invest's natural 30-year amortization end.
+  const sharedOverrides = {
+    currentAge: 42,
+    fireAge: 51,
+    endAge: 99,
+    mortgage: baseMortgage({ rate: 0.06 }),
+    stocksReturn: 0.07,
+    extraMonthly: 1000,
+    sellAtFire: false,
+  };
+
+  const outPrepay = computePayoffVsInvest(baseInputs({
+    ...sharedOverrides,
+    mortgageStrategy: 'prepay-extra',
+  }));
+
+  const outInvest = computePayoffVsInvest(baseInputs({
+    ...sharedOverrides,
+    mortgageStrategy: 'invest-keep-paying',
+  }));
+
+  // Assertion 1: both runs expose mortgageActivePayoffAge as a non-undefined object
+  // with numeric 'prepay' and 'invest' fields.
+  assert.ok(
+    outPrepay.mortgageActivePayoffAge !== undefined && outPrepay.mortgageActivePayoffAge !== null,
+    '[Inv-11] mortgageActivePayoffAge must be present in outputs for mortgageStrategy=prepay-extra. ' +
+    `Got: ${JSON.stringify(outPrepay.mortgageActivePayoffAge)}. ` +
+    'T010 has not yet added this field to computePayoffVsInvest outputs.'
+  );
+  assert.ok(
+    outInvest.mortgageActivePayoffAge !== undefined && outInvest.mortgageActivePayoffAge !== null,
+    '[Inv-11] mortgageActivePayoffAge must be present in outputs for mortgageStrategy=invest-keep-paying. ' +
+    `Got: ${JSON.stringify(outInvest.mortgageActivePayoffAge)}. ` +
+    'T010 has not yet added this field to computePayoffVsInvest outputs.'
+  );
+
+  const prepayPayoffAge = outPrepay.mortgageActivePayoffAge.prepay;
+  const investPayoffAge = outInvest.mortgageActivePayoffAge.invest;
+
+  assert.ok(
+    typeof prepayPayoffAge === 'number',
+    `[Inv-11] mortgageActivePayoffAge.prepay must be a number; got ${JSON.stringify(prepayPayoffAge)}`
+  );
+  assert.ok(
+    typeof investPayoffAge === 'number',
+    `[Inv-11] mortgageActivePayoffAge.invest must be a number; got ${JSON.stringify(investPayoffAge)}`
+  );
+
+  // Assertion 2: Inv-11 core — prepay's accelerated payoff age < invest's natural payoff age.
+  assert.ok(
+    prepayPayoffAge < investPayoffAge,
+    `[Inv-11] mortgageActivePayoffAge.prepay (${prepayPayoffAge}) must be < ` +
+    `mortgageActivePayoffAge.invest (${investPayoffAge}). ` +
+    'Prepay-extra with extraMonthly=$1000 retires the 6% mortgage faster than Invest\'s natural amortization.'
+  );
+
+  // Assertion 3: mortgageActivePayoffAge.prepay equals the row in prepayPath where
+  // mortgageBalance first reaches 0.
+  const firstZeroPrepay = outPrepay.prepayPath.find((r) => r.mortgageBalance <= 0);
+  assert.ok(
+    firstZeroPrepay !== undefined,
+    '[Inv-11] prepayPath must contain a row with mortgageBalance <= 0 for this scenario'
+  );
+  assert.strictEqual(
+    prepayPayoffAge,
+    firstZeroPrepay.age,
+    `[Inv-11] mortgageActivePayoffAge.prepay (${prepayPayoffAge}) must equal the age of the ` +
+    `first prepayPath row where mortgageBalance=0 (age ${firstZeroPrepay.age})`
+  );
+
+  // Assertion 4: mortgageActivePayoffAge.invest equals the row in investPath where
+  // mortgageBalance first reaches 0.
+  const firstZeroInvest = outInvest.investPath.find((r) => r.mortgageBalance <= 0);
+  assert.ok(
+    firstZeroInvest !== undefined,
+    '[Inv-11] investPath must contain a row with mortgageBalance <= 0 for this scenario'
+  );
+  assert.strictEqual(
+    investPayoffAge,
+    firstZeroInvest.age,
+    `[Inv-11] mortgageActivePayoffAge.invest (${investPayoffAge}) must equal the age of the ` +
+    `first investPath row where mortgageBalance=0 (age ${firstZeroInvest.age})`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T009 (feature 018): v3 SC-004 backwards-compat — saved-state without
+// mortgageStrategy defaults to invest-keep-paying
+// CONTRACT: v017-era saved states lack mortgageStrategy entirely. The calc
+// module must resolve such inputs exactly as if mortgageStrategy were absent,
+// falling back to lumpSumPayoff for strategy selection. The v2 parity
+// snapshot comparison confirms no v2 behavior drift.
+//
+// STATUS: EXPECTED TO PASS — _normalizeStrategy fallback (T006) plus the
+// existing v2 parity snapshot cover this contract.
+// ---------------------------------------------------------------------------
+
+test('v3 SC-004 backwards-compat: saved-state without mortgageStrategy defaults to invest-keep-paying', () => {
+  // Simulate a v017-era saved state: mortgageStrategy key is truly absent
+  // (not just undefined). Use destructuring + delete to guarantee absence.
+
+  // Run 1: lumpSumPayoff=false, no mortgageStrategy → should behave as
+  // invest-keep-paying (no lump-sum event).
+  const run1Inputs = { ...baseInputs(), lumpSumPayoff: false };
+  delete run1Inputs.mortgageStrategy;
+  assert.ok(
+    !('mortgageStrategy' in run1Inputs),
+    'run1Inputs must not contain mortgageStrategy key (simulating v017 saved state)'
+  );
+
+  const out1 = computePayoffVsInvest(run1Inputs);
+
+  assert.strictEqual(
+    out1.lumpSumEvent,
+    null,
+    '[SC-004] Run 1 (lumpSumPayoff=false, no mortgageStrategy): lumpSumEvent must be null ' +
+    '— strategy normalizes to invest-keep-paying so no lump-sum trigger fires. ' +
+    `Got: ${JSON.stringify(out1.lumpSumEvent)}`
+  );
+
+  // Run 2: lumpSumPayoff=true, no mortgageStrategy → should fall back to
+  // invest-lump-sum via lumpSumPayoff, so lumpSumEvent fires.
+  // Use a scenario where the lump-sum trigger is actually reachable:
+  // rate=0.09, stocks=0.07, extra=$1000 (same as T025 — Prepay-first scenario).
+  const run2Inputs = {
+    ...baseInputs({
+      mortgage: baseMortgage({ ownership: 'buying-now', rate: 0.09 }),
+      stocksReturn: 0.07,
+      extraMonthly: 1000,
+    }),
+    lumpSumPayoff: true,
+  };
+  delete run2Inputs.mortgageStrategy;
+  assert.ok(
+    !('mortgageStrategy' in run2Inputs),
+    'run2Inputs must not contain mortgageStrategy key (simulating v017 saved state)'
+  );
+
+  const out2 = computePayoffVsInvest(run2Inputs);
+
+  assert.ok(
+    out2.lumpSumEvent !== null && out2.lumpSumEvent !== undefined,
+    '[SC-004] Run 2 (lumpSumPayoff=true, no mortgageStrategy): lumpSumEvent must be non-null ' +
+    '— strategy normalizes to invest-lump-sum via lumpSumPayoff fallback. ' +
+    `Got: ${JSON.stringify(out2.lumpSumEvent)}`
+  );
+
+  // V2 parity check: Run 1 (invest-keep-paying, no sale) must produce output
+  // identical to the v2 snapshot for the "typical-buying-now" fixture.
+  // This confirms the fallback path produces no drift from the v2 ground truth.
+  const typicalSnapshot = V1_SNAPSHOTS.find((s) => s.label === 'typical-buying-now');
+  assert.ok(
+    typicalSnapshot,
+    '[SC-004] typical-buying-now snapshot must exist in payoffVsInvest_v1Snapshots.json'
+  );
+  // Re-build Run 1 with the exact snapshot inputs to ensure apples-to-apples.
+  const run1SnapshotInputs = { ...typicalSnapshot.inputs };
+  delete run1SnapshotInputs.mortgageStrategy;
+  assertV2ParityForBackCompat('SC-004 v2-parity (no mortgageStrategy, lumpSumPayoff=false)', run1SnapshotInputs, typicalSnapshot.output);
+});
+
+// ---------------------------------------------------------------------------
+// T021–T024 (feature 018): User Story 4 — sell-at-FIRE × mortgage-strategy
+// composition. Tests written FIRST (red) per TDD workflow. Implementation
+// tasks T026–T029 will make these pass (green).
+//
+// T021 — Inv-9 HomeSaleEvent invariants
+// T022 — SC-010 Section 121 exclusion boundary cases
+// T023 — Inv-3 lump-sum inhibited post-FIRE when sellAtFire=true
+// T024 — Inv-4 lump-sum LTCG gross-up on brokerage drawdown
+//
+// CONTRACT: specs/018-lifecycle-payoff-merge/contracts/payoffVsInvest-calc-v3.contract.md
+// STATUS: EXPECTED TO FAIL until T026–T029 land. All four tests are
+// intentionally red at this commit.
+// ---------------------------------------------------------------------------
+
+// T021 — Inv-9 HomeSaleEvent invariants
+// CONTRACT: When sellAtFire===true && mortgageEnabled===true, homeSaleEvent must
+// be a non-null object with all fields internally consistent:
+//   proceeds === homeValueAtFire * (1 - sellingCostPct)                 (±1 rounding)
+//   taxableGain === max(0, nominalGain - section121Exclusion)
+//   netToBrokerage === proceeds - capGainsTax - remainingMortgageBalance (±1 rounding)
+//   section121Exclusion === 500000 for mfjStatus='mfj'
+// STATUS: EXPECTED TO FAIL until T027 adds homeSaleEvent computation.
+
+test('v3 Inv-9 HomeSaleEvent: present when sellAtFire && mortgageEnabled, internally consistent', () => {
+  // Use sellingCostPct: 0.06 in the mortgage override (homeLocation='us' would
+  // yield 0.07 via the calc module's country table, but we override it here for
+  // a predictable test value).
+  const sellingCostPct = 0.06;
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ sellAtFire: true, sellingCostPct }),
+    mortgageStrategy: 'invest-keep-paying',
+  });
+
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion 1: homeSaleEvent is a non-null object.
+  assert.ok(
+    out.homeSaleEvent !== null && typeof out.homeSaleEvent === 'object',
+    '[Inv-9] homeSaleEvent must be a non-null object when sellAtFire=true and mortgageEnabled=true. ' +
+    `Got: ${JSON.stringify(out.homeSaleEvent)}. T027 has not yet added homeSaleEvent computation.`
+  );
+
+  const ev = out.homeSaleEvent;
+
+  // Assertion 2: sale fires at inputs.fireAge (51 by default from baseInputs).
+  assert.strictEqual(
+    ev.age,
+    inputs.fireAge,
+    `[Inv-9] homeSaleEvent.age (${ev.age}) must equal inputs.fireAge (${inputs.fireAge})`
+  );
+
+  // Assertion 3: proceeds === homeValueAtFire * (1 - sellingCostPct) within ±1.
+  const expectedProceeds = Math.round(ev.homeValueAtFire * (1 - sellingCostPct));
+  assert.ok(
+    Math.abs(ev.proceeds - expectedProceeds) <= 1,
+    `[Inv-9] proceeds (${ev.proceeds}) must equal homeValueAtFire × (1 - sellingCostPct) = ` +
+    `${ev.homeValueAtFire} × ${1 - sellingCostPct} = ${expectedProceeds} (±1 rounding).`
+  );
+
+  // Assertion 4: taxableGain === max(0, nominalGain - section121Exclusion).
+  const expectedTaxableGain = Math.max(0, ev.nominalGain - ev.section121Exclusion);
+  assert.strictEqual(
+    ev.taxableGain,
+    expectedTaxableGain,
+    `[Inv-9] taxableGain (${ev.taxableGain}) must equal max(0, nominalGain - section121Exclusion) = ` +
+    `max(0, ${ev.nominalGain} - ${ev.section121Exclusion}) = ${expectedTaxableGain}`
+  );
+
+  // Assertion 5: netToBrokerage === proceeds - capGainsTax - remainingMortgageBalance within ±1.
+  const expectedNet = Math.round(ev.proceeds - ev.capGainsTax - ev.remainingMortgageBalance);
+  assert.ok(
+    Math.abs(ev.netToBrokerage - expectedNet) <= 1,
+    `[Inv-9] netToBrokerage (${ev.netToBrokerage}) must equal proceeds - capGainsTax - remainingMortgageBalance = ` +
+    `${ev.proceeds} - ${ev.capGainsTax} - ${ev.remainingMortgageBalance} = ${expectedNet} (±1 rounding).`
+  );
+
+  // Assertion 6: section121Exclusion === 500000 for default mfjStatus='mfj'.
+  assert.strictEqual(
+    ev.section121Exclusion,
+    500000,
+    `[Inv-9] section121Exclusion must be 500000 for mfjStatus='mfj' (default); got ${ev.section121Exclusion}`
+  );
+});
+
+// T022 — SC-010 Section 121 exclusion boundary cases
+// CONTRACT: The private helper _section121Tax(homeValueAtFire, originalPurchasePrice,
+// mfjStatus, ltcgRate) returns { section121Exclusion, nominalGain, taxableGain, capGainsTax }
+// covering: (a) full exclusion (no tax); (b) partial taxation above MFJ cap;
+// (c) single-filer partial taxation; (d) sale at a loss (no negative tax).
+//
+// NOTE: _section121Tax is not yet exported. This test will fail with
+// "_section121Tax is not a function" until T026 adds and exports the helper.
+// STATUS: EXPECTED TO FAIL until T026 lands _section121Tax in _payoffVsInvestApi.
+
+test('v3 SC-010 Section 121 exclusion boundary cases', () => {
+  // _section121Tax is added by T026 and exported via _payoffVsInvestApi.
+  // At this point the export is missing, so we grab from the module export.
+  const mod = require(path.resolve(__dirname, '..', '..', 'calc', 'payoffVsInvest.js'));
+  const _section121Tax = mod._section121Tax;
+
+  assert.ok(
+    typeof _section121Tax === 'function',
+    '[SC-010] _section121Tax must be exported from _payoffVsInvestApi. ' +
+    'T026 has not yet added this helper. Got type: ' + typeof _section121Tax
+  );
+
+  // (a) Full exclusion applies — MFJ with $400K gain (gain ≤ $500K exclusion → no tax).
+  // homeValueAtFire=900000, originalPurchasePrice=500000, mfjStatus='mfj', ltcgRate=0.15
+  // nominalGain = 900000 - 500000 = 400000; taxableGain = max(0, 400000 - 500000) = 0
+  const resA = _section121Tax(900000, 500000, 'mfj', 0.15);
+  assert.strictEqual(resA.section121Exclusion, 500000,
+    `[SC-010a] MFJ exclusion must be $500,000; got ${resA.section121Exclusion}`);
+  assert.strictEqual(resA.nominalGain, 400000,
+    `[SC-010a] nominalGain must be 400000 (900000 - 500000); got ${resA.nominalGain}`);
+  assert.strictEqual(resA.taxableGain, 0,
+    `[SC-010a] taxableGain must be 0 when gain (${resA.nominalGain}) ≤ exclusion (${resA.section121Exclusion}); got ${resA.taxableGain}`);
+  assert.strictEqual(resA.capGainsTax, 0,
+    `[SC-010a] capGainsTax must be 0 when taxableGain=0; got ${resA.capGainsTax}`);
+
+  // (b) Partial taxation — MFJ, $700K nominal gain ($200K above $500K cap).
+  // homeValueAtFire=1200000, originalPurchasePrice=500000, mfjStatus='mfj', ltcgRate=0.15
+  // nominalGain=700000; taxableGain=max(0, 700000-500000)=200000; capGainsTax=200000*0.15=30000
+  const resB = _section121Tax(1200000, 500000, 'mfj', 0.15);
+  assert.strictEqual(resB.section121Exclusion, 500000,
+    `[SC-010b] MFJ exclusion must be $500,000; got ${resB.section121Exclusion}`);
+  assert.strictEqual(resB.nominalGain, 700000,
+    `[SC-010b] nominalGain must be 700000 (1200000 - 500000); got ${resB.nominalGain}`);
+  assert.strictEqual(resB.taxableGain, 200000,
+    `[SC-010b] taxableGain must be 200000 (700000 - 500000); got ${resB.taxableGain}`);
+  assert.strictEqual(resB.capGainsTax, 30000,
+    `[SC-010b] capGainsTax must be 30000 (200000 × 0.15); got ${resB.capGainsTax}`);
+
+  // (c) Single filer — $300K nominal gain, single exclusion cap $250K.
+  // homeValueAtFire=800000, originalPurchasePrice=500000, mfjStatus='single', ltcgRate=0.15
+  // nominalGain=300000; section121Exclusion=250000; taxableGain=50000; capGainsTax=7500
+  const resC = _section121Tax(800000, 500000, 'single', 0.15);
+  assert.strictEqual(resC.section121Exclusion, 250000,
+    `[SC-010c] Single exclusion must be $250,000; got ${resC.section121Exclusion}`);
+  assert.strictEqual(resC.nominalGain, 300000,
+    `[SC-010c] nominalGain must be 300000 (800000 - 500000); got ${resC.nominalGain}`);
+  assert.strictEqual(resC.taxableGain, 50000,
+    `[SC-010c] taxableGain must be 50000 (300000 - 250000); got ${resC.taxableGain}`);
+  assert.strictEqual(resC.capGainsTax, 7500,
+    `[SC-010c] capGainsTax must be 7500 (50000 × 0.15); got ${resC.capGainsTax}`);
+
+  // (d) Home sold at a loss — no negative tax credit allowed.
+  // homeValueAtFire=450000, originalPurchasePrice=500000, mfjStatus='mfj', ltcgRate=0.15
+  // nominalGain=450000-500000=-50000 (loss); taxableGain=max(0,-50000-500000)→max(0,-550000)=0
+  const resD = _section121Tax(450000, 500000, 'mfj', 0.15);
+  assert.strictEqual(resD.section121Exclusion, 500000,
+    `[SC-010d] MFJ exclusion must be $500,000; got ${resD.section121Exclusion}`);
+  assert.strictEqual(resD.nominalGain, -50000,
+    `[SC-010d] nominalGain must be -50000 (450000 - 500000, a loss); got ${resD.nominalGain}`);
+  assert.strictEqual(resD.taxableGain, 0,
+    `[SC-010d] taxableGain must be 0 for a loss (no negative tax credit); got ${resD.taxableGain}`);
+  assert.strictEqual(resD.capGainsTax, 0,
+    `[SC-010d] capGainsTax must be 0 for a loss; got ${resD.capGainsTax}`);
+});
+
+// T023 — Inv-3 lump-sum inhibited post-FIRE when sellAtFire=true
+// CONTRACT (Inv-3 v3 extension): When sellAtFire===true, the invest-lump-sum
+// trigger is evaluated ONLY for months where age < fireAge. If FIRE arrives
+// before the trigger condition is met, lumpSumEvent===null — sell-at-FIRE
+// retires the mortgage instead.
+// STATUS: EXPECTED TO FAIL until T026/T027 (homeSaleEvent) AND T028 (lump-sum
+// inhibition gate) land.
+
+test('v3 Inv-3 lump-sum trigger inhibited when sale-at-FIRE arrives first', () => {
+  // Low-extra, low-return scenario: the lump-sum trigger condition (brokerage >=
+  // real mortgage balance) cannot be met pre-FIRE with these parameters. With
+  // stocksReturn=0.04, extraMonthly=200, fireAge=51 (9 years from currentAge=42),
+  // the Invest brokerage is far too small to equal the ~$400K remaining balance.
+  // sellAtFire=true means the home sale at FIRE retires the mortgage instead.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ sellAtFire: true }),
+    mortgageStrategy: 'invest-lump-sum',
+    stocksReturn: 0.04,
+    extraMonthly: 200,
+    fireAge: 51,
+    endAge: 99,
+  });
+
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion 1: lumpSumEvent === null — trigger never fired pre-FIRE.
+  assert.strictEqual(
+    out.lumpSumEvent,
+    null,
+    '[Inv-3] lumpSumEvent must be null when sellAtFire=true and lump-sum trigger cannot be met pre-FIRE. ' +
+    `Got: ${JSON.stringify(out.lumpSumEvent)}. T028 has not yet added the pre-FIRE gate.`
+  );
+
+  // Assertion 2: homeSaleEvent !== null — sell-at-FIRE fires at FIRE age instead.
+  assert.ok(
+    out.homeSaleEvent !== null && out.homeSaleEvent !== undefined,
+    '[Inv-3] homeSaleEvent must be non-null when sellAtFire=true and mortgageEnabled=true. ' +
+    `Got: ${JSON.stringify(out.homeSaleEvent)}. T026/T027 has not yet added homeSaleEvent computation.`
+  );
+});
+
+// T024 — Inv-4 lump-sum LTCG gross-up on brokerage drawdown
+// CONTRACT (Inv-4 v3 extension, FR-011 Q2=B):
+//   brokerageDrawdown = realBalance × (1 + ltcgRate × stockGainPct)
+//   brokerageAfter = brokerageBefore - brokerageDrawdown
+//
+// The gross-up accounts for the LTCG tax owed on selling enough shares to raise
+// realBalance. The actual cash withdrawn equals realBalance (to pay the mortgage),
+// but the pre-tax shares liquidated = realBalance / (1 - ltcgRate × stockGainPct).
+// The brokerage must show the gross-up (pre-tax liquidation) not just realBalance.
+//
+// STATUS: EXPECTED TO FAIL until T028 adds the LTCG gross-up logic.
+// NOTE: If T028's implementation does not include the gross-up, this test will
+// continue failing — the implementer must add it (see task brief).
+
+test('v3 Inv-4 lump-sum LTCG gross-up: brokerage drops by realBalance × (1 + ltcgRate × stockGainPct)', () => {
+  // High-extra scenario (extraMonthly=1500) with no sellAtFire — the lump-sum
+  // trigger fires normally before endAge. Inputs from baseInputs give:
+  //   ltcgRate: 0.15, stockGainPct: 0.6 (defined in baseInputs factory)
+  //   grossUpFactor = 1 + (0.15 × 0.6) = 1.09
+  const inputs = baseInputs({
+    mortgageStrategy: 'invest-lump-sum',
+    stocksReturn: 0.07,
+    extraMonthly: 1500,
+  });
+
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion 1: lumpSumEvent fired.
+  assert.ok(
+    out.lumpSumEvent !== null && out.lumpSumEvent !== undefined,
+    '[Inv-4] lumpSumEvent must be non-null for stocksReturn=0.07/extraMonthly=1500/invest-lump-sum. ' +
+    `Got: ${JSON.stringify(out.lumpSumEvent)}.`
+  );
+
+  const ev = out.lumpSumEvent;
+
+  // Assertion 2: brokerage drawdown equals paidOff × (1 + ltcgRate × stockGainPct), within $2.
+  // Per FR-011 Q2=B: grossedUpDrawdown = realBalance × (1 + ltcgRate × stockGainPct).
+  // paidOff == realBalance (remaining mortgage at trigger), per existing LumpSumEvent typedef.
+  // ltcgRate=0.15, stockGainPct=0.6 → grossUpFactor=1.09.
+  const ltcgRate = inputs.ltcgRate;        // 0.15 from baseInputs
+  const stockGainPct = inputs.stockGainPct; // 0.6 from baseInputs
+  const expectedDrawdown = ev.paidOff * (1 + ltcgRate * stockGainPct);
+  const actualDrawdown = ev.brokerageBefore - ev.brokerageAfter;
+
+  assert.ok(
+    Math.abs(actualDrawdown - expectedDrawdown) <= 2,
+    `[Inv-4] LTCG gross-up: actualDrawdown (${actualDrawdown.toFixed(2)}) must equal ` +
+    `paidOff × (1 + ltcgRate × stockGainPct) = ${ev.paidOff} × 1.09 = ${expectedDrawdown.toFixed(2)} (±$2). ` +
+    `Diff = ${Math.abs(actualDrawdown - expectedDrawdown).toFixed(2)}. ` +
+    'T028 must add the LTCG gross-up (FR-011 Q2=B). Without it, actualDrawdown === paidOff (no gross-up).'
   );
 });
