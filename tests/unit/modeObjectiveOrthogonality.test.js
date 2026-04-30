@@ -19,6 +19,10 @@ const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 
 const { SCENARIOS } = require(path.resolve(REPO_ROOT, 'tests', 'fixtures', 'feature-015', 'scenarios.js'));
 
+// T019 (feature 019): load the canonical accumulation helper so test sandboxes
+// that call scoreAndRank → _simulateStrategyLifetime can resolve the dependency.
+const { accumulateToFire: _accumulateToFireFn } = require(path.join(REPO_ROOT, 'calc', 'accumulateToFire.js'));
+
 function extractFn(name) {
   const pat = new RegExp(`function\\s+${name}\\s*\\(`, 'g');
   const m = pat.exec(HTML);
@@ -67,6 +71,10 @@ function getTotalCollegeCostForYear() { return 0; }
 function getMortgageAdjustedRetirement(s) { return { annualSpend: s, saleProceeds: 0 }; }
 function getMortgageInputs() { return null; }
 function detectMFJ() { return true; }
+// T019 (feature 019): stub resolveAccumulationOptions for test sandbox (no mortgage/college/home2).
+function resolveAccumulationOptions(inp, fireAge) {
+  return { mortgageEnabled: false, secondHomeEnabled: false, mortgageStrategyOverride: 'invest-keep-paying' };
+}
 `;
   const _doc = { getElementById: (id) => {
     const d = { terminalBuffer:{value:'0'}, exp_0:{value:'2690'}, endAge:{value:'100'},
@@ -76,9 +84,10 @@ function detectMFJ() { return true; }
     return d[id] || null;
   }};
   const _win = {};
-  const ctx = new Function('mortgageEnabled','document','window',
+  // T019 (feature 019): inject accumulateToFire so _simulateStrategyLifetime can resolve it.
+  const ctx = new Function('mortgageEnabled','document','window','accumulateToFire',
     `${fnCode}\n${overrides}\n${strategiesBlock}\nreturn { scoreAndRank, rankByObjective, getStrategies };`);
-  return ctx(false, _doc, _win);
+  return ctx(false, _doc, _win, _accumulateToFireFn);
 }
 
 const FIRE_AGE = 54;

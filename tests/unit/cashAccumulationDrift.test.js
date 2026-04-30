@@ -9,12 +9,21 @@
 //   cashSavings=80000, mtgBuyInYears=2, mtgDownPayment=120000,
 //   mtgClosingCosts=17000, ageRoger=42, fireAge=53.
 //
-// Expected post-fix: all three simulators report identical pCash entering FIRE.
-// Expected pre-fix:   the two buggy paths diverge by ~$84,500.
+// POST-FIX (feature 019 Step 3): both buggy paths now delegate to accumulateToFire.
+// The sentinel confirms accumulateToFire (canonical) agrees with the reference
+// projectFullLifecycle-style accumulation path.
 // ==================================================================================
 
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const { accumulateToFire } = require(path.join(REPO_ROOT, 'calc', 'accumulateToFire.js'));
 
 // User's exact scenario from the audit dump.
 const inp = {
@@ -89,10 +98,11 @@ function accumulate_projectFullLifecycle() {
 }
 
 // ----------------------------------------------------------------------
-// Path B — _simulateStrategyLifetime (BUGGY).
-// Mirrors FIRE-Dashboard.html lines 10602–10614 verbatim. No buy-in handling.
+// Path B — _simulateStrategyLifetime (PRE-FIX reference — buggy inline).
+// Preserved as-was to document the bug; tested only in REPRO test.
+// Lines formerly at FIRE-Dashboard.html ~10602–10614, no buy-in handling.
 // ----------------------------------------------------------------------
-function accumulate_simulateStrategyLifetime() {
+function accumulate_buggy_simulateStrategyLifetime() {
   let pTrad = inp.roger401kTrad;
   let pRoth = inp.roger401kRoth;
   let pStocks = inp.rogerStocks + inp.rebeccaStocks;
@@ -112,10 +122,11 @@ function accumulate_simulateStrategyLifetime() {
 }
 
 // ----------------------------------------------------------------------
-// Path C — computeWithdrawalStrategy (BUGGY — same shape as Path B).
-// Mirrors FIRE-Dashboard.html lines 11032–11041 verbatim.
+// Path C — computeWithdrawalStrategy (PRE-FIX reference — buggy inline).
+// Preserved as-was to document the bug; tested only in REPRO test.
+// Lines formerly at FIRE-Dashboard.html ~11032–11041, no buy-in handling.
 // ----------------------------------------------------------------------
-function accumulate_computeWithdrawalStrategy() {
+function accumulate_buggy_computeWithdrawalStrategy() {
   let pTrad = inp.roger401kTrad;
   let pRoth = inp.roger401kRoth;
   let pStocks = inp.rogerStocks + inp.rebeccaStocks;
@@ -133,10 +144,37 @@ function accumulate_computeWithdrawalStrategy() {
   return { pTrad, pRoth, pStocks, pCash };
 }
 
-test('REPRO: cash-balance drift across simulator paths', () => {
+// ----------------------------------------------------------------------
+// Path B_fixed / C_fixed — post-fix: both delegate to accumulateToFire.
+// Matches what _simulateStrategyLifetime and computeWithdrawalStrategy now do
+// in the HTML after feature 019 Step 3. Uses the same options bundle shape
+// (no mortgage → buying-in buy-in fires via accumulateToFire internal loop).
+// ----------------------------------------------------------------------
+function accumulate_fixed_via_accumulateToFire() {
+  // Mirrors the options passed by resolveAccumulationOptions in the no-college,
+  // no-home2 browser context, but with mortgage enabled + buying-in to exercise
+  // the buy-in logic that was previously missing.
+  const opts = {
+    mortgageEnabled: true,
+    mortgageInputs: inp.mtg,
+    mortgageStrategyOverride: 'invest-keep-paying',
+    secondHomeEnabled: false,
+    rentMonthly: 0,
+  };
+  // Provide return rates in the inp fields accumulateToFire reads.
+  const inpFixed = Object.assign({}, inp, {
+    returnRate: inp.realReturnStocks + (inp.inflationRate || 0),
+    return401k: inp.realReturn401k + (inp.inflationRate || 0),
+    inflationRate: inp.inflationRate || 0,
+    agePerson1: inp.ageRoger,
+  });
+  return accumulateToFire(inpFixed, inp.fireAge, opts).end;
+}
+
+test('REPRO: pre-fix buggy paths carry phantom cash vs canonical accumulation', () => {
   const A = accumulate_projectFullLifecycle();
-  const B = accumulate_simulateStrategyLifetime();
-  const C = accumulate_computeWithdrawalStrategy();
+  const B = accumulate_buggy_simulateStrategyLifetime();
+  const C = accumulate_buggy_computeWithdrawalStrategy();
 
   // For the user's audit-data check, we expect the canonical Lifecycle path
   // to drain pCash to ~0 by FIRE (buy-in $137k drains $80k cash + $57k stocks
@@ -147,39 +185,36 @@ test('REPRO: cash-balance drift across simulator paths', () => {
     `projectFullLifecycle should drain pCash to 0 by FIRE; got $${Math.round(A.pCash)}`
   );
 
-  // The two buggy paths should each be carrying a phantom ~$84.5k.
+  // The two buggy inline paths each carry a phantom ~$84.5k (not fixed yet in
+  // these reference functions — they are preserved to document pre-fix behavior).
   const expectedPhantom = 80000 * Math.pow(1.005, 11);
   assert.ok(
     B.pCash > 80000 && Math.abs(B.pCash - expectedPhantom) < 100,
-    `_simulateStrategyLifetime carries phantom cash ≈ $${Math.round(expectedPhantom)}; got $${Math.round(B.pCash)}`
+    `buggy _simulateStrategyLifetime carries phantom cash ≈ $${Math.round(expectedPhantom)}; got $${Math.round(B.pCash)}`
   );
   assert.ok(
     C.pCash > 80000 && Math.abs(C.pCash - expectedPhantom) < 100,
-    `computeWithdrawalStrategy carries phantom cash ≈ $${Math.round(expectedPhantom)}; got $${Math.round(C.pCash)}`
+    `buggy computeWithdrawalStrategy carries phantom cash ≈ $${Math.round(expectedPhantom)}; got $${Math.round(C.pCash)}`
   );
 
-  // The drift between Path A and Path B/C must be > $80k for the user's scenario.
+  // The drift between Path A and the buggy paths must be > $80k for this scenario.
   const driftAB = Math.abs(A.pCash - B.pCash);
   const driftAC = Math.abs(A.pCash - C.pCash);
-  assert.ok(driftAB > 80000, `Drift A↔B must exceed $80k; got $${Math.round(driftAB)}`);
-  assert.ok(driftAC > 80000, `Drift A↔C must exceed $80k; got $${Math.round(driftAC)}`);
+  assert.ok(driftAB > 80000, `Drift A↔buggy-B must exceed $80k; got $${Math.round(driftAB)}`);
+  assert.ok(driftAC > 80000, `Drift A↔buggy-C must exceed $80k; got $${Math.round(driftAC)}`);
 });
 
-test('POST-FIX SENTINEL (currently expected to FAIL): all three sims agree on pCash', () => {
+test('POST-FIX SENTINEL: accumulateToFire agrees with projectFullLifecycle on pCash', () => {
+  // 019: SENTINEL now PASSES. _simulateStrategyLifetime and computeWithdrawalStrategy
+  // both delegate to accumulateToFire, which handles the mortgage buy-in correctly.
+  // This test confirms accumulateToFire produces the same pCash as the canonical
+  // projectFullLifecycle accumulation path (Path A) for the user's audit scenario.
   const A = accumulate_projectFullLifecycle();
-  const B = accumulate_simulateStrategyLifetime();
-  const C = accumulate_computeWithdrawalStrategy();
+  const fixed = accumulate_fixed_via_accumulateToFire();
 
-  // Once the fix lands, A === B === C (within rounding). This sentinel will
-  // pass once `accumulateToFire` is shared across all three call sites.
-  // PRE-FIX: this assertion FAILS — that's the proof.
   const tolerance = 1; // dollar
   assert.ok(
-    Math.abs(A.pCash - B.pCash) < tolerance,
-    `pCash mismatch A vs B: A=$${Math.round(A.pCash)} B=$${Math.round(B.pCash)} drift=$${Math.round(Math.abs(A.pCash - B.pCash))}`
-  );
-  assert.ok(
-    Math.abs(A.pCash - C.pCash) < tolerance,
-    `pCash mismatch A vs C: A=$${Math.round(A.pCash)} C=$${Math.round(C.pCash)} drift=$${Math.round(Math.abs(A.pCash - C.pCash))}`
+    Math.abs(A.pCash - fixed.pCash) < tolerance,
+    `pCash mismatch: canonical=$${Math.round(A.pCash)} accumulateToFire=$${Math.round(fixed.pCash)} drift=$${Math.round(Math.abs(A.pCash - fixed.pCash))}`
   );
 });

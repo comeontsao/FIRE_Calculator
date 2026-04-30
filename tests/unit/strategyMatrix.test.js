@@ -14,10 +14,16 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const HTML = fs.readFileSync(path.join(REPO_ROOT, 'FIRE-Dashboard-Generic.html'), 'utf8');
+
+// T019 (feature 019): load the canonical accumulation helper so test sandboxes
+// that call scoreAndRank → _simulateStrategyLifetime can resolve the dependency.
+const { accumulateToFire: _accumulateToFireFn } = require(path.join(REPO_ROOT, 'calc', 'accumulateToFire.js'));
 
 function extractFn(name) {
   const pat = new RegExp(`function\\s+${name}\\s*\\(`, 'g');
@@ -67,6 +73,10 @@ function getTotalCollegeCostForYear() { return 0; }
 function getMortgageAdjustedRetirement(s) { return { annualSpend: s, saleProceeds: 0 }; }
 function getMortgageInputs() { return null; }
 function detectMFJ() { return true; }
+// T019 (feature 019): stub resolveAccumulationOptions for test sandbox (no mortgage/college/home2).
+function resolveAccumulationOptions(inp, fireAge) {
+  return { mortgageEnabled: false, secondHomeEnabled: false, mortgageStrategyOverride: 'invest-keep-paying' };
+}
 `;
   const _doc = { getElementById: (id) => {
     const d = { terminalBuffer:{value:'0'}, exp_0:{value:'2690'}, endAge:{value:'100'},
@@ -76,9 +86,10 @@ function detectMFJ() { return true; }
     return d[id] || null;
   }};
   const _win = {};
-  const ctx = new Function('mortgageEnabled','document','window',
+  // T019 (feature 019): inject accumulateToFire so _simulateStrategyLifetime can resolve it.
+  const ctx = new Function('mortgageEnabled','document','window','accumulateToFire',
     `${fnCode}\n${overrides}\n${strategiesBlock}\nreturn { scoreAndRank, rankByObjective, getStrategies };`);
-  return ctx(false, _doc, _win);
+  return ctx(false, _doc, _win, _accumulateToFireFn);
 }
 
 const ALL_STRATEGY_IDS = [

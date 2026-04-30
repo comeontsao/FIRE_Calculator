@@ -10712,22 +10712,28 @@ function scoreAndRank(inp, fireAge, mode, objective) {
   function _simulateStrategyLifetime(strategy, bfOptsForStrategy) {
     // Per-strategy full lifecycle simulation (retirement years only — accumulation
     // doesn't vary by withdrawal strategy).
-    let pTrad = inp.roger401kTrad !== undefined ? inp.roger401kTrad : inp.person1_401kTrad;
-    let pRoth = inp.roger401kRoth !== undefined ? inp.roger401kRoth : inp.person1_401kRoth;
-    let pStocks = (inp.rogerStocks !== undefined ? inp.rogerStocks : inp.person1Stocks) +
-                   (inp.rebeccaStocks !== undefined ? inp.rebeccaStocks : inp.person2Stocks);
-    let pCash = inp.cashSavings + (inp.otherAssets || 0);
 
-    // Grow to FIRE age via accumulation (matches projectGrowth shape — simple).
-    const yrsAccum = Math.max(0, fireAge - (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger));
-    const tradContrib = (inp.contrib401kTrad || inp.contrib401k || 0) + (inp.empMatch || 0);
-    const rothContrib = inp.contrib401kRoth || 0;
-    const effAnnualSavings = (inp.monthlySavings || 0) * 12;
-    for (let y = 0; y < yrsAccum; y++) {
-      pTrad = pTrad * (1 + realReturn401k) + tradContrib;
-      pRoth = pRoth * (1 + realReturn401k) + rothContrib;
-      pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
-      pCash *= 1.005;
+    // CANONICAL ACCUMULATION — see calc/accumulateToFire.js
+    // T019 (feature 019): replace buggy inline accumulation (no buy-in, no college,
+    // no Home #2, no mtgSavingsAdjust) with the canonical shared helper.
+    let pTrad, pRoth, pStocks, pCash;
+    if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
+      try {
+        const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
+          ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
+          : ((typeof state !== 'undefined' && state._payoffVsInvest && state._payoffVsInvest.mortgageStrategy) || 'invest-keep-paying');
+        const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
+        const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+        pTrad = _accumResult.end.pTrad;
+        pRoth = _accumResult.end.pRoth;
+        pStocks = _accumResult.end.pStocks;
+        pCash = _accumResult.end.pCash;
+      } catch (_e) {
+        console.error('[_simulateStrategyLifetime] accumulateToFire threw:', _e);
+        throw new Error('[_simulateStrategyLifetime] accumulateToFire unavailable — cannot continue');
+      }
+    } else {
+      throw new Error('[_simulateStrategyLifetime] accumulateToFire is required — load calc/accumulateToFire.js');
     }
 
     const perYearRows = [];
@@ -11145,16 +11151,26 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
         endAge: inp.endAge || 100,
   };
 
-  // Accumulate to FIRE first (mirrors projectFullLifecycle's accumulation branch)
-  let pTrad = inp.roger401kTrad;
-  let pRoth = inp.roger401kRoth;
-  let pStocks = inp.rogerStocks + inp.rebeccaStocks;
-  let pCash = inp.cashSavings + inp.otherAssets;
-  for (let y = 0; y < yrsToFire; y++) {
-    pTrad = pTrad * (1 + realReturn401k) + tradContrib;
-    pRoth = pRoth * (1 + realReturn401k) + rothContrib;
-    pStocks = pStocks * (1 + realReturnStocks) + inp.monthlySavings * 12;
-    pCash *= 1.005;
+  // CANONICAL ACCUMULATION — see calc/accumulateToFire.js
+  // T019 (feature 019): replace buggy inline accumulation (no buy-in, no college,
+  // no Home #2, no mtgSavingsAdjust) with the canonical shared helper.
+  let pTrad, pRoth, pStocks, pCash;
+  if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
+    try {
+      const _activeMortgageStrategy = (state._payoffVsInvest && state._payoffVsInvest.mortgageStrategy)
+        || 'invest-keep-paying';
+      const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
+      const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+      pTrad = _accumResult.end.pTrad;
+      pRoth = _accumResult.end.pRoth;
+      pStocks = _accumResult.end.pStocks;
+      pCash = _accumResult.end.pCash;
+    } catch (_e) {
+      console.error('[computeWithdrawalStrategy] accumulateToFire threw:', _e);
+      throw new Error('[computeWithdrawalStrategy] accumulateToFire unavailable — cannot continue');
+    }
+  } else {
+    throw new Error('[computeWithdrawalStrategy] accumulateToFire is required — load calc/accumulateToFire.js');
   }
 
   // Year-by-year retirement simulation with tax-optimal draw
