@@ -9006,7 +9006,38 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
   let minBalancePhase3 = Infinity;
   const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
 
-  for (let age = inp.agePerson1; age < endAge; age++) {
+  // CANONICAL ACCUMULATION (T019.5) — see calc/accumulateToFire.js.
+  // Replaces the inline accumulation below. The inline path had the same
+  // cash-drift bug feature 019 fixed at three other sites: pCash subtracted
+  // unconditionally on buy-in, producing phantom negative cash that compounded
+  // into surplus by end-of-plan and inverted Exact-mode verdicts.
+  let _accumStartAge = inp.agePerson1;
+  if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
+    try {
+      const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
+        ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
+        : 'invest-keep-paying';
+      const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
+      const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+      pTrad = _accumResult.end.pTrad;
+      pRoth = _accumResult.end.pRoth;
+      pStocks = _accumResult.end.pStocks;
+      pCash = _accumResult.end.pCash;
+      const _yrsToFire = fireAge - inp.agePerson1;
+      if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && _yrsToFire >= mtg.buyInYears) {
+        mtgPurchased = true;
+        mtgPurchaseYear = mtg.buyInYears;
+      }
+      if (secondHomeEnabled && h2 && _yrsToFire >= h2.buyInYears) {
+        h2Purchased = true;
+      }
+      _accumStartAge = fireAge;
+    } catch (_e) {
+      console.error('[signedLifecycleEndBalance] accumulateToFire threw:', _e);
+    }
+  }
+
+  for (let age = _accumStartAge; age < endAge; age++) {
     const yearsFromNow = age - inp.agePerson1;
     if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && !mtgPurchased && yearsFromNow >= mtg.buyInYears) {
       pCash -= (mtg.downPayment + mtg.closingCosts);
@@ -9240,6 +9271,16 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
   if (mode === 'exact') {
     const tEl = document.getElementById('terminalBuffer');
     const tYears = tEl ? parseInt(tEl.value) || 0 : 0;
+    // T019.6 — chart-consistent Exact gate (mirrors Safe + DWZ).
+    if (typeof fireAge === 'number' && typeof projectFullLifecycle === 'function') {
+      try {
+        const chartOpts = Object.assign({}, getActiveChartStrategyOptions(), getActiveMortgageStrategyOptions());
+        const chart = projectFullLifecycle(inp, annualSpend, fireAge, true, chartOpts);
+        const last = chart[chart.length - 1];
+        const endBal = last ? last.total : 0;
+        return endBal >= tYears * annualSpend;
+      } catch (_e) { /* fall through to signed-sim fallback */ }
+    }
     return sim.endBalance >= tYears * annualSpend;
   }
   // safe — CHART-CONSISTENT trajectory enforcement: call the same simulator
