@@ -11157,8 +11157,13 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   let pTrad, pRoth, pStocks, pCash;
   if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
     try {
-      const _activeMortgageStrategy = (state._payoffVsInvest && state._payoffVsInvest.mortgageStrategy)
-        || 'invest-keep-paying';
+      // T019 hotfix: mirror the typeof guard from _simulateStrategyLifetime —
+      // `state` is not in scope inside computeWithdrawalStrategy and the bare
+      // reference threw ReferenceError on every recalc, freezing the
+      // Withdrawal Strategy chart at "Calculating…".
+      const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
+        ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
+        : ((typeof state !== 'undefined' && state._payoffVsInvest && state._payoffVsInvest.mortgageStrategy) || 'invest-keep-paying');
       const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
       const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
       pTrad = _accumResult.end.pTrad;
