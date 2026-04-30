@@ -1,9 +1,9 @@
 <!-- SPECKIT START -->
-**Active feature**: 018 (lifecycle-payoff-merge) — IN PROGRESS, paused 2026-04-29 mid-implementation. Pickup notes: [`PICKUP.md`](./specs/018-lifecycle-payoff-merge/PICKUP.md). Status: Phase 1+2 done; Phase 3 (US1) done — radio replaces lump-sum checkbox in both HTMLs lockstep, all 13 `projectFullLifecycle` call sites threaded with `mortgageStrategyOverride`, lifecycle simulator scoped strategy-aware mortgage; Phase 4 (US4 calc T026-T030) ~90% done with ONE failing test (#40) on a known design conflict between v2 `paidOff` semantics and v3 LTCG gross-up — recommendation in PICKUP.md is Option B (add `actualDrawdown` field). Phase 4 UI (T031-T035), Phase 5 (US2), Phase 6 (US3), Phase 7 (Polish) NOT STARTED. Tests at checkpoint: 49/50 + 2/2.
+**Active feature**: _none_ — feature 018 (lifecycle-payoff-merge) implementation completed 2026-04-29 on branch `018-lifecycle-payoff-merge`; awaiting user browser-smoke per [`quickstart.md`](./specs/018-lifecycle-payoff-merge/quickstart.md) S1–S16 before merge to `main`. CLOSEOUT: [`specs/018-lifecycle-payoff-merge/CLOSEOUT.md`](./specs/018-lifecycle-payoff-merge/CLOSEOUT.md). Tests: 51/51 + 4/4 = 55/55 pass.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
-- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/), [specs/013-tabbed-navigation/](./specs/013-tabbed-navigation/), [specs/014-calc-audit/](./specs/014-calc-audit/), [specs/015-calc-debt-cleanup/](./specs/015-calc-debt-cleanup/), [specs/016-mortgage-payoff-vs-invest/CLOSEOUT.md](./specs/016-mortgage-payoff-vs-invest/CLOSEOUT.md), [specs/017-payoff-vs-invest-stages-and-lumpsum/CLOSEOUT.md](./specs/017-payoff-vs-invest-stages-and-lumpsum/CLOSEOUT.md)
+- Predecessor features: [specs/001-modular-calc-engine/CLOSEOUT.md](./specs/001-modular-calc-engine/CLOSEOUT.md), [specs/002-inline-bugfix/](./specs/002-inline-bugfix/), [specs/003-browser-smoke-harness/](./specs/003-browser-smoke-harness/), [specs/004-html-canonical-swap/ABANDONED.md](./specs/004-html-canonical-swap/ABANDONED.md), [specs/005-canonical-public-launch/CLOSEOUT.md](./specs/005-canonical-public-launch/CLOSEOUT.md), [specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md](./specs/006-ui-noise-reset-lifecycle-dock/CLOSEOUT.md), [specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md](./specs/007-bracket-fill-tax-smoothing/CLOSEOUT.md), [specs/008-multi-strategy-withdrawal-optimizer/](./specs/008-multi-strategy-withdrawal-optimizer/), [specs/009-single-person-mode/](./specs/009-single-person-mode/), [specs/010-country-budget-scaling/](./specs/010-country-budget-scaling/), [specs/011-responsive-header-fixes/](./specs/011-responsive-header-fixes/), [specs/012-ssa-earnings-pre-2020/](./specs/012-ssa-earnings-pre-2020/), [specs/013-tabbed-navigation/](./specs/013-tabbed-navigation/), [specs/014-calc-audit/](./specs/014-calc-audit/), [specs/015-calc-debt-cleanup/](./specs/015-calc-debt-cleanup/), [specs/016-mortgage-payoff-vs-invest/CLOSEOUT.md](./specs/016-mortgage-payoff-vs-invest/CLOSEOUT.md), [specs/017-payoff-vs-invest-stages-and-lumpsum/CLOSEOUT.md](./specs/017-payoff-vs-invest-stages-and-lumpsum/CLOSEOUT.md), [specs/018-lifecycle-payoff-merge/CLOSEOUT.md](./specs/018-lifecycle-payoff-merge/CLOSEOUT.md)
 <!-- SPECKIT END -->
 
 # FIRE Calculator
@@ -362,6 +362,48 @@ records `isFeasible_safe` alongside `defaultChartViolations` and
 `overrideChartViolations === 0` (i.e., the strategy actually being drawn
 passes the buffer floor everywhere). Any divergence is a regression of this
 rule.
+
+### Mortgage strategy threading must follow the options-override pattern
+
+Extends the strategy-parity rule above to mortgage strategy. Feature 018 ships
+a `getActiveMortgageStrategyOptions()` helper alongside the existing
+`getActiveChartStrategyOptions()` — same shape, same call-site discipline.
+
+The non-negotiable rule: every code path that runs `projectFullLifecycle`
+(chart render, FIRE-feasibility probe, strategy ranker, audit recompute,
+copy-debug snapshot) MUST consume the SAME `mortgageStrategyOverride` value.
+Mismatches produce drift between what the user sees on the chart and what
+the verdict gate evaluates — exactly the failure mode of feature 014.
+
+**Apply:** when adding a new caller of `projectFullLifecycle`, audit it
+against this rule. Use `getActiveMortgageStrategyOptions()` (don't read
+`state._payoffVsInvest.mortgageStrategy` directly inside the caller — the
+helper centralizes the resolution including the v017 `lumpSumPayoff` fallback
+and the `'invest-keep-paying'` no-op short-circuit).
+
+**LumpSumEvent v3 contract reminder:** `paidOff` keeps v2 semantics (= what
+the bank receives = `realBalance`). The v3 `actualDrawdown` is the true
+brokerage drop including LTCG gross-up (`paidOff × (1 + ltcgRate ×
+stockGainPct)`). The trigger fires on `investedI >= actualDrawdown`, not
+`>= realBalance` — required so brokerage cannot go negative.
+
+### Calc-contract field-semantics extensions need test audits BEFORE landing
+
+When a calc module's contract field gains new semantics mid-feature (here:
+LTCG gross-up extension to `LumpSumEvent`), pre-existing tests that asserted
+on the OLD contract (e.g., `paidOff` equivalence to brokerage delta) become
+silent landmines. Feature 018's mid-implementation pause caught this only
+because the resume session ran tests as the first action.
+
+**Apply:** any time a calc-contract field gains new semantics, run a tests
+audit BEFORE landing the calc change. Grep the field name across all test
+files; for each hit, decide whether the test still holds under the new
+semantics or needs updating in the same change set.
+
+**Sibling-field beats overloading.** When a v2 field is given new v3 meaning,
+prefer adding a sibling field (`actualDrawdown`) over redefining the
+original (`paidOff`). Preserves backwards-compat readability and makes the
+diff-of-record clean.
 
 ## Spec-Driven Development
 

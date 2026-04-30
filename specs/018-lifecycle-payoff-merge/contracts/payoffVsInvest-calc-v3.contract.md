@@ -101,9 +101,18 @@ When `mortgageStrategy === 'invest-lump-sum'`:
 Extended in v3 with the LTCG gross-up per FR-011:
 
 ```
-brokerageDrawdown = realBalance × (1 + ltcgRate × stockGainPct)
-investedI_post = investedI_pre - brokerageDrawdown
+actualDrawdown = realBalance × (1 + ltcgRate × stockGainPct)
+investedI_post = investedI_pre - actualDrawdown
 ```
+
+**`LumpSumEvent` field semantics (v3 — Option B):**
+- `paidOff` retains v2 semantics: the mortgage balance the bank receives = `realBalance`.
+- `actualDrawdown` is NEW in v3: the true brokerage drop, including LTCG gross-up.
+- `brokerageAfter === brokerageBefore − actualDrawdown` (within $2 rounding).
+- `paidOff <= actualDrawdown`; equality only when `ltcgRate × stockGainPct === 0`.
+
+**Trigger threshold:** the lump-sum fires when `investedI >= actualDrawdown` (NOT `>= realBalance`),
+so the brokerage can cover both the mortgage payoff AND the LTCG tax bite.
 
 ### Inv-5 (v2 retained): Stage ordering
 
@@ -126,20 +135,26 @@ Unchanged.
 When `sellAtFire === true && mortgageEnabled === true`:
 - `homeSaleEvent !== null`.
 - `homeSaleEvent.age === inputs.fireAge`.
-- `homeSaleEvent.proceeds + homeSaleEvent.remainingMortgageBalance === homeSaleEvent.homeValueAtFire × (1 - sellingCostPct) + homeSaleEvent.remainingMortgageBalance` (i.e., proceeds calculation is correct).
+- `homeSaleEvent.proceeds === homeSaleEvent.homeValueAtFire × (1 - sellingCostPct)` (rounded).
 - `homeSaleEvent.taxableGain === max(0, homeSaleEvent.nominalGain - homeSaleEvent.section121Exclusion)`.
 - `homeSaleEvent.netToBrokerage === homeSaleEvent.proceeds - homeSaleEvent.capGainsTax - homeSaleEvent.remainingMortgageBalance`.
+- **`remainingMortgageBalance` is in REAL dollars** — the active strategy's nominal balance at FIRE deflated by `(1 + inflation)^(fireAge - currentAge)`. (Option-1-fold-in 2026-04-29 corrected a units bug; pre-fold the field was nominal and produced incorrect netToBrokerage values when inflation > 0.)
 
 When `sellAtFire === false || mortgageEnabled === false`:
 - `homeSaleEvent === null`.
 
-### Inv-10 (NEW v3): Post-sale brokerage handoff
+### Inv-10 (NEW v3, option-1-fold-in 2026-04-29): Post-sale brokerage handoff
+
+The home sale at FIRE is now applied IN-LOOP at `age === fireAge` so both `prepayPath[fireAge].invested` and `investPath[fireAge].invested` already reflect the brokerage injection (`netToBrokerage_under_<strategy>`) and the zeroed mortgage. Therefore:
 
 For each strategy:
-- If `sellAtFire === false`: `postSaleBrokerageAtFire[strategy] === <strategy>_brokerage_at_FIRE` (no sale event added).
-- If `sellAtFire === true`: `postSaleBrokerageAtFire[strategy] === <strategy>_brokerage_at_FIRE + homeSaleEvent.netToBrokerage_under_<strategy>`.
+- `postSaleBrokerageAtFire[strategy] === <strategy>_path[fireAge].invested` (always — no sale-time addition needed downstream).
 
-The `<strategy>_brokerage_at_FIRE` is read from the corresponding path's row at `fireAge` (`prepayPath.find(r => r.age === fireAge).invested` for prepay; `investPath` for invest).
+When `sellAtFire === false`, the path simulation is unchanged — `postSaleBrokerageAtFire` simply mirrors the natural brokerage at FIRE.
+
+When `sellAtFire === true`, the path's `invested` at fireAge equals `naturalBrokerage + netToBrokerage_under_<strategy>`, the mortgage balance from fireAge onward is `0`, and the post-FIRE rows reflect freed-cash-flow contributions (former P&I + extra) compounding into the brokerage.
+
+**Why fold-in:** the previous post-loop addition pattern made the PvI chart's brokerage curve disagree with the lifecycle simulator's behavior — the chart line continued along the natural-amortization trajectory through fireAge and beyond, even though the lifecycle truncates mortgage at FIRE under sellAtFire. Folding the sale into the path data makes the PvI chart match the lifecycle chart visually.
 
 ### Inv-11 (NEW v3): Mortgage active payoff age
 

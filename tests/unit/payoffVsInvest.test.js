@@ -26,7 +26,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
-const { computePayoffVsInvest, _normalizeStrategy } = require(path.resolve(__dirname, '..', '..', 'calc', 'payoffVsInvest.js'));
+const _payoffVsInvestApi = require(path.resolve(__dirname, '..', '..', 'calc', 'payoffVsInvest.js'));
+const { computePayoffVsInvest, _normalizeStrategy } = _payoffVsInvestApi;
 
 // ---------------------------------------------------------------------------
 // Fixture builders
@@ -1114,12 +1115,15 @@ test('Inv-3/Inv-4 lump-sum after Prepay payoff: Prepay-first stage ordering, bro
     'A 9% mortgage with extra=$1000 should be paid off well within 30 years.'
   );
 
-  // Assertion 3: Inv-4 — brokerageAfter === brokerageBefore − paidOff within $2 rounding.
-  const diff = Math.abs(ev.brokerageAfter - (ev.brokerageBefore - ev.paidOff));
+  // Assertion 3: Inv-4 — brokerageAfter === brokerageBefore − actualDrawdown within $2 rounding.
+  // v3 (feature 018, FR-011 / Option B): `paidOff` retains v2 semantics (what the bank
+  // receives = realBalance); `actualDrawdown` is the true brokerage drop including
+  // LTCG gross-up. The brokerage delta uses actualDrawdown, not paidOff.
+  const diff = Math.abs(ev.brokerageAfter - (ev.brokerageBefore - ev.actualDrawdown));
   assert.ok(
     diff <= 2,
     `[Inv-4] lumpSumEvent rounding: brokerageAfter (${ev.brokerageAfter}) should equal ` +
-    `brokerageBefore (${ev.brokerageBefore}) − paidOff (${ev.paidOff}) ± $2. ` +
+    `brokerageBefore (${ev.brokerageBefore}) − actualDrawdown (${ev.actualDrawdown}) ± $2. ` +
     `Got difference of $${diff}.`
   );
 
@@ -1798,5 +1802,38 @@ test('v3 Inv-4 lump-sum LTCG gross-up: brokerage drops by realBalance × (1 + lt
     `paidOff × (1 + ltcgRate × stockGainPct) = ${ev.paidOff} × 1.09 = ${expectedDrawdown.toFixed(2)} (±$2). ` +
     `Diff = ${Math.abs(actualDrawdown - expectedDrawdown).toFixed(2)}. ` +
     'T028 must add the LTCG gross-up (FR-011 Q2=B). Without it, actualDrawdown === paidOff (no gross-up).'
+  );
+});
+
+// T036 — v3 US2 sidebar formatter: produces expected display-template descriptor
+// CONTRACT (T037 helper):
+//   _formatSidebarMortgageIndicator(strategy, activePayoffAge) →
+//     { key: 'sidebar.mortgageStatus.template', args: [strategyLabelKey, activePayoffAge] }
+//   strategy → strategyLabelKey mapping:
+//     'prepay-extra'        → 'pvi.strategy.prepay'
+//     'invest-keep-paying'  → 'pvi.strategy.investKeep'
+//     'invest-lump-sum'     → 'pvi.strategy.investLumpSum'
+//     unknown               → 'pvi.strategy.investKeep' (safe fallback)
+// Pure function — no DOM, no globals.
+test('v3 US2 sidebar formatter: produces expected display string', () => {
+  // prepay-extra → pvi.strategy.prepay
+  assert.deepStrictEqual(
+    _payoffVsInvestApi._formatSidebarMortgageIndicator('prepay-extra', 58),
+    { key: 'sidebar.mortgageStatus.template', args: ['pvi.strategy.prepay', 58] },
+    '[US2] strategy="prepay-extra", activePayoffAge=58 must yield prepay label key + age 58.'
+  );
+
+  // invest-keep-paying → pvi.strategy.investKeep
+  assert.deepStrictEqual(
+    _payoffVsInvestApi._formatSidebarMortgageIndicator('invest-keep-paying', 60),
+    { key: 'sidebar.mortgageStatus.template', args: ['pvi.strategy.investKeep', 60] },
+    '[US2] strategy="invest-keep-paying", activePayoffAge=60 must yield investKeep label key + age 60.'
+  );
+
+  // invest-lump-sum → pvi.strategy.investLumpSum
+  assert.deepStrictEqual(
+    _payoffVsInvestApi._formatSidebarMortgageIndicator('invest-lump-sum', 55),
+    { key: 'sidebar.mortgageStatus.template', args: ['pvi.strategy.investLumpSum', 55] },
+    '[US2] strategy="invest-lump-sum", activePayoffAge=55 must yield investLumpSum label key + age 55.'
   );
 });

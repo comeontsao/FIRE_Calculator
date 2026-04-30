@@ -1213,3 +1213,12 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | `pvi.lumpSum.bannerLine` | Lump-sum payoff fires at age {0} · brokerage drops from ${1} to ${2}, then resumes investing. | 一次清償於 {0} 歲觸發 · 投資組合由 ${1} 降至 ${2}，之後重新累積。 |
 | `pvi.lumpSum.notReached` | Invest never reaches the lump-sum threshold in this horizon. | 投資策略在此期間未達一次清償門檻。 |
 | `pvi.chart.brokerage.investLumpSumMarker` | Invest pays lump sum at age {0} | Invest 於 {0} 歲一次清償 |
+| `pvi.chart.brokerage.sellMarker` | Sell home at age {0} · +${1} | 在 {0} 歲賣房 · +${1} |
+| `pvi.verdict.sale.bannerLine` | Sell home at age {0} · +${1} | 在 {0} 歲賣房 · +${1} |
+| `pvi.verdict.sale.placeholder` | (empty) | (empty) |
+| `pvi.strategy.label` | Mortgage strategy | 房貸策略 |
+| `pvi.strategy.prepay` | Prepay | 提前還款 |
+| `pvi.strategy.investKeep` | Invest, keep paying | 投資並持續還款 |
+| `pvi.strategy.investLumpSum` | Invest then lump-sum payoff | 投資後一次清償 |
+| `sidebar.mortgageStatus.template` | Mortgage: {0} · paid off at age {1} | 房貸：{0} · {1} 歲還清 |
+| `sidebar.mortgageStatus.placeholder` | (empty) | (empty) |

@@ -353,6 +353,16 @@ A pragmatic order: 002 (quick wins first), 003 (unblock), 004 (big one), then pi
 
 ---
 
+## Done in feature 018 — Lifecycle Payoff Merge (2026-04-29)
+
+- **US1 (P1 / MVP) — Mortgage strategy drives the lifecycle simulation**: replaced the old `pviLumpSumPayoff` checkbox with a 3-option radio (Prepay / Invest-keep-paying / Invest-lump-sum). New `getActiveMortgageStrategyOptions()` helper threads `mortgageStrategyOverride` through every `projectFullLifecycle` call site (chart render + FIRE-age search + audit). Lifecycle simulator reads strategy-aware monthly P&I from calc's per-year `amortizationSplit`. Default `'invest-keep-paying'` path bypasses the precompute (zero perf impact).
+- **US4 (P2) — Sell-at-FIRE × strategy composition**: new `homeSaleEvent` and `postSaleBrokerageAtFire` outputs. Section 121 exclusion modeled (MFJ $500K / single $250K). Lump-sum trigger inhibited at age ≥ FIRE under `sellAtFire=true`. PvI brokerage chart shows green-star sell marker at FIRE; verdict banner Line 4 surfaces sale proceeds. Lifecycle truncates mortgage cash flow at FIRE when sale event present and seeds retirement-phase brokerage from `postSaleBrokerageAtFire[strategyKey]`.
+- **US2 (P2) — Sidebar mortgage indicator**: `#sidebarMortgageStatus` element in both HTMLs. Reads `mortgageActivePayoffAge[strategyKey]` and surfaces a one-line "Mortgage: {strategy} · paid off at age {N}" indicator. Updates on every recompute.
+- **US3 (P3) — FIRE verdict + ranker auto-react**: radio-change handler clears `fireAgeOverride = null` then re-runs both PvI recompute and `recalcAll()`. Audit `subSteps[]` flow verbatim from calc outputs (5 new v3 strings). `copyDebugInfo()` exposes `mortgageStrategy`, `mortgageActivePayoffAge`, `lumpSumEvent`, `homeSaleEvent`, `postSaleBrokerageAtFire`; `feasibilityProbe` records `activeMortgageStrategy` for LH-Inv-1 verifiability.
+- **Calc module v3**: `LumpSumEvent` typedef extended with v3 `actualDrawdown` field (Option B); trigger threshold corrected to `investedI >= actualDrawdown` so brokerage cannot go negative. `paidOff` retains v2 semantics (= what bank receives). v3 contract updated; 50/50 fixture tests + 4/4 lifecycle handoff tests = 55/55 pass.
+- **Lockstep delivery**: both HTMLs shipped together; sentinel-symbol audit confirms parity. 11 new translation keys (EN + zh-TW) bilingual.
+- Spec / Plan / Tasks / CLOSEOUT: see [`specs/018-lifecycle-payoff-merge/`](./specs/018-lifecycle-payoff-merge/) — awaiting user browser-smoke per `quickstart.md` S1–S16 before merge to `main`.
+
 ## Done in feature 016 — Mortgage Payoff vs Invest (2026-04-28)
 
 - **US1 MVP — chart + verdict + amortization split**: Read-only Plan sub-pill that visualizes whether prepaying the mortgage or investing extra cash yields more wealth year-by-year. Three new charts: Wealth Trajectory, "Where each dollar goes" (per-year interest+principal stacked-bar), Verdict banner with winner + dollar margin at FIRE-age and plan-end. Crossover marker drawn when the lines cross.

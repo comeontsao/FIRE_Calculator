@@ -2831,6 +2831,13 @@
   </div>
   <div class="header__status">
     <div id="fireStatus" class="fire-status warning" aria-live="polite">Calculating...</div>
+    <!-- v3 (feature 018, T038/T040 US2) — One-line indicator showing the active
+         mortgage strategy and the resolved payoff age. Populated by
+         recomputePayoffVsInvest() via _formatSidebarMortgageIndicator. Empty
+         until the first compute. -->
+    <div id="sidebarMortgageStatus" class="sidebar-mortgage-status" data-i18n="sidebar.mortgageStatus.placeholder" style="font-size: 0.85em; color: var(--text-dim); margin-top: 6px;">
+      <!-- populated by recomputePayoffVsInvest -->
+    </div>
   </div>
   <div class="header__controls">
     <div class="header__lang-toggle">
@@ -3114,7 +3121,7 @@
     </div>
     <div class="control-group">
       <label><span data-i18n="invest.monthlySavings">Monthly Investment (New Savings)</span> <span class="val" id="monthSaveVal">$2,000</span></label>
-      <input type="range" id="monthlySavings" min="0" max="6000" step="100" value="2000" oninput="document.getElementById('monthSaveVal').textContent='$'+Number(this.value).toLocaleString();recalcAll()">
+      <input type="range" id="monthlySavings" min="0" max="6000" step="100" value="2000" oninput="_syncMonthlySavings(this.value, 'monthlySavings');">
     </div>
     <div class="control-group">
       <label><span data-i18n="invest.contrib401k">401K: Traditional Contribution (pre-tax)</span> <span class="val" id="contrib401kVal">$8,550</span> <span class="info-tip" data-tip="Pre-tax: lowers taxable income today (22% fed + 5% MA = save 27% now). Taxed as ordinary income in retirement.">?</span></label>
@@ -3381,8 +3388,8 @@
                 <span data-i18n="pvi.input.extraMonthly">Extra monthly cash to allocate</span>
                 <span class="pvi-input-value" id="pviExtraMonthlyVal">$500</span>
               </label>
-              <input type="range" id="pviExtraMonthly" min="0" max="5000" step="50" value="500"
-                     oninput="document.getElementById('pviExtraMonthlyVal').textContent='$'+Number(this.value).toLocaleString();recomputePayoffVsInvest();_pviSaveState();">
+              <input type="range" id="pviExtraMonthly" min="0" max="6000" step="100" value="2000"
+                     oninput="_syncMonthlySavings(this.value, 'pviExtraMonthly');">
             </div>
             <!-- v3 (feature 018, T012) — Active mortgage strategy radio group.
                  Replaces the v017 single lump-sum checkbox with three explicit
@@ -3413,6 +3420,7 @@
             <div class="pvi-verdict-line" id="pviVerdictAtFire">—</div>
             <div class="pvi-verdict-line" id="pviVerdictAtEnd">—</div>
             <div class="pvi-verdict-line" id="pviVerdictAtLumpSum" style="display:none;">—</div>
+            <div class="pvi-verdict-line" id="pviVerdictAtSale" style="display:none;" data-i18n="pvi.verdict.sale.placeholder">—</div>
           </div>
 
           <!-- Explainer card (mortgage off / paid off) -->
@@ -6022,6 +6030,17 @@ const TRANSLATIONS = {
     'pvi.lumpSum.bannerLine': 'Lump-sum payoff fires at age {0} · brokerage drops from ${1} to ${2}, then resumes investing.',
     'pvi.lumpSum.notReached': 'Invest never reaches the lump-sum threshold in this horizon.',
     'pvi.chart.brokerage.investLumpSumMarker': 'Invest pays lump sum at age {0}',
+    // v3 (feature 018 US4) — Sell-at-FIRE event
+    'pvi.chart.brokerage.sellMarker': 'Sell home at age {0} · +${1}',
+    'pvi.verdict.sale.bannerLine': 'Sell home at age {0} · +${1}',
+    'pvi.verdict.sale.placeholder': '',
+    // v3 (feature 018 US2 / T041) — Active mortgage strategy + sidebar one-liner
+    'pvi.strategy.label': 'Mortgage strategy',
+    'pvi.strategy.prepay': 'Prepay',
+    'pvi.strategy.investKeep': 'Invest, keep paying',
+    'pvi.strategy.investLumpSum': 'Invest then lump-sum payoff',
+    'sidebar.mortgageStatus.template': 'Mortgage: {0} · paid off at age {1}',
+    'sidebar.mortgageStatus.placeholder': '',
     'country.card.budget': 'Budget',
     'country.card.bridgeAtFire': 'Bridge $ at FIRE',
     'country.card.target25x': '25× total target',
@@ -7038,6 +7057,17 @@ const TRANSLATIONS = {
     'pvi.lumpSum.bannerLine': '一次清償於 {0} 歲觸發 · 投資組合由 ${1} 降至 ${2}，之後重新累積。',
     'pvi.lumpSum.notReached': '投資策略在此期間未達一次清償門檻。',
     'pvi.chart.brokerage.investLumpSumMarker': 'Invest 於 {0} 歲一次清償',
+    // v3 (feature 018 US4) — Sell-at-FIRE event
+    'pvi.chart.brokerage.sellMarker': '在 {0} 歲賣房 · +${1}',
+    'pvi.verdict.sale.bannerLine': '在 {0} 歲賣房 · +${1}',
+    'pvi.verdict.sale.placeholder': '',
+    // v3 (feature 018 US2 / T041) — Active mortgage strategy + sidebar one-liner
+    'pvi.strategy.label': '房貸策略',
+    'pvi.strategy.prepay': '提前還款',
+    'pvi.strategy.investKeep': '投資並持續還款',
+    'pvi.strategy.investLumpSum': '投資後一次清償',
+    'sidebar.mortgageStatus.template': '房貸：{0} · {1} 歲還清',
+    'sidebar.mortgageStatus.placeholder': '',
     'country.card.budget': '預算',
     'country.card.bridgeAtFire': 'FIRE 橋樑資金',
     'country.card.target25x': '25× 總目標',
@@ -9359,10 +9389,25 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   // and lumpSumEvent so the per-year loop can swap contractual P&I for the
   // strategy's actual P&I. Default strategy ('invest-keep-paying') skips this
   // entirely and preserves the v017 baseline behavior to minimize blast radius.
+  //
+  // T033 (feature 018 US4) — LH-Inv-3 lifecycle handoff truncation.
+  // FR-018: "the lifecycle simulator MUST consume only the post-sale brokerage
+  // value at FIRE under the active mortgage strategy from the PvI calc module
+  // (not the long-horizon trajectory). Mortgage cash-flow ceases at FIRE
+  // (because the home is sold)."
+  // Consumes: outputs.homeSaleEvent, outputs.postSaleBrokerageAtFire from the
+  // calc module (typedefs in calc/payoffVsInvest.js HomeSaleEvent + Inv-10).
+  // To honor that contract for ANY strategy when sellAtFire is on, widen the
+  // prefetch gate: load _pviOut whenever (non-default strategy) OR (sellAtFire).
   let _pviAmort = null;        // age-keyed Map<age, {principalPaidThisYear, interestPaidThisYear}>
   let _pviLumpSumEvent = null; // {age, brokerageBefore, brokerageAfter, ...} or null
   let _pviLumpSumDrained = false; // single-shot guard
-  if (mortgageEnabled && mtg && _mortgageStrategy !== 'invest-keep-paying'
+  let _pviHomeSaleEvent = null;        // v3 (US4) — {age, netToBrokerage, ...} or null
+  let _pviPostSaleAtFire = null;       // v3 (US4) — {prepay, invest} or null
+  let _pviSaleSeeded = false;          // single-shot guard for the FIRE-age seed
+  const _pviSellAtFireOn = !!(mortgageEnabled && mtg && mtg.sellAtFire === true);
+  if (mortgageEnabled && mtg
+      && (_mortgageStrategy !== 'invest-keep-paying' || _pviSellAtFireOn)
       && typeof computePayoffVsInvest === 'function'
       && typeof document !== 'undefined' && document) {
     try {
@@ -9374,6 +9419,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         endAge: inp.endAge || 99,
         mortgageEnabled: true,
         mortgage: mtg,
+        sellAtFire: _pviSellAtFireOn,
+        mfjStatus: 'mfj', // RR dashboard default per FR-016
         stocksReturn: inp.returnRate,
         inflation: inp.inflationRate,
         ltcgRate: inp.taxTrad ? Math.min(0.20, inp.taxTrad) : 0.15,
@@ -9392,6 +9439,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
           if (r && typeof r.age === 'number') _pviAmort.set(r.age, r);
         }
         _pviLumpSumEvent = _pviOut.lumpSumEvent || null;
+        _pviHomeSaleEvent = _pviOut.homeSaleEvent || null;
+        _pviPostSaleAtFire = _pviOut.postSaleBrokerageAtFire || null;
       }
     } catch (_e) { /* swallow — falls back to contractual P&I below */ }
   }
@@ -9430,7 +9479,25 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     const ssActive = (age >= inp.ssClaimAge) && withSS;
     const ssThisYear = ssActive ? ssAnnual : 0;
 
-    // At FIRE, add home sale proceeds if selling
+    // At FIRE, settle the home sale.
+    // T033 (feature 018 US4) — LH-Inv-3 lifecycle handoff truncation.
+    // When the calc module reported a homeSaleEvent (sellAtFire=true && mortgageEnabled=true),
+    // SEED retirement-phase brokerage to outputs.postSaleBrokerageAtFire[strategy] —
+    // a tax-aware, per-strategy value that already includes the equity injection
+    // net of Section 121 + LTCG + remaining mortgage balance. This supersedes the
+    // legacy `mtgAdj.saleProceeds += ...` path (which lacked strategy-awareness
+    // and Section 121). The legacy path remains the fallback for non-mortgage
+    // sales and for sellAtFire under unconfigured calc modules.
+    if (isRetired && !_pviSaleSeeded && _pviHomeSaleEvent && _pviPostSaleAtFire
+        && _pviSellAtFireOn && age === _pviHomeSaleEvent.age) {
+      const _strategyKey = (_mortgageStrategy === 'prepay-extra') ? 'prepay' : 'invest';
+      const _seed = _pviPostSaleAtFire[_strategyKey];
+      if (Number.isFinite(_seed)) {
+        portfolioStocks = Math.max(0, _seed);
+        _pviSaleSeeded = true;
+        saleAddedAtFire = true; // suppress the legacy mtgAdj.saleProceeds add below
+      }
+    }
     if (isRetired && !saleAddedAtFire && mtgAdj.saleProceeds > 0) {
       portfolioStocks += mtgAdj.saleProceeds;
       saleAddedAtFire = true;
@@ -9491,7 +9558,13 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
 
     // Calculate current mortgage savings adjustment (per year, not once)
     let mtgSavingsAdjust = 0;
-    if (mortgageEnabled && mtgPurchased && mtg) {
+    // T033 (feature 018 US4) — LH-Inv-3: once the home is sold at FIRE, ALL
+    // mortgage cash flow ceases (P&I + tax + ins + HOA). The retirement-spend
+    // baseline already covers post-FIRE rent/housing via mtgAdj.annualSpend, so
+    // we simply skip the mortgage adjustment block for ages >= fireAge.
+    const _mortgageRetiredBySale = (_pviHomeSaleEvent && _pviSellAtFireOn
+      && typeof _pviHomeSaleEvent.age === 'number' && age >= _pviHomeSaleEvent.age);
+    if (mortgageEnabled && mtgPurchased && mtg && !_mortgageRetiredBySale) {
       const yearsIntoPurchase = yearsFromNow - mtgPurchaseYear;
       const rentEl = document.getElementById('exp_0');
       const rent = rentEl ? parseFloat(rentEl.value) || 0 : 2690;
@@ -10491,6 +10564,11 @@ function getStrategies() { return window.__STRATEGIES_V008__; }
 // Runs one full lifecycle simulation per strategy at the given fireAge and
 // returns an unsorted Ranking. Shared YearContext stream built once per year
 // to amortize RMD / taxableSS / bracketHeadroom compute across strategies.
+//
+// v3 (feature 018, T047): The ranker consumes lifecycle simulator outputs.
+// Since US1's T017 thread `mortgageStrategyOverride` through every projectFullLifecycle
+// call site (chart, FIRE-age search, ranker), the ranker's input automatically
+// changes when strategy changes. No code change required here.
 function scoreAndRank(inp, fireAge, mode, objective) {
   const strategies = getStrategies();
   const endAge = inp.endAge || 95;
@@ -11485,7 +11563,15 @@ function recalcAll() {
   // The header chips were removed (feature-007 bug-fix) because they duplicated
   // what this pill already conveys and could drift out of sync mid-render.
   const statusEl = document.getElementById('fireStatus');
-  const progressPctRounded = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)).toFixed(1) : '0';
+  // Cap displayed % below 100 when the gate-based search isn't yet feasible
+  // (yrsToFire > 0). The naive ratio (accessible / accessibleFireNum) can exceed
+  // 100% when current net worth already meets the simple FIRE multiple, but if
+  // the trajectory still fails Safe / Exact / DWZ gates, "100%" misleads the
+  // user. Only show 100% when yrsToFire <= 0 (truly feasible today).
+  const _rawProgress = Number.isFinite(progress) ? Math.max(0, progress) : 0;
+  const progressPctRounded = yrsToFire <= 0
+    ? Math.min(100, _rawProgress).toFixed(1)
+    : Math.min(99, _rawProgress).toFixed(1);
   if (yrsToFire <= 12) {
     statusEl.className = 'fire-status on-track';
     statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
@@ -13345,7 +13431,8 @@ function _hidePayoffVsInvestExplainer() {
 //         outputs.mortgageNaturalPayoff { prepayAge, investAge },
 //         outputs.mortgageFreedom.buyInAge, outputs.refiAnnotation,
 //         outputs.stageBoundaries (v2 feature 017 — for shaded stage bands),
-//         outputs.lumpSumEvent (v2 feature 017 — swaps blue X → down-arrow when fired).
+//         outputs.lumpSumEvent (v2 feature 017 — swaps blue X → down-arrow when fired),
+//         outputs.homeSaleEvent (v3 feature 018 US4 — green star at fireAge when sellAtFire).
 // Plots two lines per strategy of brokerage balance (liquidNetWorth = invested),
 // each strategy's natural mortgage-payoff age (red/blue X or down-arrow), and an
 // optional home-purchase diamond for buying-in ownership. Stage bands paint
@@ -13497,6 +13584,28 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
     });
   }
 
+  // v3 (feature 018 US4 — T031): sell-at-FIRE marker. When the user opted to
+  // sell the home at FIRE AND the calc module reports a homeSaleEvent, paint a
+  // green star on the Prepay curve's data point at fireAge. The data point
+  // already reflects the post-sale equity injection (see Inv-9 / Inv-10).
+  // Pattern: sparse dataset with a single non-null point at the fireAge index.
+  const saleEvt = outputs.homeSaleEvent;
+  if (saleEvt && typeof saleEvt.age === 'number') {
+    const saleIdx = outputs.prepayPath.findIndex((r) => r.age === saleEvt.age);
+    if (saleIdx >= 0) {
+      const _saleNet = Math.round(saleEvt.netToBrokerage || 0).toLocaleString();
+      datasets.push({
+        label: t('pvi.chart.brokerage.sellMarker', saleEvt.age, _saleNet),
+        data: outputs.prepayPath.map((_r, i) => i === saleIdx ? prepayData[saleIdx] : null),
+        borderColor: '#37d399',
+        backgroundColor: '#37d399',
+        pointRadius: 11,
+        pointStyle: 'star',
+        showLine: false,
+      });
+    }
+  }
+
   charts_pviWealth = new Chart(ctx, {
     type: 'line',
     data: { labels: ageLabels, datasets },
@@ -13630,9 +13739,11 @@ function renderPayoffVsInvestAmortizationChart(outputs) {
 // Reads : outputs.mortgageNaturalPayoff, outputs.prepayPath[*].liquidNetWorth,
 //         outputs.investPath[*].liquidNetWorth, inputs.endAge,
 //         outputs.lumpSumEvent (v2 feature 017 — banner Line 3 status),
-//         inputs.lumpSumPayoff (v2 feature 017 — gates Line 3 visibility).
+//         inputs.lumpSumPayoff (v2 feature 017 — gates Line 3 visibility),
+//         outputs.homeSaleEvent (v3 feature 018 US4 — banner Line 4 status).
 // Writes: text content of #pviVerdictAtFire, #pviVerdictAtEnd,
-//         and #pviVerdictAtLumpSum (v2 feature 017).
+//         #pviVerdictAtLumpSum (v2 feature 017),
+//         and #pviVerdictAtSale (v3 feature 018 US4).
 // =============================================================================
 function renderPayoffVsInvestVerdictBanner(outputs, inputs) {
   const banner = document.getElementById('pviVerdictBanner');
@@ -13700,6 +13811,23 @@ function renderPayoffVsInvestVerdictBanner(outputs, inputs) {
       lineLump.style.display = 'none';
     }
   }
+
+  // Line 4 — v3 (feature 018 US4 — T032) — sell-at-FIRE event status. Visible
+  // when the calc module emitted a homeSaleEvent. Reads outputs.homeSaleEvent
+  // (typedef in calc/payoffVsInvest.js HomeSaleEvent).
+  const lineSale = document.getElementById('pviVerdictAtSale');
+  if (lineSale) {
+    const sale = outputs && outputs.homeSaleEvent;
+    if (sale && typeof sale.age === 'number') {
+      lineSale.textContent = t('pvi.verdict.sale.bannerLine',
+        sale.age,
+        Math.round(sale.netToBrokerage || 0).toLocaleString());
+      lineSale.style.display = '';
+    } else {
+      lineSale.textContent = '';
+      lineSale.style.display = 'none';
+    }
+  }
 }
 
 function renderPayoffVsInvestFactorBreakdown(factors) {
@@ -13744,6 +13872,28 @@ function _pviSaveState() {
   try { if (typeof saveState === 'function') saveState(); } catch (_e) {}
 }
 
+// Sync helper: the "Monthly Investment" slider (Plan→Investment) and the
+// "Extra monthly cash to allocate" slider (Plan→PvI) represent the same
+// quantity in the user's mental model — there's one bucket of monthly savings
+// that PvI tells them how to allocate. Bidirectional link: changing either
+// updates the other and triggers BOTH the lifecycle recalc and the PvI recalc.
+// `source` is the id of the slider the user just dragged, used to avoid an
+// infinite event loop if a future change moves to dispatched events.
+function _syncMonthlySavings(value, source) {
+  const fmt = '$' + Number(value).toLocaleString();
+  const msEl   = document.getElementById('monthlySavings');
+  const msVal  = document.getElementById('monthSaveVal');
+  const pviEl  = document.getElementById('pviExtraMonthly');
+  const pviVal = document.getElementById('pviExtraMonthlyVal');
+  if (msEl  && source !== 'monthlySavings')   msEl.value  = value;
+  if (msVal)                                  msVal.textContent  = fmt;
+  if (pviEl && source !== 'pviExtraMonthly')  pviEl.value = value;
+  if (pviVal)                                 pviVal.textContent = fmt;
+  try { if (typeof recalcAll === 'function') recalcAll(); } catch (_e) {}
+  try { if (typeof recomputePayoffVsInvest === 'function') recomputePayoffVsInvest(); } catch (_e) {}
+  try { if (typeof _pviSaveState === 'function') _pviSaveState(); } catch (_e) {}
+}
+
 function recomputePayoffVsInvest() {
   if (typeof computePayoffVsInvest !== 'function') return; // calc module not loaded
   const inputs = _assemblePayoffVsInvestInputs();
@@ -13754,10 +13904,33 @@ function recomputePayoffVsInvest() {
     return;
   }
   _hidePayoffVsInvestExplainer();
+  // v3 (feature 018, T049 US3) — Cache the latest PvI outputs on `window` so
+  // copyDebugInfo() can include mortgageActivePayoffAge / lumpSumEvent /
+  // homeSaleEvent / postSaleBrokerageAtFire in the debug payload without
+  // re-running the calc. Set BEFORE renderers in case a renderer throws.
+  try { window._lastPviOutputs = outputs; } catch (_e) {}
   try { renderPayoffVsInvestBrokerageChart(outputs); } catch (_e) { console.error('[pvi] brokerage chart', _e); }
   try { renderPayoffVsInvestAmortizationChart(outputs); } catch (_e) { console.error('[pvi] amort chart', _e); }
   try { renderPayoffVsInvestVerdictBanner(outputs, inputs); } catch (_e) { console.error('[pvi] verdict', _e); }
   try { renderPayoffVsInvestFactorBreakdown(outputs.factors); } catch (_e) { console.error('[pvi] factors', _e); }
+  // v3 (feature 018, T040 US2) — Update the sidebar mortgage-status one-liner
+  // using the calc module's _formatSidebarMortgageIndicator helper (T037). The
+  // helper returns a {key, args} descriptor so all string assembly happens
+  // through the t() i18n machine. Active strategy is read from inputs (which
+  // already mirrors the radio group via _assemblePayoffVsInvestInputs).
+  try {
+    const sbEl = document.getElementById('sidebarMortgageStatus');
+    if (sbEl && outputs && outputs.mortgageActivePayoffAge
+        && typeof payoffVsInvestModule !== 'undefined'
+        && payoffVsInvestModule
+        && typeof payoffVsInvestModule._formatSidebarMortgageIndicator === 'function') {
+      const activeStrategy = inputs.mortgageStrategy || 'invest-keep-paying';
+      const strategyKey = (activeStrategy === 'prepay-extra') ? 'prepay' : 'invest';
+      const activePayoffAge = outputs.mortgageActivePayoffAge[strategyKey];
+      const desc = payoffVsInvestModule._formatSidebarMortgageIndicator(activeStrategy, activePayoffAge);
+      sbEl.textContent = t(desc.key, t(desc.args[0]), desc.args[1]);
+    }
+  } catch (_e) { console.error('[pvi] sidebar', _e); }
 }
 
 // v3 (feature 018, T014) — Bind change handler on the Active mortgage strategy
@@ -15142,6 +15315,13 @@ function restoreState() {
           setVal('pviExtraMonthly', pvi.extraMonthly);
           const lbl = document.getElementById('pviExtraMonthlyVal');
           if (lbl) lbl.textContent = '$' + Number(pvi.extraMonthly).toLocaleString();
+          // Linked slider — Plan→Investment "Monthly Investment" mirrors the
+          // PvI value because they represent the same underlying quantity.
+          // We sync silently here (no recalc) since the rest of the hydration
+          // pipeline will trigger recalcAll() once at the end.
+          setVal('monthlySavings', pvi.extraMonthly);
+          const lblMs = document.getElementById('monthSaveVal');
+          if (lblMs) lblMs.textContent = '$' + Number(pvi.extraMonthly).toLocaleString();
         }
         setChk('pviRefiEnabled', pvi.refiEnabled);
         if (Number.isFinite(pvi.refiYear)) {
@@ -15925,6 +16105,11 @@ window._rebindStickyHeaderObserver();
       if (headlineEl) headlineEl.textContent = stg.headlineOutput || '';
       // Feature 015 follow-up — populate the ordered sub-steps list per stage
       // so the user sees the actual sequence of operations within each stage.
+      // v3 (feature 018, T048): Mortgage-strategy stage's subSteps[] flows verbatim
+      // from outputs.subSteps. New v3 strings added in calc T011 + T030 — see
+      // specs/018-lifecycle-payoff-merge/contracts/payoffVsInvest-calc-v3.contract.md.
+      // The renderer below performs no filtering or key-matching; new strings are
+      // displayed automatically.
       const substepsEl = _$id('audit-flow-substeps-' + stg.stageId);
       if (substepsEl) {
         substepsEl.innerHTML = '';
@@ -17145,6 +17330,13 @@ function copyDebugInfo() {
               };
             })
           : null;
+        // v3 (feature 018, T049 US3) — Record the active mortgage strategy
+        // INSIDE the probe block so audit consumers can verify probe-vs-chart
+        // parity (LH-Inv-1). Reads the radio's checked value; the probe charts
+        // above already thread `_probeMortOpts` so this captures the same
+        // strategy the simulator used.
+        const _activeMortgageStrategyEl = document.querySelector('input[name="pviMortgageStrategy"]:checked');
+        const _activeMortgageStrategy = _activeMortgageStrategyEl ? _activeMortgageStrategyEl.value : 'invest-keep-paying';
         feasibilityProbe = {
           inpBufferUnlock: liveInp.bufferUnlock,
           inpBufferSS: liveInp.bufferSS,
@@ -17159,6 +17351,7 @@ function copyDebugInfo() {
           previewStrategyId: previewId,
           winnerStrategyId: winnerId,
           usingNonDefaultStrategy: usingNonDefault,
+          activeMortgageStrategy: _activeMortgageStrategy,
           defaultChartRows: defaultChart ? defaultChart.length : null,
           defaultChartViolations: countViolations(defaultChart),
           overrideChartRows: overrideChart ? overrideChart.length : null,
@@ -17185,6 +17378,43 @@ function copyDebugInfo() {
       phase: d.phase,
       synthConv: Math.round(d.syntheticConversion || 0),
     }));
+    // v3 (feature 018, T049 US3) — Capture Payoff-vs-Invest state per FR-019:
+    // mortgage strategy (radio), resolved per-strategy payoff ages, lump-sum
+    // event, home-sale event, and post-sale brokerage at FIRE. Each IIFE is
+    // defensive against `_lastPviOutputs` being unset on cold load (the calc
+    // runs lazily after the PvI tab is opened).
+    const mortgageStrategy = (function () {
+      try {
+        const checked = document.querySelector('input[name="pviMortgageStrategy"]:checked');
+        return checked ? checked.value : 'invest-keep-paying';
+      } catch (_e) { return null; }
+    })();
+    const mortgageActivePayoffAge = (function () {
+      try {
+        if (typeof _lastPviOutputs !== 'undefined' && _lastPviOutputs && _lastPviOutputs.mortgageActivePayoffAge) {
+          return _lastPviOutputs.mortgageActivePayoffAge;
+        }
+      } catch (_e) {}
+      return null;
+    })();
+    const lumpSumEvent = (function () {
+      try {
+        if (typeof _lastPviOutputs !== 'undefined' && _lastPviOutputs) return _lastPviOutputs.lumpSumEvent || null;
+      } catch (_e) {}
+      return null;
+    })();
+    const homeSaleEvent = (function () {
+      try {
+        if (typeof _lastPviOutputs !== 'undefined' && _lastPviOutputs) return _lastPviOutputs.homeSaleEvent || null;
+      } catch (_e) {}
+      return null;
+    })();
+    const postSaleBrokerageAtFire = (function () {
+      try {
+        if (typeof _lastPviOutputs !== 'undefined' && _lastPviOutputs) return _lastPviOutputs.postSaleBrokerageAtFire || null;
+      } catch (_e) {}
+      return null;
+    })();
     const debugObj = {
       _generatedAt: new Date().toISOString(),
       _file: location.pathname.split('/').pop(),
@@ -17197,6 +17427,11 @@ function copyDebugInfo() {
       bufferSS_yrs: bufSS,
       summary,
       feasibilityProbe,
+      mortgageStrategy,
+      mortgageActivePayoffAge,
+      lumpSumEvent,
+      homeSaleEvent,
+      postSaleBrokerageAtFire,
       audit: window._lastAuditSnapshot ?? null,
       lifecycleSamples: samples,
       inputs,
