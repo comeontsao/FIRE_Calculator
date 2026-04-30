@@ -2,8 +2,9 @@
  * =============================================================================
  * MODULE: calc/accumulateToFire.js
  *
- * Feature: 019-accumulation-drift-fix
- * Spec: specs/019-accumulation-drift-fix/spec.md
+ * Feature: 020-validation-audit (extends feature 019-accumulation-drift-fix)
+ * Spec: specs/020-validation-audit/spec.md US4 / FR-015
+ * Contract: specs/020-validation-audit/contracts/accumulate-to-fire-v2.contract.md
  *
  * Inputs: inp (dashboard state record), fireAge (number), options (object)
  *   See spec §4.2–4.3 for the full field list. Key inp fields:
@@ -14,7 +15,12 @@
  *   - cashSavings, otherAssets
  *   - returnRate, return401k, inflationRate
  *   - monthlySavings, contrib401kTrad, contrib401kRoth, empMatch
- *   - raiseRate (income trajectory, not returned but advanced per canonical loop)
+ *   - raiseRate (income trajectory — used in v2 grossIncome computation)
+ *   - annualIncome — gross annual income (used in v2 cash-flow accounting)
+ *   - taxRate — effective tax rate applied to (grossIncome − pretax401kEmployee)
+ *   - annualSpend / monthlySpend — annual spending (v2: inflation-adjusted per year)
+ *   - pviCashflowOverrideEnabled (boolean) — when true, bypass computed residual
+ *   - pviCashflowOverride (number) — annual cash-flow override amount (when enabled)
  *   options fields:
  *   - mortgageEnabled, mortgageInputs (MortgageShape)
  *   - mortgageStrategyOverride ('invest-keep-paying' | 'prepay-extra' | 'invest-lump-sum')
@@ -28,29 +34,43 @@
  * Outputs: { end: { pTrad, pRoth, pStocks, pCash }, perYearRows: [...] }
  *   end — post-loop pool state entering the FIRE year (pre-retirement-phase simulation)
  *   perYearRows — one row per accumulation year (age = currentAge..fireAge-1):
- *     { age, pTrad, pRoth, pStocks, pCash, mtgPurchasedThisYear, h2PurchasedThisYear,
- *       lumpSumDrainThisYear, contributions, effectiveAnnualSavings, mtgSavingsAdjust,
- *       collegeDrain, h2Drain }
+ *     v1 fields (unchanged):
+ *       { age, pTrad, pRoth, pStocks, pCash, mtgPurchasedThisYear, h2PurchasedThisYear,
+ *         lumpSumDrainThisYear, contributions, effectiveAnnualSavings, mtgSavingsAdjust,
+ *         collegeDrain, h2Drain }
+ *     v2 fields (NEW — feature 020 cash-flow accounting):
+ *       { grossIncome, federalTax, annualSpending, pretax401kEmployee,
+ *         empMatchToTrad, stockContribution, cashFlowToCash, cashFlowWarning }
  *   Each row is a snapshot AT THE START of that age (pre-mutations, pre-growth).
  *
  * Consumers:
- *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch,
- *      lines 9333–9475 + 9632–9638). Step 2 of feature 019 rewires this.
- *   2. FIRE-Dashboard.html → _simulateStrategyLifetime (lines 10595–10614). Step 3.
- *   3. FIRE-Dashboard.html → computeWithdrawalStrategy (lines 11031–11041). Step 3.
+ *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch).
+ *      Feature 020 removes the typeof-guarded inline fallback (plan §Phase 2).
+ *   2. FIRE-Dashboard.html → _simulateStrategyLifetime. Consumes end only.
+ *   3. FIRE-Dashboard.html → computeWithdrawalStrategy. Consumes end only.
+ *   4. FIRE-Dashboard.html → signedLifecycleEndBalance. Consumes end only.
+ *   5. FIRE-Dashboard.html → copyDebugInfo() audit dump — perYearRows v2 fields.
  *   (and the corresponding lines in FIRE-Dashboard-Generic.html — lockstep mirror)
  *
  * Policy:
  *   - PURE. No DOM, no window/document/localStorage, no global mutable state.
  *   - Node-importable via CommonJS module.exports (matches calc/payoffVsInvest.js pattern).
- *   - Byte-exact arithmetic with projectFullLifecycle accumulation branch.
  *   - Cash growth: 1.005/yr (hardcoded — locked decision per plan §6 item 2).
  *   - Stocks/401k: real return (nominal − inflation).
+ *   - Federal tax computed on (grossIncome − pretax401kEmployee) × taxRate per IRS R1.
+ *   - pCash grows by cashFlowToCash (clamped at 0) — no phantom debt.
+ *   - Employer match is a non-cash inflow to pTrad; NOT part of the conservation invariant LHS.
+ *
+ * Conservation invariant (v2, FR-015.2, SC-012):
+ *   For non-clamped years:
+ *   grossIncome − federalTax − annualSpending − pretax401kEmployee − stockContribution
+ *     === cashFlowToCash (within floating-point tolerance)
  *
  * Constitution Principles:
  *   II  — pure module, contract-documented.
  *   V   — CommonJS (no `export` keyword; UMD-style globalThis assign for browser compat).
  *   VI  — Consumers list above is canonical.
+ *   VIII — Spending Funded First is a RETIREMENT-phase contract; not modified here.
  * =============================================================================
  */
 
@@ -195,8 +215,26 @@ function accumulateToFire(inp, fireAge, options) {
   const realReturn401k = inp.return401k - inflationRate;
 
   // --- Contribution constants (line 9320–9322) ---
-  const tradContrib = (inp.contrib401kTrad || 0) + (inp.empMatch || 0);
-  const rothContrib = inp.contrib401kRoth || 0;
+  // v2: split employee vs employer for cash-flow conservation accounting.
+  const emp401kTrad = inp.contrib401kTrad || 0;   // employee Trad deferral
+  const emp401kRoth = inp.contrib401kRoth || 0;   // employee Roth deferral
+  const empMatchAmt = inp.empMatch || 0;           // employer match (non-cash, pTrad only)
+  const tradContrib = emp401kTrad + empMatchAmt;   // total into pTrad (employee + match)
+  const rothContrib = emp401kRoth;                 // total into pRoth
+
+  // --- v2 Cash-flow inputs ---
+  const annualIncomeBase = inp.annualIncome || 0;   // gross annual income at currentAge
+  const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
+  const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
+  // Base annual spend: prefer inp.annualSpend (explicit), fall back to monthlySpend*12,
+  // then fall back to 0 (backwards-compatible — v1 callers may not supply these fields).
+  const baseAnnualSpend = (typeof inp.annualSpend === 'number') ? inp.annualSpend
+    : (typeof inp.monthlySpend === 'number') ? inp.monthlySpend * 12
+    : 0;
+
+  // v2 override inputs
+  const cashflowOverrideEnabled = !!(inp.pviCashflowOverrideEnabled);
+  const cashflowOverrideValue = (typeof inp.pviCashflowOverride === 'number') ? inp.pviCashflowOverride : 0;
 
   // --- Starting pools (lines 9333–9336, with Generic fallbacks) ---
   // Feature 009: in Generic dashboard, person2Stocks is preserved in memory
@@ -358,13 +396,54 @@ function accumulateToFire(inp, fireAge, options) {
       : 0;
 
     // --- Effective annual savings (line 9605) ---
-    const effectiveAnnualSavings = Math.max(
+    // v2: stockContribution is the taxable-brokerage deposit (formerly effectiveAnnualSavings).
+    // Adjusted for mortgage/college/h2 carry drains (same as v1).
+    const stockContribution = Math.max(
       0,
       (inp.monthlySavings || 0) * 12 - mtgSavingsAdjust - collegeDrain - h2Drain
     );
+    // Keep v1 alias for backwards-compatible row field.
+    const effectiveAnnualSavings = stockContribution;
+
+    // --- v2 Cash-flow accounting (FR-015 steps 1–7) ---
+    // Step 1: Gross income (real-terms, raised by raiseRate each year).
+    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate, yearsFromNow);
+
+    // Step 2: Pre-tax 401(k) employee contributions.
+    const pretax401kEmployee = emp401kTrad + emp401kRoth;
+
+    // Step 3: Federal tax on (grossIncome − pretax401kEmployee) × taxRate (IRS R1).
+    const federalTax = (grossIncome - pretax401kEmployee) * taxRate;
+
+    // Step 4: Annual spending (inflation-adjusted).
+    const annualSpending = baseAnnualSpend * Math.pow(1 + inflationRate, yearsFromNow);
+
+    // Step 5: Stock contribution (already computed above as effectiveAnnualSavings).
+
+    // Step 6: Cash flow residual (signed).
+    let cashFlowToCash;
+    let cashFlowWarning;
+
+    if (cashflowOverrideEnabled) {
+      // Override active: bypass computed residual.
+      cashFlowToCash = cashflowOverrideValue;
+    } else if (annualIncomeBase > 0 || taxRate > 0) {
+      // v2 cash-flow model: compute residual from income/tax/spend/contributions.
+      const residual = grossIncome - federalTax - pretax401kEmployee - annualSpending - stockContribution;
+      if (residual < 0) {
+        cashFlowToCash = 0;
+        cashFlowWarning = 'NEGATIVE_RESIDUAL';
+      } else {
+        cashFlowToCash = residual;
+      }
+    } else {
+      // No income info provided (v1 backwards-compat): cash pool receives $0 residual.
+      cashFlowToCash = 0;
+    }
 
     // --- Snapshot row (pre-mutation, pre-growth) ---
     perYearRows.push({
+      // v1 fields (unchanged)
       age,
       pTrad: Math.max(0, pTrad),
       pRoth: Math.max(0, pRoth),
@@ -378,13 +457,27 @@ function accumulateToFire(inp, fireAge, options) {
       mtgSavingsAdjust,
       collegeDrain,
       h2Drain,
+      // v2 fields (NEW — feature 020 cash-flow accounting)
+      grossIncome,
+      federalTax,
+      annualSpending,
+      pretax401kEmployee,
+      empMatchToTrad: empMatchAmt,
+      stockContribution,
+      cashFlowToCash,
+      cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | undefined
     });
 
-    // --- Accumulation arithmetic (lines 9632–9638) ---
-    // Note: raiseRate advances income (not tracked as a pool, so not returned).
+    // --- Accumulation arithmetic (steps 8–9 per v2 contract) ---
+    // Step 8: Pool updates (order: pTrad/pRoth/pStocks absorb contributions, pCash absorbs cashFlow).
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
     pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
+    pCash = pCash + cashFlowToCash;
+
+    // Step 9: Pool growth (real return for 401k; nominal 0.5% for cash).
+    // Note: pTrad/pRoth/pStocks growth is already applied in step 8 (multiply before add).
+    // pCash grows at 0.5%/yr nominal (FR-016 — hardcoded, locked).
     pCash *= 1.005;
   }
 

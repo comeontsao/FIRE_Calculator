@@ -9676,66 +9676,79 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   // module will get false here and fall through to the original inline path.
   let _accumulationHandledByHelper = false;
   if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
+    // Feature 020: no inline fallback — if accumulateToFire throws, re-throw.
+    // The inline path would produce v1-style numbers (no cash-flow accounting), which
+    // is wrong post-feature-020. Per plan.md Phase 2 shim defense-in-depth.
+    const _accumOpts = resolveAccumulationOptions(inp, fireAge, _mortgageStrategy);
+    let _accumResult;
     try {
-      const _accumOpts = resolveAccumulationOptions(inp, fireAge, _mortgageStrategy);
-      const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
-      // Push per-year accumulation rows (same shape as inline data.push below).
-      for (const _ay of _accumResult.perYearRows) {
-        const _ayYear = 2026 + (_ay.age - inp.ageRoger);
-        const _ayP401k = Math.max(0, _ay.pTrad) + Math.max(0, _ay.pRoth);
-        const _ayAccessible = Math.max(0, _ay.pStocks) + Math.max(0, _ay.pCash);
-        data.push({
-          year: _ayYear, age: _ay.age,
-          total: _ayP401k + _ayAccessible,
-          p401k: _ayP401k,
-          p401kTrad: Math.max(0, _ay.pTrad),
-          p401kRoth: Math.max(0, _ay.pRoth),
-          pStocks: Math.max(0, _ay.pStocks),
-          pCash: Math.max(0, _ay.pCash),
-          accessible: _ayAccessible,
-          phase: 'accumulation',
-          ssIncome: 0,
-          withdrawal: 0,
-          contribution: _ay.contributions,
-          is401kUnlocked: _ay.age >= unlockAge,
-        });
-      }
-      // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
-      portfolio401kTrad = _accumResult.end.pTrad;
-      portfolio401kRoth = _accumResult.end.pRoth;
-      portfolioStocks   = _accumResult.end.pStocks;
-      portfolioCash     = _accumResult.end.pCash;
-      // Advance income to FIRE year (income is not returned by helper).
-      income = inp.annualIncome * Math.pow(1 + (inp.raiseRate || 0), yrsToFire);
-      // Reconstruct mortgage purchase state for the retirement loop.
-      // The retirement loop's buy-in checks still run for edge cases where
-      // buyInYears >= yrsToFire (purchase deferred to retirement phase).
-      if (mortgageEnabled && mtg) {
-        if (mtg.ownership === 'buying-now') {
-          mtgPurchased = true; mtgPurchaseYear = 0;
-        } else if (mtg.ownership === 'already-own') {
-          mtgPurchased = true; mtgPurchaseYear = -(mtg.yearsPaid || 0);
-        } else if (mtg.ownership === 'buying-in' && yrsToFire > (mtg.buyInYears || 0)) {
-          // Buy-in occurred during accumulation (helper handled deduction).
-          mtgPurchased = true; mtgPurchaseYear = mtg.buyInYears || 0;
-        }
-        // buying-in with buyInYears >= yrsToFire: mtgPurchased stays false;
-        // retirement loop handles it.
-      }
-      // Reconstruct Home #2 purchase state.
-      if (secondHomeEnabled && h2) {
-        h2Purchased = (h2.buyInYears === 0 || yrsToFire > (h2.buyInYears || 0));
-      }
-      // If helper drained the lump-sum during accumulation, mark it done so the
-      // retirement loop doesn't double-drain.
-      if (_accumResult.perYearRows.some(_r => _r.lumpSumDrainThisYear > 0)) {
-        _pviLumpSumDrained = true;
-      }
-      _accumulationHandledByHelper = true;
+      _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
     } catch (_accumErr) {
-      // Fallback to inline path on any unexpected error.
       console.error('[projectFullLifecycle] accumulateToFire threw:', _accumErr);
+      throw _accumErr;
     }
+    // Push per-year accumulation rows (v1 + v2 fields).
+    for (const _ay of _accumResult.perYearRows) {
+      const _ayYear = 2026 + (_ay.age - inp.ageRoger);
+      const _ayP401k = Math.max(0, _ay.pTrad) + Math.max(0, _ay.pRoth);
+      const _ayAccessible = Math.max(0, _ay.pStocks) + Math.max(0, _ay.pCash);
+      data.push({
+        year: _ayYear, age: _ay.age,
+        total: _ayP401k + _ayAccessible,
+        p401k: _ayP401k,
+        p401kTrad: Math.max(0, _ay.pTrad),
+        p401kRoth: Math.max(0, _ay.pRoth),
+        pStocks: Math.max(0, _ay.pStocks),
+        pCash: Math.max(0, _ay.pCash),
+        accessible: _ayAccessible,
+        phase: 'accumulation',
+        ssIncome: 0,
+        withdrawal: 0,
+        contribution: _ay.contributions,
+        is401kUnlocked: _ay.age >= unlockAge,
+        // v2 cash-flow fields (feature 020, FR-015)
+        grossIncome: _ay.grossIncome,
+        federalTax: _ay.federalTax,
+        annualSpending: _ay.annualSpending,
+        pretax401kEmployee: _ay.pretax401kEmployee,
+        empMatchToTrad: _ay.empMatchToTrad,
+        stockContribution: _ay.stockContribution,
+        cashFlowToCash: _ay.cashFlowToCash,
+        cashFlowWarning: _ay.cashFlowWarning,
+      });
+    }
+    // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
+    portfolio401kTrad = _accumResult.end.pTrad;
+    portfolio401kRoth = _accumResult.end.pRoth;
+    portfolioStocks   = _accumResult.end.pStocks;
+    portfolioCash     = _accumResult.end.pCash;
+    // Advance income to FIRE year (income is not returned by helper).
+    income = inp.annualIncome * Math.pow(1 + (inp.raiseRate || 0), yrsToFire);
+    // Reconstruct mortgage purchase state for the retirement loop.
+    // The retirement loop's buy-in checks still run for edge cases where
+    // buyInYears >= yrsToFire (purchase deferred to retirement phase).
+    if (mortgageEnabled && mtg) {
+      if (mtg.ownership === 'buying-now') {
+        mtgPurchased = true; mtgPurchaseYear = 0;
+      } else if (mtg.ownership === 'already-own') {
+        mtgPurchased = true; mtgPurchaseYear = -(mtg.yearsPaid || 0);
+      } else if (mtg.ownership === 'buying-in' && yrsToFire > (mtg.buyInYears || 0)) {
+        // Buy-in occurred during accumulation (helper handled deduction).
+        mtgPurchased = true; mtgPurchaseYear = mtg.buyInYears || 0;
+      }
+      // buying-in with buyInYears >= yrsToFire: mtgPurchased stays false;
+      // retirement loop handles it.
+    }
+    // Reconstruct Home #2 purchase state.
+    if (secondHomeEnabled && h2) {
+      h2Purchased = (h2.buyInYears === 0 || yrsToFire > (h2.buyInYears || 0));
+    }
+    // If helper drained the lump-sum during accumulation, mark it done so the
+    // retirement loop doesn't double-drain.
+    if (_accumResult.perYearRows.some(_r => _r.lumpSumDrainThisYear > 0)) {
+      _pviLumpSumDrained = true;
+    }
+    _accumulationHandledByHelper = true;
   }
 
   for (let age = inp.ageRoger; age <= endAge; age++) {
@@ -17707,6 +17720,48 @@ function copyDebugInfo() {
       phase: d.phase,
       synthConv: Math.round(d.syntheticConversion || 0),
     }));
+    // Feature 020 (T028): lifecycleProjection with v2 cash-flow fields + conservation block.
+    const _accumRows = lc.filter(d => d.phase === 'accumulation');
+    let _totalCashFlow = 0;
+    let _grossSum = 0, _taxSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
+    for (const _r of _accumRows) {
+      const _cf = _r.cashFlowToCash || 0;
+      _totalCashFlow += _cf;
+      _grossSum += (_r.grossIncome || 0);
+      _taxSum += (_r.federalTax || 0);
+      _spendSum += (_r.annualSpending || 0);
+      _contribSum += (_r.pretax401kEmployee || 0);
+      _stockSum += (_r.stockContribution || 0);
+      _cashSum += _cf;
+    }
+    const lifecycleProjection = {
+      rows: _accumRows.map(_r => ({
+        age: _r.age,
+        grossIncome: Math.round(_r.grossIncome || 0),
+        federalTax: Math.round(_r.federalTax || 0),
+        annualSpending: Math.round(_r.annualSpending || 0),
+        pretax401kEmployee: Math.round(_r.pretax401kEmployee || 0),
+        empMatchToTrad: Math.round(_r.empMatchToTrad || 0),
+        stockContribution: Math.round(_r.stockContribution || 0),
+        cashFlowToCash: Math.round(_r.cashFlowToCash || 0),
+        cashFlowWarning: _r.cashFlowWarning || null,
+        pCash: Math.round(_r.pCash || 0),
+        pStocks: Math.round(_r.pStocks || 0),
+      })),
+      summary: {
+        totalCashFlow: Math.round(_totalCashFlow),
+        accumYears: _accumRows.length,
+      },
+      cashFlowConservation: {
+        grossSum: Math.round(_grossSum),
+        taxSum: Math.round(_taxSum),
+        spendSum: Math.round(_spendSum),
+        contribSum: Math.round(_contribSum),
+        stockSum: Math.round(_stockSum),
+        cashSum: Math.round(_cashSum),
+        residual: Math.round(_grossSum - _taxSum - _spendSum - _contribSum - _stockSum - _cashSum),
+      },
+    };
     // v3 (feature 018, T049 US3) — Capture Payoff-vs-Invest state per FR-019:
     // mortgage strategy (radio), resolved per-strategy payoff ages, lump-sum
     // event, home-sale event, and post-sale brokerage at FIRE. Each IIFE is
@@ -17763,6 +17818,7 @@ function copyDebugInfo() {
       postSaleBrokerageAtFire,
       audit: window._lastAuditSnapshot ?? null,
       lifecycleSamples: samples,
+      lifecycleProjection,
       inputs,
     };
     const json = JSON.stringify(debugObj, null, 2);
