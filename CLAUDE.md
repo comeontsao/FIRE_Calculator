@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
-**Active feature**: 020 (validation-audit) on branch `020-validation-audit`. Comprehensive audit of mode/strategy/chart consistency across both dashboards (RR + Generic, single + couple). Spec/plan at [`specs/020-validation-audit/`](./specs/020-validation-audit/). Predecessors 018 (lifecycle-payoff-merge, merged a9f1997) and 019 (accumulation-drift-fix, merged f73ab44) both landed on main 2026-04-30; their feature branches deleted.
+**Active feature**: 020 (validation-audit) on branch `020-validation-audit`. Comprehensive audit of mode/strategy/chart consistency + cash-flow calc engine rewrite + month-precision FIRE-age + header months UI. Spec [`spec.md`](./specs/020-validation-audit/spec.md), Plan [`plan.md`](./specs/020-validation-audit/plan.md). 9-phase implementation, ~2 weeks. Phase 0 (research) blocks Phase 2; Phase 2 ships before Phases 6–7 audit so the calc rewrite settles before the audit runs against it. Predecessors 018 (lifecycle-payoff-merge, merged a9f1997) and 019 (accumulation-drift-fix, merged f73ab44) both landed on main 2026-04-30; their feature branches deleted.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
