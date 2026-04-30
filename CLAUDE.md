@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
-**Active feature**: _none_ — feature 018 (lifecycle-payoff-merge) implementation completed 2026-04-29 on branch `018-lifecycle-payoff-merge`; awaiting user browser-smoke per [`quickstart.md`](./specs/018-lifecycle-payoff-merge/quickstart.md) S1–S16 before merge to `main`. CLOSEOUT: [`specs/018-lifecycle-payoff-merge/CLOSEOUT.md`](./specs/018-lifecycle-payoff-merge/CLOSEOUT.md). Tests: 51/51 + 4/4 = 55/55 pass.
+**Active feature**: 019 (accumulation-drift-fix) on branch `019-accumulation-drift-fix`. Spec/plan at [`specs/019-accumulation-drift-fix/`](./specs/019-accumulation-drift-fix/). Origin: cross-surface drift discovered while reviewing 018 audit data — `_simulateStrategyLifetime` and `computeWithdrawalStrategy` skip mortgage buy-in / college drain / Home #2 carry during accumulation, producing $84,512 phantom cash entering FIRE in user's audit scenario. Repro test at [`tests/unit/cashAccumulationDrift.test.js`](./tests/unit/cashAccumulationDrift.test.js). Feature 018 merged to `main` 2026-04-30 (commit a9f1997).
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
