@@ -15,6 +15,7 @@
 <script src="calc/tabRouter.js"></script>
 <script src="calc/calcAudit.js"></script>
 <script src="calc/payoffVsInvest.js"></script>
+<script src="calc/accumulateToFire.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -9647,6 +9648,46 @@ function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, f
   return data;
 }
 
+// ==================== ACCUMULATION OPTIONS RESOLVER ====================
+// T019 (feature 019) — resolveAccumulationOptions: impure helper that reads
+// DOM and module-level closures to assemble the `options` bundle consumed by
+// the pure `accumulateToFire` helper. Called by `projectFullLifecycle` (and
+// in Step 3 by `_simulateStrategyLifetime` and `computeWithdrawalStrategy`).
+// This function is ALLOWED to be impure — DOM/closure access is its job.
+// The pure worker (accumulateToFire.js) must not be burdened with that.
+//
+// Inputs:   inp (dashboard state), fireAge (number), mortgageStrategyOverride (string)
+// Outputs:  options bundle (see calc/accumulateToFire.js §4.3 for full field list)
+function resolveAccumulationOptions(inp, fireAge, mortgageStrategyOverride) {
+  const _mtg = mortgageEnabled ? getMortgageInputs() : null;
+  const _h2  = secondHomeEnabled ? getSecondHomeInputs() : null;
+  // rentMonthly: base monthly housing expense used in mtgSavingsAdjust.
+  const _rentEl = document.getElementById('exp_0');
+  const _rentMonthly = _rentEl ? (parseFloat(_rentEl.value) || 2690) : 2690;
+  // pviExtraMonthly: extra monthly P&I contribution slider.
+  const _pviExtraEl = document.getElementById('pviExtraMonthly');
+  const _pviExtraMonthly = _pviExtraEl ? (parseFloat(_pviExtraEl.value) || 0) : 0;
+  return {
+    mortgageStrategyOverride: mortgageStrategyOverride || 'invest-keep-paying',
+    mortgageEnabled:     !!mortgageEnabled,
+    mortgageInputs:      _mtg,
+    secondHomeEnabled:   !!secondHomeEnabled,
+    secondHomeInputs:    _h2,
+    rentMonthly:         _rentMonthly,
+    pviExtraMonthly:     _pviExtraMonthly,
+    selectedScenario:    selectedScenario,
+    collegeFn:           (inpArg, yearsFromNow) => getTotalCollegeCostForYear(inpArg, yearsFromNow),
+    // payoffVsInvestFn: injected so the helper can be pure. Use window.computePayoffVsInvest
+    // (set by calc/payoffVsInvest.js) rather than the bare name so test sandboxes that do
+    // not include payoffVsInvest in scope get null gracefully.
+    payoffVsInvestFn:    (typeof window !== 'undefined' && typeof window.computePayoffVsInvest === 'function')
+                           ? window.computePayoffVsInvest : null,
+    framing:             'liquidNetWorth',
+    // Generic dashboard derives mfjStatus from adultCount per FR-016.
+    mfjStatus:           (inp && inp.adultCount === 2) ? 'mfj' : 'single',
+  };
+}
+
 // ==================== UNIFIED LIFECYCLE PROJECTION ====================
 // Full picture: accumulation → FIRE → drawdown → SS → end of life
 // Feature 008: optional `options.strategyOverride` replaces the canonical
@@ -9815,8 +9856,86 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     } catch (_e) { /* swallow — falls back to contractual P&I below */ }
   }
 
+  // T019 (feature 019) — CANONICAL ACCUMULATION — see calc/accumulateToFire.js.
+  // When the helper module is loaded (browser context), delegate all pre-FIRE
+  // pool accumulation to the pure helper. The helper reproduces lines 9333–9475
+  // + 9632–9638 byte-exact so that _simulateStrategyLifetime and
+  // computeWithdrawalStrategy can share the same accumulation without drift.
+  //
+  // Guard: `typeof accumulateToFire === 'function'` is safe on undeclared names;
+  // test sandboxes that extract projectFullLifecycle without loading the helper
+  // module will get false here and fall through to the original inline path.
+  let _accumulationHandledByHelper = false;
+  if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
+    try {
+      const _accumOpts = resolveAccumulationOptions(inp, fireAge, _mortgageStrategy);
+      const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+      // Push per-year accumulation rows (same shape as inline data.push below).
+      for (const _ay of _accumResult.perYearRows) {
+        const _ayYear = 2026 + (_ay.age - inp.agePerson1);
+        const _ayP401k = Math.max(0, _ay.pTrad) + Math.max(0, _ay.pRoth);
+        const _ayAccessible = Math.max(0, _ay.pStocks) + Math.max(0, _ay.pCash);
+        data.push({
+          year: _ayYear, age: _ay.age,
+          total: _ayP401k + _ayAccessible,
+          p401k: _ayP401k,
+          p401kTrad: Math.max(0, _ay.pTrad),
+          p401kRoth: Math.max(0, _ay.pRoth),
+          pStocks: Math.max(0, _ay.pStocks),
+          pCash: Math.max(0, _ay.pCash),
+          accessible: _ayAccessible,
+          phase: 'accumulation',
+          ssIncome: 0,
+          withdrawal: 0,
+          contribution: _ay.contributions,
+          is401kUnlocked: _ay.age >= unlockAge,
+        });
+      }
+      // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
+      portfolio401kTrad = _accumResult.end.pTrad;
+      portfolio401kRoth = _accumResult.end.pRoth;
+      portfolioStocks   = _accumResult.end.pStocks;
+      portfolioCash     = _accumResult.end.pCash;
+      // Advance income to FIRE year (income is not returned by helper).
+      income = inp.annualIncome * Math.pow(1 + (inp.raiseRate || 0), yrsToFire);
+      // Reconstruct mortgage purchase state for the retirement loop.
+      // The retirement loop's buy-in checks still run for edge cases where
+      // buyInYears >= yrsToFire (purchase deferred to retirement phase).
+      if (mortgageEnabled && mtg) {
+        if (mtg.ownership === 'buying-now') {
+          mtgPurchased = true; mtgPurchaseYear = 0;
+        } else if (mtg.ownership === 'already-own') {
+          mtgPurchased = true; mtgPurchaseYear = -(mtg.yearsPaid || 0);
+        } else if (mtg.ownership === 'buying-in' && yrsToFire > (mtg.buyInYears || 0)) {
+          // Buy-in occurred during accumulation (helper handled deduction).
+          mtgPurchased = true; mtgPurchaseYear = mtg.buyInYears || 0;
+        }
+        // buying-in with buyInYears >= yrsToFire: mtgPurchased stays false;
+        // retirement loop handles it.
+      }
+      // Reconstruct Home #2 purchase state.
+      if (secondHomeEnabled && h2) {
+        h2Purchased = (h2.buyInYears === 0 || yrsToFire > (h2.buyInYears || 0));
+      }
+      // If helper drained the lump-sum during accumulation, mark it done so the
+      // retirement loop doesn't double-drain.
+      if (_accumResult.perYearRows.some(_r => _r.lumpSumDrainThisYear > 0)) {
+        _pviLumpSumDrained = true;
+      }
+      _accumulationHandledByHelper = true;
+    } catch (_accumErr) {
+      // Fallback to inline path on any unexpected error.
+      console.error('[projectFullLifecycle] accumulateToFire threw:', _accumErr);
+    }
+  }
+
   for (let age = inp.agePerson1; age <= endAge; age++) {
     const yearsFromNow = age - inp.agePerson1;
+
+    // T019: accumulation rows already pushed by helper; skip pre-FIRE iterations.
+    // Retirement-phase iterations (age >= fireAge) always run this loop body.
+    if (_accumulationHandledByHelper && age < fireAge) continue;
+
     // Handle delayed purchase for "buying-in" mode
     if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && !mtgPurchased && yearsFromNow >= mtg.buyInYears) {
       const upfrontCost = mtg.downPayment + mtg.closingCosts;
