@@ -750,3 +750,91 @@ test('INV-08: person1Stocks / person2Stocks fallback works (Generic dashboard)',
   assert.ok(Number.isFinite(result.end.pStocks) && result.end.pStocks > 0,
     'Generic pStocks should be positive finite');
 });
+
+test('INV-09: Generic single-person mode (adultCount=1) ignores person2Stocks', () => {
+  // Feature 009: when a user toggles 2→1, person2Stocks is preserved in
+  // memory (not zeroed). Read-time consumers MUST gate on adultCount===2.
+  // The helper must mirror projectFullLifecycle's canonical pattern:
+  //   pStocks = person1Stocks + (adultCount===2 ? person2Stocks : 0)
+  const baseInp = {
+    agePerson1: 42,
+    person1_401kTrad: 50000,
+    person1_401kRoth: 30000,
+    person1Stocks: 100000,
+    person2Stocks: 50000,  // stale from couple mode — should NOT be counted in single
+    cashSavings: 20000,
+    otherAssets: 0,
+    returnRate: 0.07,
+    return401k: 0.07,
+    inflationRate: 0.03,
+    monthlySavings: 1000,
+    contrib401kTrad: 16500,
+    contrib401kRoth: 2900,
+    empMatch: 7200,
+    endAge: 95,
+    taxTrad: 0.22,
+    stockGainPct: 0.6,
+    raiseRate: 0.03,
+    annualIncome: 120000,
+    ssClaimAge: 67,
+  };
+
+  const inpSingle = Object.assign({}, baseInp, { adultCount: 1 });
+  const inpCouple = Object.assign({}, baseInp, { adultCount: 2 });
+  const inpMissing = Object.assign({}, baseInp); // no adultCount → default to couple
+
+  const resultSingle = accumulateToFire(inpSingle, 52, baseOptions());
+  const resultCouple = accumulateToFire(inpCouple, 52, baseOptions());
+  const resultMissing = accumulateToFire(inpMissing, 52, baseOptions());
+
+  // Couple should have a higher starting pStocks at age 42 → higher pStocks at FIRE.
+  assert.ok(resultSingle.end.pStocks < resultCouple.end.pStocks,
+    `single (${Math.round(resultSingle.end.pStocks)}) must be less than couple (${Math.round(resultCouple.end.pStocks)})`);
+
+  // Difference at FIRE should reflect 10 years of compounding the missing $50k person2Stocks.
+  // Real return = 0.07 - 0.03 = 0.0388 → 50000 × 1.0388^10 ≈ $73,200.
+  // Allow ±$1k tolerance for floating-point.
+  const expectedDelta = 50000 * Math.pow(1.0388, 10);
+  const actualDelta = resultCouple.end.pStocks - resultSingle.end.pStocks;
+  assert.ok(Math.abs(actualDelta - expectedDelta) < 1000,
+    `delta ${Math.round(actualDelta)} should be ≈ $${Math.round(expectedDelta)} (10yr growth on $50k person2)`);
+
+  // Missing adultCount should default to couple — equal to the couple result.
+  assert.ok(Math.abs(resultMissing.end.pStocks - resultCouple.end.pStocks) < 1,
+    'missing adultCount must default to couple semantics');
+});
+
+test('INV-10: Generic single-person mode with zero person2Stocks (fresh single user)', () => {
+  // Fresh single user — never had a couple plan. person2Stocks defaults to 0.
+  // Must produce same result regardless of adultCount setting.
+  const baseInp = {
+    agePerson1: 42,
+    person1_401kTrad: 50000,
+    person1_401kRoth: 30000,
+    person1Stocks: 100000,
+    person2Stocks: 0,
+    cashSavings: 20000,
+    otherAssets: 0,
+    returnRate: 0.07,
+    return401k: 0.07,
+    inflationRate: 0.03,
+    monthlySavings: 1000,
+    contrib401kTrad: 16500,
+    contrib401kRoth: 2900,
+    empMatch: 7200,
+    endAge: 95,
+    taxTrad: 0.22,
+    stockGainPct: 0.6,
+    raiseRate: 0.03,
+    annualIncome: 120000,
+    ssClaimAge: 67,
+  };
+  const inpSingle = Object.assign({}, baseInp, { adultCount: 1 });
+  const inpCouple = Object.assign({}, baseInp, { adultCount: 2 });
+
+  const resultSingle = accumulateToFire(inpSingle, 52, baseOptions());
+  const resultCouple = accumulateToFire(inpCouple, 52, baseOptions());
+
+  assert.ok(Math.abs(resultSingle.end.pStocks - resultCouple.end.pStocks) < 1,
+    'with person2Stocks=0, single and couple modes must agree');
+});

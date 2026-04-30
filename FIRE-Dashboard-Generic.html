@@ -9654,7 +9654,14 @@ function findMinTotalAtFireNumerical(inp, annualSpend, fireAge, mode) {
   // mid-retirement buy-in event (the purchase conceptually happened during
   // accumulation in this synthesis).
   function synthInpFor(accessible) {
-    const stocks = accessible * 0.4;
+    // Feature 009 — single-person mode: when adultCount===1, person2Stocks
+    // is ignored by all canonical readers. Allocate the full 0.8×accessible
+    // to person1; setting person2Stocks=0 keeps the synth honest about how
+    // much accessible is actually present (vs split 40/40 which only matters
+    // for couple mode).
+    const _adultCount = (typeof inp.adultCount === 'number') ? inp.adultCount : 2;
+    const isCouple = _adultCount === 2;
+    const stocksPerPerson = isCouple ? accessible * 0.4 : accessible * 0.8;
     const overrides = {
       agePerson1: fireAge,
       ageRoger: fireAge,
@@ -9662,10 +9669,10 @@ function findMinTotalAtFireNumerical(inp, annualSpend, fireAge, mode) {
       person1_401kRoth: projRoth,
       roger401kTrad: projTrad,
       roger401kRoth: projRoth,
-      person1Stocks: stocks,
-      person2Stocks: stocks,
-      rogerStocks: stocks,
-      rebeccaStocks: stocks,
+      person1Stocks: stocksPerPerson,
+      person2Stocks: isCouple ? stocksPerPerson : 0,
+      rogerStocks: accessible * 0.4,   // RR is always couple
+      rebeccaStocks: accessible * 0.4,
       cashSavings: accessible * 0.2,
       otherAssets: 0,
       monthlySavings: 0,

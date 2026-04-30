@@ -199,11 +199,23 @@ function accumulateToFire(inp, fireAge, options) {
   const rothContrib = inp.contrib401kRoth || 0;
 
   // --- Starting pools (lines 9333–9336, with Generic fallbacks) ---
+  // Feature 009: in Generic dashboard, person2Stocks is preserved in memory
+  // when a user toggles adultCount 2→1 (no DOM mutation per data-model.md
+  // §"Visibility model"). Read-time consumers MUST gate person2 on
+  // adultCount === 2 — matches projectFullLifecycle's canonical pattern
+  // (FIRE-Dashboard-Generic.html line 9902). RR dashboard is always couple
+  // (no adultCount), so its branch sums both unconditionally.
   let pTrad = (inp.person1_401kTrad != null ? inp.person1_401kTrad : inp.roger401kTrad) || 0;
   let pRoth = (inp.person1_401kRoth != null ? inp.person1_401kRoth : inp.roger401kRoth) || 0;
-  let pStocks = (inp.person1Stocks != null
-    ? (inp.person1Stocks || 0) + (inp.person2Stocks || 0)
-    : (inp.rogerStocks || 0) + (inp.rebeccaStocks || 0));
+  let pStocks;
+  if (inp.person1Stocks != null) {
+    // Generic dashboard — gate person2 on adultCount.
+    const _adultCount = (typeof inp.adultCount === 'number') ? inp.adultCount : 2;
+    pStocks = (inp.person1Stocks || 0) + (_adultCount === 2 ? (inp.person2Stocks || 0) : 0);
+  } else {
+    // RR dashboard — always couple.
+    pStocks = (inp.rogerStocks || 0) + (inp.rebeccaStocks || 0);
+  }
   let pCash = (inp.cashSavings || 0) + (inp.otherAssets || 0);
 
   // --- Mortgage setup (mirrors lines 9340–9363) ---
