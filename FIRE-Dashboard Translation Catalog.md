@@ -696,9 +696,9 @@ Frontend Phase 3 refactor: extracted JavaScript template literals into `t(key, .
 | `chart.countrySubtitle` | country-chart language legend | — |
 | `dyn.ageLabel` | `Age {0}` | `{0}` age |
 | `dyn.progressComplete` | `{0}% complete` | `{0}` percent |
-| `dyn.accessibleNeededAtFire` | `Accessible assets needed at FIRE (age {0}) — {1} mode{2}` | age / mode / suffix |
+| `dyn.accessibleNeededAtFire` | `Total assets needed at FIRE (age {0}) — {1} mode{2}` | age / mode / suffix |
 | `dyn.cushionSuffix` | ` (incl. {0}yr end-of-life cushion)` | years |
-| `dyn.accessibleNeededSub` | `{0} accessible needed (3-phase){1}` | flag / mortgage icon |
+| `dyn.accessibleNeededSub` | `{0} total at FIRE{1}` | flag / mortgage icon |
 | `dyn.phase1Info` | `FIRE ({0}) → 59.5: {1} yrs, taxable only, {2}{3}` | age / yrs / spend / suffix |
 | `dyn.phase1MtgAdjusted` | ` (mtg-adjusted)` | — |
 | `dyn.phase2Info` | `59.5 → {0}: {1} yrs, 401K unlocks` | ss age / yrs |
