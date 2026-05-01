@@ -16,6 +16,7 @@
 <script src="calc/calcAudit.js"></script>
 <script src="calc/payoffVsInvest.js"></script>
 <script src="calc/accumulateToFire.js"></script>
+<script src="calc/fireAgeResolver.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -3095,7 +3096,7 @@
       <input type="range" id="swr" min="2.5" max="5" step="0.25" value="4" oninput="document.getElementById('swrVal').textContent=this.value+'%';recalcAll()">
     </div>
     <div class="control-group">
-      <label><span data-i18n="invest.monthlySavings">Monthly Investment (New Savings)</span> <span class="val" id="monthSaveVal">$500</span></label>
+      <label><span data-i18n="invest.monthlySavings">Monthly Stock Contribution</span> <span class="val" id="monthSaveVal">$500</span> <span class="info-tip" data-i18n-tip="invest.monthlySavingsTooltip" data-tip="Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow.">?</span></label>
       <input type="range" id="monthlySavings" min="0" max="6000" step="100" value="500" oninput="_syncMonthlySavings(this.value, 'monthlySavings');">
     </div>
     <div class="control-group">
@@ -3113,6 +3114,24 @@
     <div class="control-group">
       <label><span data-i18n="invest.empMatch">401K: Employer Match (annual)</span> <span class="val" id="empMatchVal">$1,500</span> <span class="info-tip" data-tip="Employer match is ALWAYS Traditional (pre-tax) regardless of your contribution type.">?</span></label>
       <input type="range" id="empMatch" min="0" max="15000" step="100" value="1500" oninput="document.getElementById('empMatchVal').textContent='$'+Number(this.value).toLocaleString();recalcAll()">
+    </div>
+    <!-- Feature 020 — Annual cash flow to savings (override) -->
+    <div class="control-group" style="border-top:1px dashed var(--border);padding-top:12px;margin-top:8px">
+      <label class="pvi-toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="pviCashflowOverrideEnabled"
+               onchange="_cashflowUpdateOverrideVisibility();recalcAll()">
+        <span data-i18n="plan.cashflowOverrideToggle">Override computed cash flow</span>
+        <span class="info-tip" data-i18n-tip="plan.cashflowTooltip" data-tip="Annual cash that flows to your savings buffer after taxes, spending, 401k, and stock contributions are deducted from gross income.">?</span>
+      </label>
+      <div id="pviCashflowOverrideInput" hidden style="margin-top:8px">
+        <label><span data-i18n="plan.cashflowInput">Annual cash flow to savings ($)</span> <span class="val" id="pviCashflowOverrideVal">$0</span></label>
+        <input type="number" id="pviCashflowOverride" min="-100000" max="500000" step="500" value="0"
+               oninput="document.getElementById('pviCashflowOverrideVal').textContent='$'+Number(this.value).toLocaleString();recalcAll()">
+      </div>
+      <div id="pviCashflowWarning" hidden role="status" aria-live="polite"
+           style="margin-top:10px;padding:10px 12px;border:1px solid #c79b22;background:rgba(199,155,34,0.10);color:#e8c258;border-radius:8px;font-size:0.86em;line-height:1.4">
+        <span data-i18n="plan.cashflowWarning">Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0.</span>
+      </div>
     </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
@@ -5553,6 +5572,9 @@ const TRANSLATIONS = {
     'kpi.progressSub': 'of target reached',
     'kpi.yearsToFire': 'Years to FIRE',
     'kpi.yearsToFireSub': 'estimated at current pace',
+    // Feature 020 (US4c) — month-precision FIRE-age display.
+    'kpi.yearsMonthsToFire': '{0} Years {1} Months',
+    'verdict.fireInYearsMonths': '🔥 On Track — FIRE in {0} years {1} months (age {2}) · {3}% there',
     // Section / card titles
     'sec.fireProgress': 'FIRE Progress',
     'sec.profileIncome': 'Profile & Income',
@@ -5623,11 +5645,17 @@ const TRANSLATIONS = {
     'invest.return401k': '401K Annual Return',
     'invest.inflation': 'Inflation Rate',
     'invest.swr': 'Safe Withdrawal Rate',
-    'invest.monthlySavings': 'Monthly Investment (New Savings)',
+    'invest.monthlySavings': 'Monthly Stock Contribution',
+    'invest.monthlySavingsTooltip': 'Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow.',
     'invest.contrib401k': '401K: Traditional Contribution (pre-tax)',
     'invest.contrib401kRoth': '401K: Roth Contribution (after-tax)',
     'invest.taxTrad': 'Effective Tax on Trad 401K Withdrawals',
     'invest.empMatch': '401K: Employer Match (annual)',
+    // Feature 020 — Cash-flow override (US4 / FR-015.5)
+    'plan.cashflowInput': 'Annual cash flow to savings ($)',
+    'plan.cashflowTooltip': 'Annual cash that flows to your savings buffer after taxes, spending, 401k, and stock contributions are deducted from gross income.',
+    'plan.cashflowOverrideToggle': 'Override computed cash flow',
+    'plan.cashflowWarning': 'Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0.',
     // Mortgage
     'mtg.homeLocation': 'Home Location',
     'mtg.capGainsTreatment': 'Capital Gains Treatment (on sale)',
@@ -6598,6 +6626,9 @@ const TRANSLATIONS = {
     'kpi.progressSub': '已達成目標',
     'kpi.yearsToFire': '距離 FIRE 年數',
     'kpi.yearsToFireSub': '以目前速度估算',
+    // Feature 020 (US4c) — month-precision FIRE-age display (zh-TW).
+    'kpi.yearsMonthsToFire': '{0} 年 {1} 個月',
+    'verdict.fireInYearsMonths': '🔥 正軌 — 距離 FIRE 還有 {0} 年 {1} 個月（{2} 歲）· {3}% 已達標',
     // Section / card titles
     'sec.fireProgress': 'FIRE 進度',
     'sec.profileIncome': '個人資料與收入',
@@ -6668,11 +6699,17 @@ const TRANSLATIONS = {
     'invest.return401k': '401K 年回報率',
     'invest.inflation': '通膨率',
     'invest.swr': '安全提領率',
-    'invest.monthlySavings': '每月投資（新增儲蓄）',
+    'invest.monthlySavings': '每月股票投入',
+    'invest.monthlySavingsTooltip': '稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。',
     'invest.contrib401k': '401K：傳統提撥（稅前）',
     'invest.contrib401kRoth': '401K：Roth 提撥（稅後）',
     'invest.taxTrad': '傳統 401K 提領的有效稅率',
     'invest.empMatch': '401K：雇主配對（年度）',
+    // Feature 020 — Cash-flow override (US4 / FR-015.5)
+    'plan.cashflowInput': '每年流入儲蓄的現金 ($)',
+    'plan.cashflowTooltip': '從毛收入扣除稅金、支出、401k 提撥與股票投入後，實際流入儲蓄緩衝的年度現金。',
+    'plan.cashflowOverrideToggle': '覆寫自動計算的現金流',
+    'plan.cashflowWarning': '部分 FIRE 前年度的現金流為負——支出超過收入扣除儲蓄後的金額；緩衝成長已被限制在 $0。',
     // Mortgage
     'mtg.homeLocation': '房屋地點',
     'mtg.capGainsTreatment': '資本利得稅處理（售屋時）',
@@ -7942,6 +7979,15 @@ function getInputs() {
   inp.person1_401k = inp.person1_401kTrad + inp.person1_401kRoth;
   inp.contrib401k = inp.contrib401kTrad + inp.contrib401kRoth;
 
+  // ==================== Feature 020 — Cash-flow override (US4 / FR-015.5) ====================
+  // Plan-tab cash-flow override toggle + amount. Defaults: OFF, $0.
+  // Read defensively (DOM may be missing on early-boot or test harness).
+  const _cfEnEl = document.getElementById('pviCashflowOverrideEnabled');
+  const _cfValEl = document.getElementById('pviCashflowOverride');
+  inp.pviCashflowOverrideEnabled = !!(_cfEnEl && _cfEnEl.checked);
+  const _cfRaw = _cfValEl ? parseFloat(_cfValEl.value) : NaN;
+  inp.pviCashflowOverride = Number.isFinite(_cfRaw) ? _cfRaw : 0;
+
   // ==================== Feature 007 — Bracket-Fill Tax Smoothing ====================
   // Read the four new DOM controls defensively. Missing/blank values fall back
   // to spec defaults so early-boot or partial-DOM callers do not throw.
@@ -8427,10 +8473,23 @@ function renderKpiCards(state) {
       : '—';
   }
   if (progressSubEl) progressSubEl.textContent = t('kpi.progressSubAccess');
+  // Feature 020 (US4c, T044) — render "{years} Years {months} Months" when the
+  // resolver returned a feasible result. Falls back to the legacy single-year
+  // display whenever the resolver is unavailable, infeasible, or out of bounds
+  // (yrsToFire > 40), so existing behavior is preserved.
+  const fireAgeRes = snap.fireAgeResult;
   if (yearsEl) {
-    yearsEl.textContent = Number.isFinite(yrsToFire)
-      ? (yrsToFire <= 40 ? yrsToFire + ' ' + t('kpi.yearsSuffix') : t('kpi.yearsOver'))
-      : '—';
+    if (fireAgeRes && fireAgeRes.feasible
+      && Number.isFinite(yrsToFire) && yrsToFire <= 40
+      && Number.isFinite(snap.currentAge)) {
+      const yYears = Math.max(0, fireAgeRes.years - snap.currentAge);
+      const yMonths = fireAgeRes.months || 0;
+      yearsEl.textContent = t('kpi.yearsMonthsToFire', yYears, yMonths);
+    } else {
+      yearsEl.textContent = Number.isFinite(yrsToFire)
+        ? (yrsToFire <= 40 ? yrsToFire + ' ' + t('kpi.yearsSuffix') : t('kpi.yearsOver'))
+        : '—';
+    }
   }
   if (yearsSubEl) {
     if (!Number.isFinite(yrsToFire) || !Number.isFinite(fireAge)) {
@@ -12259,6 +12318,42 @@ function recalcAll() {
   // delegate rendering to `renderKpiCards(state)`. The chartState listener
   // registered in _registerChartStateListeners will re-render on every
   // FIRE-age transition (drag confirm, override reset, mode switch).
+  // Feature 020 (US4c, T044) — month-precision FIRE-age resolution.
+  // Refines the integer-year `yrsToFire` to "X Years Y Months" by feeding
+  // the same canonical helpers (simulateRetirementOnlySigned + isFireAgeFeasible)
+  // into the pure resolver in calc/fireAgeResolver.js. Stash on the snapshot
+  // so renderKpiCards + verdict pill can read it without re-running the search.
+  let _fireAgeResult = null;
+  try {
+    if (typeof findEarliestFeasibleAge === 'function'
+      && typeof simulateRetirementOnlySigned === 'function'
+      && typeof isFireAgeFeasible === 'function'
+      && typeof accumulateToFire === 'function'
+      && typeof resolveAccumulationOptions === 'function') {
+      const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
+        ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
+        : 'invest-keep-paying';
+      const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
+      const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+      _fireAgeResult = findEarliestFeasibleAge(inp, fireMode, {
+        annualSpend: effectiveSpend,
+        simulateRetirementOnlySigned: simulateRetirementOnlySigned,
+        isFireAgeFeasible: isFireAgeFeasible,
+        pools: {
+          pTrad: _accumResult.end.pTrad,
+          pRoth: _accumResult.end.pRoth,
+          pStocks: _accumResult.end.pStocks,
+          pCash: _accumResult.end.pCash,
+        },
+      });
+    }
+  } catch (_e) {
+    _fireAgeResult = null;
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[fireAgeResolver] resolution threw:', _e);
+    }
+  }
+
   _lastKpiSnapshot = {
     accessible,
     locked,
@@ -12269,6 +12364,7 @@ function recalcAll() {
     currentAge: inp.agePerson1,
     scenarioFlag: scenario.flag,
     mortgageEnabled,
+    fireAgeResult: _fireAgeResult,
   };
   const _kpiCs = _cs();
   renderKpiCards(_kpiCs ? _kpiCs.state : null);
@@ -12300,9 +12396,23 @@ function recalcAll() {
   const progressPctRounded = yrsToFire <= 0
     ? Math.min(100, _rawProgress).toFixed(1)
     : Math.min(99, _rawProgress).toFixed(1);
+  // Feature 020 (US4c, T045) — month-precision verdict copy when the resolver
+  // produced a month-precision answer; otherwise stay with the integer-year
+  // fallback so existing modes/copy never regress.
+  const _vFireRes = (_lastKpiSnapshot && _lastKpiSnapshot.fireAgeResult) || null;
+  const _useMonthVerdict = !!(_vFireRes
+    && _vFireRes.feasible
+    && _vFireRes.searchMethod === 'month-precision'
+    && Number.isFinite(inp.agePerson1));
   if (yrsToFire <= 12) {
     statusEl.className = 'fire-status on-track';
-    statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
+    if (_useMonthVerdict) {
+      const _vYears = Math.max(0, _vFireRes.years - inp.agePerson1);
+      const _vMonths = _vFireRes.months || 0;
+      statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, fireAge, progressPctRounded);
+    } else {
+      statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
+    }
   } else if (yrsToFire <= 18) {
     statusEl.className = 'fire-status warning';
     statusEl.textContent = t('dyn.statusNeedsOpt', yrsToFire, progressPctRounded);
@@ -14627,6 +14737,48 @@ function _pviUpdateOverrideVisibility() {
   if (cb && wrap) wrap.hidden = !cb.checked;
 }
 
+// ==================== Feature 020 — Cash-flow override visibility + warning ====================
+// Mirrors `_pviUpdateOverrideVisibility` — toggles the override input panel
+// based on the override checkbox state.
+function _cashflowUpdateOverrideVisibility() {
+  const cb = document.getElementById('pviCashflowOverrideEnabled');
+  const wrap = document.getElementById('pviCashflowOverrideInput');
+  if (cb && wrap) wrap.hidden = !cb.checked;
+  // Sync the dollar-formatted live label (matches saved-state hydration parity).
+  const valEl = document.getElementById('pviCashflowOverride');
+  const valLbl = document.getElementById('pviCashflowOverrideVal');
+  if (valEl && valLbl) {
+    const _n = parseFloat(valEl.value);
+    valLbl.textContent = '$' + (Number.isFinite(_n) ? _n.toLocaleString() : '0');
+  }
+}
+
+// Show/hide the negative-residual warning callout near the cash-flow input.
+// Auto-clears when no pre-FIRE row carries `cashFlowWarning === 'NEGATIVE_RESIDUAL'`.
+function _cashflowUpdateWarning() {
+  const wrap = document.getElementById('pviCashflowWarning');
+  if (!wrap) return;
+  if (typeof accumulateToFire !== 'function') {
+    wrap.hidden = true;
+    return;
+  }
+  try {
+    const inp = getInputs();
+    const yrsToFire = (typeof yearsToFIREcache === 'number' && Number.isFinite(yearsToFIREcache))
+      ? yearsToFIREcache
+      : (typeof yearsToFIRE === 'function' ? yearsToFIRE(inp, 0) : 10);
+    const currentAge = (inp.agePerson1 != null) ? inp.agePerson1 : inp.ageRoger;
+    const fireAge = currentAge + yrsToFire;
+    const result = accumulateToFire(inp, fireAge, {});
+    const hasWarning = !!(result && result.perYearRows
+      && result.perYearRows.some(r => r && r.cashFlowWarning === 'NEGATIVE_RESIDUAL'));
+    wrap.hidden = !hasWarning;
+  } catch (_err) {
+    // Defensive: if calc throws, hide the warning rather than expose an error.
+    wrap.hidden = true;
+  }
+}
+
 function _pviSaveState() {
   try { if (typeof saveState === 'function') saveState(); } catch (_e) {}
 }
@@ -15688,6 +15840,8 @@ const PERSIST_IDS = [
   'safetyMargin', 'rule55Enabled', 'rule55SeparationAge', 'irmaaThreshold',
   // Feature 009 — Single-Person Mode
   'adultCount',
+  // Feature 020 — Cash-flow override (US4 / FR-015.5)
+  'pviCashflowOverrideEnabled', 'pviCashflowOverride',
 ];
 
 // Slider label IDs that need updating when values are restored
@@ -16071,6 +16225,8 @@ function restoreState() {
         if (typeof _pviUpdateOverrideVisibility === 'function') _pviUpdateOverrideVisibility();
       } catch (_e) { /* swallow */ }
     }
+    // Feature 020 — sync cash-flow override panel visibility on restore.
+    try { if (typeof _cashflowUpdateOverrideVisibility === 'function') _cashflowUpdateOverrideVisibility(); } catch (_e) {}
     return true;
   } catch (e) {
     console.warn('Failed to restore state:', e);
@@ -16086,6 +16242,9 @@ recalcAll = function() {
   // sees the freshly-computed FIRE age and updated mortgage state, but its
   // own outputs do not feed back into any other chart.
   try { if (typeof recomputePayoffVsInvest === 'function') recomputePayoffVsInvest(); } catch (_e) {}
+  // Feature 020 — refresh the negative-residual warning visibility (auto-clears
+  // when residual goes positive). Read-only, runs after the main recalc.
+  try { if (typeof _cashflowUpdateWarning === 'function') _cashflowUpdateWarning(); } catch (_e) {}
   saveState();
 };
 

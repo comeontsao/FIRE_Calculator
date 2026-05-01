@@ -43,6 +43,20 @@
 | "Years to FIRE" | Static | `<div class="label">` (line ~926) |
 | "estimated at current pace" | Static | `<div class="sub">` (line ~927) |
 
+### Feature 020 (US4c) — Month-precision FIRE-age display
+
+Added 2026-04-30 alongside `calc/fireAgeResolver.js`. Both keys live in
+TRANSLATIONS.en + TRANSLATIONS.zh of `FIRE-Dashboard.html` and
+`FIRE-Dashboard-Generic.html`.
+
+| Key | EN | zh-TW | Used in |
+|-----|----|-------|---------|
+| `kpi.yearsMonthsToFire` | `{0} Years {1} Months` | `{0} 年 {1} 個月` | `renderKpiCards` "Years to FIRE" card value, when resolver returns `feasible: true` and `yrsToFire ≤ 40`. Falls back to legacy `{n} yrs` when resolver is unavailable. |
+| `verdict.fireInYearsMonths` | `🔥 On Track — FIRE in {0} years {1} months (age {2}) · {3}% there` | `🔥 正軌 — 距離 FIRE 還有 {0} 年 {1} 個月（{2} 歲）· {3}% 已達標` | `recalcAll` verdict pill (`#fireStatus`), shown when resolver's `searchMethod === 'month-precision'`. Falls back to legacy `dyn.fireInYears` otherwise. |
+
+zh-TW format chosen: `{0} 年 {1} 個月` (simple, readable). User can refine to
+something like `{0}年又{1}個月` in a follow-up if desired.
+
 ---
 
 ## 3. Section Headers (Card Titles with Emoji Icons)
@@ -585,6 +599,17 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 |-----|----|----|
 | `invest.contrib401kRoth` | 401K: Roth Contribution (after-tax) | 401K：Roth 提撥（稅後） |
 | `invest.taxTrad` | Effective Tax on Trad 401K Withdrawals | 傳統 401K 提領的有效稅率 |
+| `invest.monthlySavings` (relabeled, feature 020 T038/T039) | Monthly Stock Contribution | 每月股票投入 |
+| `invest.monthlySavingsTooltip` (feature 020) | Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow. | 稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。 |
+
+**Plan tab — Cash-flow override (feature 020 / FR-015)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `plan.cashflowInput` | Annual cash flow to savings ($) | 每年流入儲蓄的現金 ($) |
+| `plan.cashflowTooltip` | Annual cash that flows to your savings buffer after taxes, spending, 401k, and stock contributions are deducted from gross income. | 從毛收入扣除稅金、支出、401k 提撥與股票投入後，實際流入儲蓄緩衝的年度現金。 |
+| `plan.cashflowOverrideToggle` | Override computed cash flow | 覆寫自動計算的現金流 |
+| `plan.cashflowWarning` | Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0. | 部分 FIRE 前年度的現金流為負——支出超過收入扣除儲蓄後的金額；緩衝成長已被限制在 $0。 |
 
 **Mortgage (`mtg.*`) — new keys**
 
