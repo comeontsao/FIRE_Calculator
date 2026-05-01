@@ -416,3 +416,47 @@ When ready, extend `calc/simulateLifecycle.js` to interpret a non-null `noiseMod
 ### B-015-5. Manager-driven browser smoke walks on both HTML files
 
 Remaining manual gate: open both files in a real browser, run the 5-step smoke per `CLAUDE.md > Browser smoke before claiming a feature "done"`, plus the wave-specific checks in `specs/015-calc-debt-cleanup/quickstart.md`. Cannot be automated.
+
+---
+
+## Done in feature 020 — Validation Audit + Cash-flow Rewrite (2026-04-30)
+
+- **US4 (P1 / MVP) — Cash-flow calc engine rewrite**: `calc/accumulateToFire.js` v2 algorithm tracks per-year `grossIncome`, `federalTax`, `annualSpending`, `pretax401kEmployee`, `empMatchToTrad`, `stockContribution`, `cashFlowToCash`, `cashFlowWarning`. Tax base per IRS Topic 424 (`(grossIncome − pretax401kEmployee) × taxRate`); employer match flows direct to Trad. Override hook: `pviCashflowOverrideEnabled` + `pviCashflowOverride`. Negative residual clamps cashFlow to $0 + emits `cashFlowWarning='NEGATIVE_RESIDUAL'`. Conservation invariant verified for RR-baseline ($0 exact).
+- **US4 Wave 2 — Plan tab UI**: new "Annual cash flow to savings" input + override toggle (mirrors `pviEffRateOverrideEnabled` pattern); negative-residual amber warning callout (auto-shows when any pre-FIRE row has cashFlowWarning, auto-clears when residual goes positive); `monthlySavings` relabeled "Monthly Stock Contribution" with new tooltip clarifying post-tax brokerage semantics. 6 new EN + zh-TW translation keys; Translation Catalog updated.
+- **US4c (P2) — Month-precision FIRE-age header + verdict**: new `calc/fireAgeResolver.js` UMD module with year-then-month two-stage search + monotonic-flip stability fallback. KPI card renders "X Years Y Months" when month-precision applies; verdict pill renders "FIRE in X years Y months". Edge Case 4 default = option (c): UI-display refinement only; year-level feasibility unchanged.
+- **US1+US2+US3+US5 — Validation audit harness**: 5 invariant test files (mode-ordering, end-state-validity, cross-chart-consistency, drag-invariants) running 1,150+ persona×invariant cells across 92 personas. After harness wiring fixes (`SAFE_TERMINAL_FIRE_RATIO` + persona-aware DOC_STUB), audit produced 38 real findings: 0 CRITICAL ✓, 12 HIGH (DEFERRED to feature 021), 6 MEDIUM, 20 LOW.
+- **US6 (P3) — Withdrawal strategy survey**: `specs/020-validation-audit/withdrawal-strategy-survey.md` — 6 strategies (4% rule, VPW, Guyton-Klinger, Bucket, Vanguard Dynamic Spending, RMD-based) with definitions, citations, model-fit assessments, recommendations. **RMD-based recommended IMPLEMENT-NEXT** (only strategy that ships on existing deterministic chassis). Others DEFER pending Monte Carlo or are SKIP.
+- **Lockstep delivery**: both HTMLs shipped together. Test count: 397 unit + 12 audit harness = **409 tests, 0 failures**. Constitution VIII gate green.
+- Spec / Plan / Tasks / audit-report / CLOSEOUT: see [`specs/020-validation-audit/`](./specs/020-validation-audit/) — awaiting user browser-smoke (T080) before merge to `main`.
+
+## New backlog items from feature 020 audit
+
+### ~~B-020-1. DWZ shortfall semantics harmonization~~ — RESOLVED in Phase 11 (2026-04-30)
+
+**Status**: ~~bundled feature 021~~ — fixed in-place during feature 020 Phase 11. **Bundles B3 (8 HIGH findings) + E2 (5 MEDIUM findings) + C2 (1 MEDIUM, incidental) + 3 of E3 (LOW, incidental).** Root cause was NOT the originally-described "chart sim flags when a single pool can't cover even when cross-pool covers" — that mischaracterized the issue. Actual root cause: all three feasibility gates (DWZ, Safe, Exact) iterated chart rows checking `row.total < floor` only; chart `total` sums ALL pools including locked Trad 401k pre-59.5, so the check passed even when `taxOptimizedWithdrawal`'s pre-unlock branch returned `shortfall > 0` (genuinely couldn't fund spend from accessible cash + stocks). Additionally, the DWZ month-precise interpolation in `findFireAgeNumerical` assumed an endBalance-monotonic crossover, which broke once `hasShortfall` joined the gate. Fix: added `if (row.hasShortfall === true) return false;` to all three gate per-row loops in both `FIRE-Dashboard.html` (DWZ ~8966, Safe ~9025, Exact ~8985) and `FIRE-Dashboard-Generic.html` (parallel sites); guarded DWZ interpolation on `prevSim.endBalance < 0`. Regression test in `tests/unit/validation-audit/end-state-validity.test.js` (`B3 regression` block). Tests: 410/410 passing post-fix.
+
+### ~~B-020-2. Bracket-fill parity in stress regimes~~ — RESOLVED in Phase 11 (2026-04-30)
+
+**Status**: ~~bundled feature 021~~ — fixed in-place during feature 020 Phase 11. **Bundles 3 of 4 C3 HIGH findings** (`RR-age-late`, `Generic-couple-late`, `RR-late-prepay` and `RR-edge-already-retired`). The "stress regime" framing turned out to be a misdiagnosis; root cause was NOT bracket-fill smoothing or LTCG handling. Actual root cause: `signedLifecycleEndBalance` (FIRE-Dashboard.html:8635 / Generic:9001) subtracted `mtg.downPayment + mtg.closingCosts` (and equivalent for second-home) **unconditionally** from `pCash`, allowing it to go negative when the buy-in fell during the retirement phase (`yrsToFire < buyInYears`). That negative cash compounded at 1.005 and skewed subsequent retirement-phase `taxOptimizedWithdrawal` calls against `projectFullLifecycle`'s clamp-to-zero invariant, producing systematic ~$575/year drift (cumulative $76k–$139k over a 47-year plan). Fix: aligned signed sim's upfront-cost deduction with chart's safe pattern — subtract from cash up to zero, take remainder from `Math.max(0, pStocks - remainder)`. Applied to buying-now upfront, retirement-loop buy-in, and second-home delayed-purchase branches in both HTMLs. Regression test in `tests/unit/validation-audit/cross-chart-consistency.test.js` (`Regression — C3 fix` block) pins the 3 affected personas at delta ≤ $1000. Tests: 411/411 passing post-fix.
+
+**Remaining 1 DEFERRED**: `RR-edge-fire-at-endage` (delta $74,616) — degenerate harness edge case where persona has `endAge: 70, fireAge: 75, annualSpend: 200000` (explicitly designed infeasible). Harness `_resolveFireAge` falls back to `currentAge + safeYears = 75 > endAge`. This is a harness wiring issue, not a calc bug; cannot arise from real user inputs (UI clamps `fireAge ≤ endAge`). Tracked under B-020-7 below.
+
+### ~~B-020-3. Already-retired verdict pill UX~~ — RESOLVED incidentally in Phase 11 (2026-04-30)
+
+**1 MEDIUM finding (C2)**. `RR-edge-already-retired` (currentAge=65 ≥ planAge) showed pill 99% / progress card 108.9% — formula divergence. Cleared as a side effect of the B-020-1 fix (gate semantics tightening). The standalone "dedicated already-retired pill format" UX item remains a polish backlog item but is not blocking the audit.
+
+### B-020-4. Strategy ranker integer-year hysteresis
+
+**17 LOW findings (E3)** (was 20; 3 cleared incidentally by B-020-1 fix). Ranker winner flips under ±0.01yr age perturbation across multiple personas (`trad-first ↔ bracket-fill-smoothed`, `proportional ↔ conventional`). Knife-edge near integer ages. Fix: add ±0.05yr hysteresis OR quantize the ranker's age input to monthly precision.
+
+### B-020-5. Phase 4 Edge Case 4 — true fractional-year DWZ feasibility
+
+`calc/fireAgeResolver.js` defaults to option (c) per contract: month-precision is UI display only; year-level feasibility check is unchanged. True month-level feasibility would require extending `simulateRetirementOnlySigned` to pro-rate the FIRE-year row by `(1 - m/12)`. Defer until users complain that the displayed months look misaligned with actual retire-now semantics.
+
+### B-020-7. Harness fireAge bound enforcement
+
+**1 HIGH finding (C3 — `RR-edge-fire-at-endage`)**. The harness `_resolveFireAge` returns `currentAge + safeYears` regardless of `endAge`, so degenerate personas where `safeYears` makes `fireAge > endAge` produce spurious endBalance-mismatch warnings (signed-sim and chart-sim execute different code paths when the loop bound is exceeded). Fix: clamp the fallback to `min(currentAge + safeYears, endAge - 1)` in `tests/unit/validation-audit/harness.js::_resolveFireAge`. Trivial fix (~5 LOC); deferred only because it doesn't reflect a real calc-layer issue.
+
+### B-020-6. Audit harness drives in CI
+
+Phase 10 ran the full audit manually. Future: add a CI job that runs `node --test tests/unit/validation-audit/` on every PR and posts findings count to PR comments. Lets us catch regressions in mode ordering / end-state / cross-chart consistency without re-running the full audit by hand.
