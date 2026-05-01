@@ -1249,11 +1249,27 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | `sidebar.mortgageStatus.placeholder` | (empty) | (empty) |
 
 
-## Feature 021 — Tax Expense Category + Audit Cleanup (3)
+## Feature 021 — Tax Expense Category + Audit Cleanup (8)
+
+### US3 — Investment-tab Auto-rate toggle
 
 | Key | EN | zh-TW |
 |---|---|---|
 | `invest.taxRateAuto` | Auto | 自動 |
 | `invest.taxRateAutoLabel` | Auto: {0}% | 自動: {0}% |
 | `invest.taxRateAutoTooltip` | Use progressive US tax brackets + FICA. Toggle off to enter a flat rate manually. | 使用美國累進稅率 + FICA。關閉切換可手動輸入單一稅率。 |
+
+### US1 + US2 — Plan-tab Tax expense category
+
+Added 2026-05-01 alongside `calc/taxExpenseRow.js`. Both EN + zh-TW keys live in
+`TRANSLATIONS.en` + `TRANSLATIONS.zh` of `FIRE-Dashboard.html` and
+`FIRE-Dashboard-Generic.html` (lockstep).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `expenses.tax.category` | Tax | 稅 |
+| `expenses.tax.income` | Income tax | 所得稅 |
+| `expenses.tax.incomeTooltip` | Income tax = federal income tax + FICA (Social Security + Medicare). Computed automatically from your gross income, pretax 401(k) contributions, filing status, and the 2024 IRS / SSA tables. Already deducted from your income on the savings side; does NOT add to your monthly spend budget. | 所得稅 = 聯邦所得稅 + FICA（社會安全稅 + 醫療保險稅）。根據您的總收入、稅前 401(k) 提撥、申報狀態以及 2024 年 IRS / SSA 稅表自動計算。已從收入端扣除，不計入月支出預算。 |
+| `expenses.tax.other` | Other tax | 其他稅 |
+| `expenses.tax.otherPlaceholder` | e.g., state income tax, sales tax | 例如：州所得稅、銷售稅 |
 
