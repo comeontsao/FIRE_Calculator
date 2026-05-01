@@ -8476,6 +8476,12 @@ function renderStrategyComparePanel(ranking) {
     tie.strategyIds.forEach(id => { tiesByStrategyId[id] = tie.rank; });
   });
   const previewId = (typeof _previewStrategyId !== 'undefined') ? _previewStrategyId : null;
+  // FRAME: conversion (Wave 4b) — surface Book Value companions for the two
+  // $-valued comparison columns. earliestFeasibleFireAge and ranks are pure-data.
+  const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
+  const _kpi = (typeof _lastKpiSnapshot !== 'undefined') ? _lastKpiSnapshot : null;
+  const _curAge = _kpi && typeof _kpi.currentAge === 'number' ? _kpi.currentAge : null;
+  const _infl = _kpi && typeof _kpi.inflationRate === 'number' ? _kpi.inflationRate : null;
   const rowsHtml = nonWinners.map((r, idx) => {
     const policy = policies[r.strategyId];
     const name = policy ? t(policy.nameKey) : r.strategyId;
@@ -8496,10 +8502,22 @@ function renderStrategyComparePanel(ranking) {
       ? `⚠ ${t('withdrawal.compare.previewAction')}`
       : t('withdrawal.compare.previewAction');
     const previewBtn = `<button onclick="setPreviewStrategy('${r.strategyId}'); if (typeof renderRothLadder === 'function' && typeof getInputs === 'function') try { renderRothLadder(getInputs()); } catch (_e) {} if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') try { renderGrowthChart(getInputs()); } catch (_e) {} if (typeof renderLifecycleSidebarChart === 'function') try { renderLifecycleSidebarChart(null); } catch (_e) {} if (typeof renderWithdrawalPreviewBanner === 'function') renderWithdrawalPreviewBanner(); if (typeof renderStrategyComparePanel === 'function') renderStrategyComparePanel(_lastStrategyResults);" style="${previewStyle}">${previewLabel}</button>`;
+    // FRAME: nominal-$ — convert end-of-plan net worth + lifetime tax to Book
+    // Value at the relevant projection age. Uses earliestFeasibleFireAge as
+    // the conversion reference age (closest projection point we have).
+    let endNwBV = r.endOfPlanNetWorthReal;
+    let taxBV = r.lifetimeFederalTaxReal;
+    try {
+      if (_conv && _curAge != null && _infl != null
+          && typeof r.earliestFeasibleFireAge === 'number') {
+        endNwBV = _conv.toBookValue(r.endOfPlanNetWorthReal, r.earliestFeasibleFireAge, _curAge, _infl);
+        taxBV = _conv.toBookValue(r.lifetimeFederalTaxReal, r.earliestFeasibleFireAge, _curAge, _infl);
+      }
+    } catch (_e) { /* fall through to real-$ */ }
     return `<tr style="${rowStyle}"${tooltipAttr}>
       <td style="padding:6px 8px"><span style="color:var(--text-dim);font-size:0.82em">${rankLabel}.</span> <strong>${name}</strong></td>
-      <td style="padding:6px 8px;text-align:right">$${Math.round(r.endOfPlanNetWorthReal).toLocaleString()}</td>
-      <td style="padding:6px 8px;text-align:right">$${Math.round(r.lifetimeFederalTaxReal).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right">$${Math.round(endNwBV).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right">$${Math.round(taxBV).toLocaleString()}</td>
       <td style="padding:6px 8px;text-align:right">${r.earliestFeasibleFireAge}</td>
       <td style="padding:6px 8px">${previewBtn}</td>
     </tr>`;
@@ -8577,8 +8595,14 @@ function renderKpiCards(state) {
       : '—';
   }
   if (fireNumEl) {
-    fireNumEl.textContent = Number.isFinite(snap.accessibleFireNum)
-      ? '$' + Math.round(snap.accessibleFireNum).toLocaleString()
+    // FRAME: nominal-$ (Wave 4b / FR-001k) — FIRE NUMBER displays Book Value
+    // when companion is available; falls back to real-$ if conversion failed.
+    const _fireNumBV = Number.isFinite(snap.fireNumberBookValue)
+      ? snap.fireNumberBookValue
+      : (Number.isFinite(snap.accessibleFireNumBookValue)
+          ? snap.accessibleFireNumBookValue : snap.accessibleFireNum);
+    fireNumEl.textContent = Number.isFinite(_fireNumBV)
+      ? '$' + Math.round(_fireNumBV).toLocaleString()
       : '—';
   }
   if (fireNumSubEl) {
@@ -8664,11 +8688,20 @@ function renderLifecycleSidebarChart(_state) {
     ? lifecycle.findIndex(function (d) { return d.age === ds.calculatedFireAge; })
     : -1;
 
-  const totals = lifecycle.map(function (r) { return (typeof r.total === 'number') ? Math.round(r.total) : 0; });
-  const pTrad = lifecycle.map(function (r) { return (typeof r.p401kTrad === 'number') ? Math.round(r.p401kTrad) : 0; });
-  const pRoth = lifecycle.map(function (r) { return (typeof r.p401kRoth === 'number') ? Math.round(r.p401kRoth) : 0; });
-  const pStocks = lifecycle.map(function (r) { return (typeof r.pStocks === 'number') ? Math.round(r.pStocks) : 0; });
-  const pCash = lifecycle.map(function (r) { return (typeof r.pCash === 'number') ? Math.round(r.pCash) : 0; });
+  // FRAME: nominal-$ (Wave 4b) — sidebar mirrors the primary growth chart's
+  // Book Value series. The lifecycle array was extended with *BookValue
+  // companions in renderGrowthChart; the sidebar reads them with real-$
+  // fallback for safety.
+  const _bvOrReal = (r, field) => {
+    const bv = r[field + 'BookValue'];
+    if (typeof bv === 'number') return Math.round(bv);
+    return (typeof r[field] === 'number') ? Math.round(r[field]) : 0;
+  };
+  const totals = lifecycle.map(function (r) { return _bvOrReal(r, 'total'); });
+  const pTrad = lifecycle.map(function (r) { return _bvOrReal(r, 'p401kTrad'); });
+  const pRoth = lifecycle.map(function (r) { return _bvOrReal(r, 'p401kRoth'); });
+  const pStocks = lifecycle.map(function (r) { return _bvOrReal(r, 'pStocks'); });
+  const pCash = lifecycle.map(function (r) { return _bvOrReal(r, 'pCash'); });
   const fireMarker = lifecycle.map(function (_d, i) { return i === fireIdx ? totals[i] : null; });
   const unlockMarker = lifecycle.map(function (d, i) { return d.age === 60 ? totals[i] : null; });
   const ssMarker = lifecycle.map(function (_d, i) { return i === ssIdx ? totals[i] : null; });
@@ -12643,6 +12676,40 @@ function _renderBookValueCaption(containerEl, inflationRate) {
   captionEl.textContent = `Book Value at ${pct}% assumed annual inflation`;
 }
 
+// _extendRowsWithBookValues — feature 022 Wave 4b (US1 / FR-008d)
+//
+// FRAME: conversion (real-$ array rows → nominal-$ companion fields)
+//
+// Helper that extends an array of row objects (e.g., the lifecycle array
+// returned from projectFullLifecycle, the withdrawal-strategy rows, the
+// drawdown rows, etc.) with <field>BookValue companions for a given list
+// of $-valued fields. Each row must have a numeric `age` property; rows
+// without one are left untouched.
+//
+// This keeps render functions FR-008d-compliant: the renderer simply calls
+// this helper to "extend the snapshot" with companions for its data, then
+// reads <field>BookValue directly from the row objects when wiring Chart.js
+// data. The renderer never calls displayConverter.toBookValue per-data-point.
+//
+// Usage:
+//   _extendRowsWithBookValues(lifecycle, inp.ageRoger, inp.inflationRate,
+//     ['total','p401k','pStocks','pCash','pRoth']);
+//   // now lifecycle[i].totalBookValue etc. are populated
+function _extendRowsWithBookValues(rows, currentAge, inflationRate, fieldList) {
+  if (!Array.isArray(rows) || typeof currentAge !== 'number'
+      || typeof inflationRate !== 'number' || !Array.isArray(fieldList)) return;
+  const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
+  if (!_conv || typeof _conv.toBookValue !== 'function') return;
+  for (const row of rows) {
+    if (!row || typeof row.age !== 'number') continue;
+    for (const field of fieldList) {
+      const realVal = row[field];
+      // FRAME: conversion (real-$ row[field] → nominal-$ row[field+'BookValue'])
+      row[field + 'BookValue'] = _conv.toBookValue(realVal, row.age, currentAge, inflationRate);
+    }
+  }
+}
+
 // ==================== RENDER ALL ====================
 // FRAME (feature 022 / FR-009):
 //   Dominant frame: mixed (recalc pipeline reads getInputs() real-$ scalars,
@@ -12872,14 +12939,32 @@ function recalcAll() {
     }
   }
 
+  // FRAME: nominal-$ companions (Wave 4b / FR-001k, FR-008d) — KPI cards for
+  // FIRE NUMBER + Total Portfolio at FIRE display Book Value. Current Net
+  // Worth + locked are year-0 values (real-$ === nominal-$); no companion
+  // needed (FR-006).
+  let _accessibleFireNumBookValue = null;
+  let _totalFireNumBookValue = null;
+  try {
+    if (typeof globalThis !== 'undefined' && globalThis.displayConverter
+        && typeof inp.inflationRate === 'number' && typeof fireAge === 'number') {
+      _accessibleFireNumBookValue = globalThis.displayConverter.toBookValue(
+        totalFireNum, fireAge, inp.agePerson1, inp.inflationRate);
+      _totalFireNumBookValue = _accessibleFireNumBookValue;
+    }
+  } catch (_e) { /* fall back to real-$ if converter unavailable */ }
   _lastKpiSnapshot = {
     accessible,
     locked,
     accessibleFireNum: totalFireNum,
+    accessibleFireNumBookValue: _accessibleFireNumBookValue,
+    fireNumberBookValue: _accessibleFireNumBookValue,
+    totalAtFireBookValue: _totalFireNumBookValue,
     progress,
     yrsToFire,
     fireAge,
     currentAge: inp.agePerson1,
+    inflationRate: inp.inflationRate,
     scenarioFlag: scenario.flag,
     mortgageEnabled,
     fireAgeResult: _fireAgeResult,
@@ -13734,16 +13819,26 @@ function renderRothLadder(inp) {
     return;
   }
 
+  // FRAME: conversion (Wave 4b / FR-001b, FR-008d) — extend strategy rows
+  // with BookValue companions for each $-valued field consumed below.
+  try {
+    if (typeof _extendRowsWithBookValues === 'function') {
+      _extendRowsWithBookValues(result.strategy, inp.agePerson1, inp.inflationRate,
+        ['ssIncome','wTrad','wRoth','wStocks','wCash','syntheticConversion','withdraw','grossIncome']);
+    }
+  } catch (_e) { /* defensive */ }
+
   const labels = result.strategy.map(r => `${r.age}`);
-  const ssData = result.strategy.map(r => r.ssIncome);
-  const tradData = result.strategy.map(r => r.wTrad);
+  // FRAME: nominal-$ (Wave 4b) — chart series read *BookValue companions.
+  const ssData = result.strategy.map(r => r.ssIncomeBookValue ?? r.ssIncome);
+  const tradData = result.strategy.map(r => r.wTradBookValue ?? r.wTrad);
   // T022 (feature-007 §Change 1) — bracket-fill excess routed into taxable stocks.
   // Stacks between Trad and Roth in a distinct hue so the eye distinguishes
   // "Trad used for spend" from "Trad routed to taxable".
-  const bracketFillExcessData = result.strategy.map(r => r.syntheticConversion || 0);
-  const rothData = result.strategy.map(r => r.wRoth);
-  const stocksData = result.strategy.map(r => r.wStocks);
-  const cashData = result.strategy.map(r => r.wCash);
+  const bracketFillExcessData = result.strategy.map(r => r.syntheticConversionBookValue ?? (r.syntheticConversion || 0));
+  const rothData = result.strategy.map(r => r.wRothBookValue ?? r.wRoth);
+  const stocksData = result.strategy.map(r => r.wStocksBookValue ?? r.wStocks);
+  const cashData = result.strategy.map(r => r.wCashBookValue ?? r.wCash);
   const effRateData = result.strategy.map(r => r.effRate * 100);
 
   // T034 (feature-007 §Change 2) — IRMAA horizontal threshold line.
@@ -13825,17 +13920,26 @@ function renderRothLadder(inp) {
         legend: { position: 'top', labels: { color: '#e8e8ee', font: { size: 12 } } },
         tooltip: {
           callbacks: {
+            // FRAME: nominal-$ primary (Wave 4b). Bar values are Book Value;
+            // tax-rate axis (y1) is unitless %.
             label: (ctx) => {
               const v = ctx.parsed.y;
               if (ctx.dataset.yAxisID === 'y1') return `${ctx.dataset.label}: ${v.toFixed(1)}%`;
-              return `${ctx.dataset.label}: $${(v/1000).toFixed(1)}K`;
+              const _bvSuffix = (typeof t === 'function')
+                ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
+              return `${ctx.dataset.label}: $${(v/1000).toFixed(1)}K${_bvSuffix}`;
             },
             afterBody: (items) => {
               if (!items.length) return '';
               const idx = items[0].dataIndex;
               const r = result.strategy[idx];
+              // FR-003: purchasing-power companion line for the bar-chart row.
+              const totalRealK = ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1);
+              const _ppSuffix = (typeof t === 'function')
+                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
               const lines = [
                 ``,
+                `≈ $${totalRealK}K ${_ppSuffix}`,
                 t('tw.tooltip.totalDrawn', ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1)),
                 t('tw.tooltip.taxOwed', (r.taxOwed/1000).toFixed(1), (r.effRate*100).toFixed(1)),
                 t('tw.tooltip.ordIncome', (r.ordIncome/1000).toFixed(1)),
@@ -13885,6 +13989,14 @@ function renderRothLadder(inp) {
   });
   // Feature 013 (T018) — register with the tab router for resize-on-activate.
   if (window.tabRouter) window.tabRouter.registerChart('withdrawal', _rothLadderChart);
+  // FRAME: conversion (Wave 4b) — render Book Value caption near the chart.
+  try {
+    const _wrap = canvas.parentElement;
+    if (_wrap && typeof _renderBookValueCaption === 'function'
+        && typeof inp.inflationRate === 'number') {
+      _renderBookValueCaption(_wrap, inp.inflationRate);
+    }
+  } catch (_e) { /* caption is decorative */ }
 }
 
 // ==================== SCALE INDICATOR (Feature 010 US3) ====================
@@ -14917,9 +15029,23 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
   const ctx = canvas.getContext('2d');
   if (charts_pviWealth) { try { charts_pviWealth.destroy(); } catch (_e) {} }
 
+  // FRAME: conversion (Wave 4b) — extend PvI path rows with BookValue companions.
+  try {
+    if (typeof _extendRowsWithBookValues === 'function'
+        && typeof _lastKpiSnapshot !== 'undefined' && _lastKpiSnapshot
+        && typeof _lastKpiSnapshot.currentAge === 'number'
+        && typeof _lastKpiSnapshot.inflationRate === 'number') {
+      _extendRowsWithBookValues(outputs.prepayPath, _lastKpiSnapshot.currentAge,
+        _lastKpiSnapshot.inflationRate, ['liquidNetWorth','total']);
+      _extendRowsWithBookValues(outputs.investPath, _lastKpiSnapshot.currentAge,
+        _lastKpiSnapshot.inflationRate, ['liquidNetWorth','total']);
+    }
+  } catch (_e) { /* defensive — fall back to real-$ */ }
+
   const ageLabels = outputs.prepayPath.map((r) => 'age ' + r.age);
-  const prepayData = outputs.prepayPath.map((r) => r.liquidNetWorth);
-  const investData = outputs.investPath.map((r) => r.liquidNetWorth);
+  // FRAME: nominal-$ (Wave 4b / FR-001g) — read BookValue when available.
+  const prepayData = outputs.prepayPath.map((r) => r.liquidNetWorthBookValue ?? r.liquidNetWorth);
+  const investData = outputs.investPath.map((r) => r.liquidNetWorthBookValue ?? r.liquidNetWorth);
 
   const datasets = [
     {
@@ -15048,9 +15174,23 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
         tooltip: {
           mode: 'index', intersect: false,
           callbacks: {
+            // FRAME: nominal-$ primary + purchasing-power companion (FR-003).
             label: (tCtx) => {
               if (tCtx.parsed.y === null || tCtx.parsed.y === undefined) return null;
-              return tCtx.dataset.label + ': $' + Math.round(tCtx.parsed.y).toLocaleString();
+              const _bvSuffix = (typeof t === 'function')
+                ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
+              return tCtx.dataset.label + ': $' + Math.round(tCtx.parsed.y).toLocaleString() + _bvSuffix;
+            },
+            afterBody: (items) => {
+              if (!items || !items.length) return null;
+              const item = items[0];
+              const dsIdx = item.datasetIndex;
+              const i = item.dataIndex;
+              const path = (dsIdx === 0 ? outputs.prepayPath : (dsIdx === 1 ? outputs.investPath : null));
+              if (!path || !path[i] || typeof path[i].liquidNetWorth !== 'number') return null;
+              const _ppSuffix = (typeof t === 'function')
+                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              return `≈ $${Math.round(path[i].liquidNetWorth).toLocaleString()} ${_ppSuffix}`;
             },
           },
         },
@@ -15074,6 +15214,15 @@ function renderPayoffVsInvestBrokerageChart(outputs) {
     },
   });
   if (window.tabRouter) window.tabRouter.registerChart('payoff-invest', charts_pviWealth);
+  // FRAME: conversion (Wave 4b) — render Book Value caption near the chart.
+  try {
+    const _wrap = canvas.parentElement;
+    if (_wrap && typeof _renderBookValueCaption === 'function'
+        && typeof _lastKpiSnapshot !== 'undefined' && _lastKpiSnapshot
+        && typeof _lastKpiSnapshot.inflationRate === 'number') {
+      _renderBookValueCaption(_wrap, _lastKpiSnapshot.inflationRate);
+    }
+  } catch (_e) { /* caption is decorative */ }
 }
 
 function renderPayoffVsInvestAmortizationChart(outputs) {
@@ -15536,6 +15685,9 @@ document.addEventListener('DOMContentLoaded', function _bindPviStrategyRadios() 
 //          Cash | Total. The FIRE-age row gets a red tint + 🔥 suffix.
 // Consumers: companion to renderGrowthChart on the Retirement → Lifecycle pill.
 // =============================================================================
+// FRAME: nominal-$ (Wave 4b / FR-001n, FR-007) — companion table beneath the
+// Lifecycle chart. $-valued columns gain "(Book Value)" suffix per FR-007 and
+// read *BookValue companions populated by the chart renderer.
 function renderLifecycleAssetTable(lifecycle, fireAge) {
   const wrap = document.getElementById('lifecycleAssetTable');
   if (!wrap) return;
@@ -15544,14 +15696,16 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
     return;
   }
   const fmt = (n) => '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString();
+  const _bvSuffix = (typeof t === 'function')
+    ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
   const headers = [
     t('lifecycle.assetTable.col.year'),
     t('lifecycle.assetTable.col.age'),
-    t('lifecycle.assetTable.col.trad'),
-    t('lifecycle.assetTable.col.roth'),
-    t('lifecycle.assetTable.col.stocks'),
-    t('lifecycle.assetTable.col.cash'),
-    t('lifecycle.assetTable.col.total'),
+    t('lifecycle.assetTable.col.trad') + _bvSuffix,
+    t('lifecycle.assetTable.col.roth') + _bvSuffix,
+    t('lifecycle.assetTable.col.stocks') + _bvSuffix,
+    t('lifecycle.assetTable.col.cash') + _bvSuffix,
+    t('lifecycle.assetTable.col.total') + _bvSuffix,
   ];
   const headHtml = '<thead><tr>'
     + headers.map((h) => '<th>' + h + '</th>').join('')
@@ -15562,11 +15716,11 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
     return '<tr' + cls + '>'
       + '<td>' + d.year + '</td>'
       + '<td>' + d.age + '</td>'
-      + '<td>' + fmt(d.p401kTrad) + '</td>'
-      + '<td>' + fmt(d.p401kRoth) + '</td>'
-      + '<td>' + fmt(d.pStocks) + '</td>'
-      + '<td>' + fmt(d.pCash) + '</td>'
-      + '<td>' + fmt(d.total) + '</td>'
+      + '<td>' + fmt(d.p401kTradBookValue ?? d.p401kTrad) + '</td>'
+      + '<td>' + fmt(d.p401kRothBookValue ?? d.p401kRoth) + '</td>'
+      + '<td>' + fmt(d.pStocksBookValue ?? d.pStocks) + '</td>'
+      + '<td>' + fmt(d.pCashBookValue ?? d.pCash) + '</td>'
+      + '<td>' + fmt(d.totalBookValue ?? d.total) + '</td>'
       + '</tr>';
   }).join('') + '</tbody>';
   wrap.innerHTML = '<table class="lifecycle-asset-table">' + headHtml + bodyHtml + '</table>';
@@ -15636,6 +15790,14 @@ function renderGrowthChart(inp) {
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true, _chartOpts);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.agePerson1;
+  // FRAME: conversion (Wave 4b / FR-008d) — extend lifecycle rows with *BookValue
+  // companions so the chart's data: maps below read BookValue directly.
+  try {
+    if (typeof _extendRowsWithBookValues === 'function') {
+      _extendRowsWithBookValues(lifecycle, inp.agePerson1, inp.inflationRate,
+        ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth']);
+    }
+  } catch (_e) { /* defensive — render real-$ if helper unavailable */ }
   // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
   _lastLifecycleDataset = {
     lifecycle,
@@ -15662,17 +15824,21 @@ function renderGrowthChart(inp) {
   const originalFireIdx = hasOverride ? lifecycle.findIndex(d => d.age === calculatedFireAge) : -1;
 
   // Point markers
-  const fireMarker = lifecycle.map((d, i) => i === fireIdx ? Math.round(d.total) : null);
-  const ssMarker = lifecycle.map((d, i) => i === ssIdx ? Math.round(d.total) : null);
+  // FRAME: nominal-$ (Wave 4b) — markers read totalBookValue (Book Value).
+  const fireMarker = lifecycle.map((d, i) => i === fireIdx ? Math.round(d.totalBookValue ?? d.total) : null);
+  const ssMarker = lifecycle.map((d, i) => i === ssIdx ? Math.round(d.totalBookValue ?? d.total) : null);
   const ghostFireMarker = originalFireIdx >= 0
-    ? lifecycle.map((d, i) => i === originalFireIdx ? Math.round(d.total) : null)
+    ? lifecycle.map((d, i) => i === originalFireIdx ? Math.round(d.totalBookValue ?? d.total) : null)
     : lifecycle.map(() => null);
 
   // Build datasets
+  // FRAME: nominal-$ (Wave 4b / FR-001a, FR-008d) — Chart.js data series read
+  // *BookValue companions populated via _extendRowsWithBookValues above.
+  // Tooltip companion line shows the real-$ purchasing-power equivalent.
   const datasets = [
     {
       label: t('chart.lifecycle.totalPortfolio'),
-      data: lifecycle.map(d => Math.round(d.total)),
+      data: lifecycle.map(d => Math.round(d.totalBookValue ?? d.total)),
       borderColor: __fireChartColor('accent'),
       backgroundColor: 'rgba(108,99,255,0.08)',
       fill: true,
@@ -15708,7 +15874,7 @@ function renderGrowthChart(inp) {
     },
     {
       label: t('chart.lifecycle.tradLine'),
-      data: lifecycle.map(d => Math.round(d.p401kTrad)),
+      data: lifecycle.map(d => Math.round(d.p401kTradBookValue ?? d.p401kTrad)),
       borderColor: 'rgba(0,212,170,0.55)',
       borderDash: [5,5],
       tension: 0,
@@ -15718,7 +15884,7 @@ function renderGrowthChart(inp) {
     },
     {
       label: t('chart.lifecycle.rothLine'),
-      data: lifecycle.map(d => Math.round(d.p401kRoth)),
+      data: lifecycle.map(d => Math.round(d.p401kRothBookValue ?? d.p401kRoth)),
       borderColor: 'rgba(132,108,255,0.55)',
       borderDash: [5,5],
       tension: 0,
@@ -15728,7 +15894,7 @@ function renderGrowthChart(inp) {
     },
     {
       label: t('chart.lifecycle.stocks'),
-      data: lifecycle.map(d => Math.round(d.pStocks)),
+      data: lifecycle.map(d => Math.round(d.pStocksBookValue ?? d.pStocks)),
       borderColor: 'rgba(255,217,61,0.55)',
       borderDash: [5,5],
       tension: 0,
@@ -15738,7 +15904,7 @@ function renderGrowthChart(inp) {
     },
     {
       label: t('chart.lifecycle.cashLine'),
-      data: lifecycle.map(d => Math.round(d.pCash)),
+      data: lifecycle.map(d => Math.round(d.pCashBookValue ?? d.pCash)),
       borderColor: 'rgba(170,180,200,0.55)',
       borderDash: [5,5],
       tension: 0,
@@ -15781,7 +15947,7 @@ function renderGrowthChart(inp) {
   datasets.push(
     {
       label: t('chart.lifecycle.unlock401k'),
-      data: lifecycle.map((d, i) => d.age === 60 ? Math.round(d.total) : null),
+      data: lifecycle.map((d, i) => d.age === 60 ? Math.round(d.totalBookValue ?? d.total) : null),
       borderColor: '#ffd93d',
       backgroundColor: '#ffd93d',
       pointRadius: 8,
@@ -15809,7 +15975,8 @@ function renderGrowthChart(inp) {
   if (rule55Applies) {
     const rule55Row = lifecycle.find(d => d.age === 55);
     if (rule55Row) {
-      const rule55Marker = lifecycle.map(d => d.age === 55 ? Math.round(rule55Row.total) : null);
+      // FRAME: nominal-$ (Wave 4b) — rule55 marker reads totalBookValue.
+      const rule55Marker = lifecycle.map(d => d.age === 55 ? Math.round(rule55Row.totalBookValue ?? rule55Row.total) : null);
       datasets.push({
         label: t('chart.rule55Unlock'),
         data: rule55Marker,
@@ -15953,6 +16120,9 @@ function renderGrowthChart(inp) {
           mode: 'index',
           intersect: false,
           callbacks: {
+            // FRAME: nominal-$ primary + purchasing-power companion (FR-003).
+            // The Chart.js parsed.y is now Book Value; the companion afterBody
+            // emits the real-$ purchasing-power equivalent for the hovered row.
             label: (tCtx) => {
               if (tCtx.parsed.y === null || tCtx.parsed.y === undefined) return null;
               // Markers (FIRE / 401K Unlocks / SS) are point-only datasets
@@ -15962,18 +16132,32 @@ function renderGrowthChart(inp) {
               const ds = tCtx.dataset || {};
               if (ds.showLine === false) return null;
               const d = lifecycle[tCtx.dataIndex];
-              if (!d) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}`;
+              const _bvSuffix = (typeof t === 'function')
+                ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
+              if (!d) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}${_bvSuffix}`;
               // Only annotate the Total Portfolio series with phase + flow
               // context (the asset lines just show their pool balance).
               const isTotal = tCtx.datasetIndex === 0;
-              if (!isTotal) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}`;
+              if (!isTotal) return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}${_bvSuffix}`;
               const phaseLabels = { 'accumulation': 'Saving', 'phase1-taxable-only': 'Phase 1: Taxable Only (401K locked)', 'phase2-401k-unlocked': 'Phase 2: 401K Unlocked', 'phase3-with-ss': 'Phase 3: With SS' };
               const phase = phaseLabels[d.phase] || d.phase;
               const extra = d.phase !== 'accumulation'
                 ? ` | Withdrawing $${Math.round(d.withdrawal).toLocaleString()}/yr` + (d.ssIncome > 0 ? ` | SS: $${Math.round(d.ssIncome).toLocaleString()}/yr` : '')
                 : ` | Contributing $${Math.round(d.contribution).toLocaleString()}/yr`;
-              return `${ds.label}: $${tCtx.parsed.y.toLocaleString()} [${phase}]${extra}`;
-            }
+              return `${ds.label}: $${tCtx.parsed.y.toLocaleString()}${_bvSuffix} [${phase}]${extra}`;
+            },
+            // FR-003: purchasing-power companion line. Uses lifecycle[i].total
+            // (real-$) as the inverse-converted reference; renderer reads pre-
+            // computed real-$ field, no per-tooltip displayConverter call.
+            afterBody: (items) => {
+              if (!items || !items.length) return null;
+              const item = items[0];
+              const d = lifecycle[item.dataIndex];
+              if (!d || typeof d.total !== 'number') return null;
+              const _ppSuffix = (typeof t === 'function')
+                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              return `≈ $${Math.round(d.total).toLocaleString()} ${_ppSuffix}`;
+            },
           }
         }
       },
@@ -16144,9 +16328,20 @@ function renderCountryChart(inp) {
   // computeScenarioFireFigures. Without this, flipping between country targets
   // would shift every bar because the selected country's costs would bleed
   // into every other country's calc.
+  // FRAME: nominal-$ (Wave 4b / FR-001h) — extend each scenario's fireNum with
+  // a Book Value companion at the projected fireAge.
+  const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
   const sorted = scenarios.map(s => {
     const { yrs, fireNum } = computeScenarioFireFigures(inp, s);
-    return { ...s, yrs, fireNum };
+    let fireNumBookValue = fireNum;
+    try {
+      if (_conv && typeof _conv.toBookValue === 'function'
+          && typeof inp.inflationRate === 'number') {
+        fireNumBookValue = _conv.toBookValue(fireNum, inp.agePerson1 + yrs,
+          inp.agePerson1, inp.inflationRate);
+      }
+    } catch (_e) { /* fall back to real-$ */ }
+    return { ...s, yrs, fireNum, fireNumBookValue };
   }).sort((a, b) => a.yrs - b.yrs);
 
   // Color by language advantage
@@ -16174,7 +16369,9 @@ function renderCountryChart(inp) {
         {
           label: t('country.card.bridgeAtFire'),
           order: 1,
-          data: sorted.map(s => s.fireNum),
+          // FRAME: nominal-$ (Wave 4b / FR-001h) — Bridge $ amount at FIRE age
+          // is a projection-time value; render Book Value when companion exists.
+          data: sorted.map(s => s.fireNumBookValue ?? s.fireNum),
           type: 'line',
           borderColor: '#00d4aa',
           backgroundColor: 'rgba(0,212,170,0.2)',
@@ -16199,13 +16396,27 @@ function renderCountryChart(inp) {
         },
         tooltip: {
           callbacks: {
+            // FRAME: nominal-$ + purchasing-power companion (FR-003) for the
+            // Bridge $ datapoint; years datapoint is unitless (years).
             label: (ctx) => {
               if (ctx.datasetIndex === 0) {
                 const s = sorted[ctx.dataIndex];
                 return t('chart.country.tooltipYears', ctx.parsed.y, inp.agePerson1 + ctx.parsed.y, s.lang);
               }
-              return t('chart.country.tooltipBridge', ctx.parsed.y.toLocaleString());
-            }
+              const _bvSuffix = (typeof t === 'function')
+                ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
+              return t('chart.country.tooltipBridge', ctx.parsed.y.toLocaleString()) + _bvSuffix;
+            },
+            afterBody: (items) => {
+              if (!items || !items.length) return null;
+              const item = items[0];
+              if (item.datasetIndex !== 1) return null; // only Bridge $ row
+              const s = sorted[item.dataIndex];
+              if (!s || typeof s.fireNum !== 'number') return null;
+              const _ppSuffix = (typeof t === 'function')
+                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              return `≈ $${Math.round(s.fireNum).toLocaleString()} ${_ppSuffix}`;
+            },
           }
         }
       },
@@ -16228,6 +16439,14 @@ function renderCountryChart(inp) {
   });
   // Feature 013 (T018) — register with the tab router for resize-on-activate.
   if (window.tabRouter) window.tabRouter.registerChart('country-chart', charts.country);
+  // FRAME: conversion (Wave 4b) — render Book Value caption near the chart.
+  try {
+    const _wrap = ctx.canvas.parentElement;
+    if (_wrap && typeof _renderBookValueCaption === 'function'
+        && typeof inp.inflationRate === 'number') {
+      _renderBookValueCaption(_wrap, inp.inflationRate);
+    }
+  } catch (_e) { /* caption is decorative */ }
 }
 
 // ==================== SS DRAWDOWN CHART ====================
@@ -16264,6 +16483,15 @@ function renderSSChart(inp) {
   const withSS = simulateDrawdown(inp, ssChartSpend, fire401k, fireAccessible, fireAge, true);
   const withoutSS = simulateDrawdown(inp, ssChartSpend, fire401k, fireAccessible, fireAge, false);
 
+  // FRAME: conversion (Wave 4b / FR-001c, FR-008d) — extend drawdown rows with
+  // BookValue companions for the chart's $-valued series (`portfolio`).
+  try {
+    if (typeof _extendRowsWithBookValues === 'function') {
+      _extendRowsWithBookValues(withSS, inp.agePerson1, inp.inflationRate, ['portfolio']);
+      _extendRowsWithBookValues(withoutSS, inp.agePerson1, inp.inflationRate, ['portfolio']);
+    }
+  } catch (_e) { /* defensive */ }
+
   charts.ssChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -16271,7 +16499,8 @@ function renderSSChart(inp) {
       datasets: [
         {
           label: t('chart.drawdown.withSS'),
-          data: withSS.map(d => Math.round(d.portfolio)),
+          // FRAME: nominal-$ (Wave 4b) — read portfolioBookValue companion.
+          data: withSS.map(d => Math.round(d.portfolioBookValue ?? d.portfolio)),
           borderColor: '#00d4aa',
           backgroundColor: 'rgba(0,212,170,0.1)',
           fill: true,
@@ -16280,7 +16509,7 @@ function renderSSChart(inp) {
         },
         {
           label: t('chart.drawdown.withoutSS'),
-          data: withoutSS.map(d => Math.round(d.portfolio)),
+          data: withoutSS.map(d => Math.round(d.portfolioBookValue ?? d.portfolio)),
           borderColor: '#ff6b6b',
           backgroundColor: 'rgba(255,107,107,0.1)',
           fill: true,
@@ -16289,7 +16518,7 @@ function renderSSChart(inp) {
         },
         {
           label: t('chart.drawdown.ssStarts', inp.ssClaimAge),
-          data: withSS.map(d => d.age === inp.ssClaimAge ? Math.round(d.portfolio) : null),
+          data: withSS.map(d => d.age === inp.ssClaimAge ? Math.round(d.portfolioBookValue ?? d.portfolio) : null),
           borderColor: '#ffd93d',
           backgroundColor: '#ffd93d',
           pointRadius: 8,
@@ -16312,7 +16541,21 @@ function renderSSChart(inp) {
         },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: $${(ctx.parsed.y || 0).toLocaleString()}`
+            // FRAME: nominal-$ primary (Wave 4b) + purchasing-power companion.
+            label: (ctx) => {
+              const _bvSuffix = (typeof t === 'function')
+                ? ' ' + t('display.frame.bookValueColumnSuffix') : '';
+              return `${ctx.dataset.label}: $${(ctx.parsed.y || 0).toLocaleString()}${_bvSuffix}`;
+            },
+            afterBody: (items) => {
+              if (!items || !items.length) return null;
+              const item = items[0];
+              const arr = (item.datasetIndex === 0 ? withSS : (item.datasetIndex === 1 ? withoutSS : null));
+              if (!arr || !arr[item.dataIndex] || typeof arr[item.dataIndex].portfolio !== 'number') return null;
+              const _ppSuffix = (typeof t === 'function')
+                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              return `≈ $${Math.round(arr[item.dataIndex].portfolio).toLocaleString()} ${_ppSuffix}`;
+            },
           }
         }
       },
@@ -16327,6 +16570,14 @@ function renderSSChart(inp) {
   });
   // Feature 013 (T018) — register with the tab router for resize-on-activate.
   if (window.tabRouter) window.tabRouter.registerChart('drawdown', charts.ssChart);
+  // FRAME: conversion (Wave 4b) — render Book Value caption near the chart.
+  try {
+    const _wrap = ctx.canvas.parentElement;
+    if (_wrap && typeof _renderBookValueCaption === 'function'
+        && typeof inp.inflationRate === 'number') {
+      _renderBookValueCaption(_wrap, inp.inflationRate);
+    }
+  } catch (_e) { /* caption is decorative */ }
 }
 
 // ==================== TIMELINE ====================
