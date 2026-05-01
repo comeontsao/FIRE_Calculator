@@ -419,6 +419,32 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 ---
 
+## Done in feature 021 — Tax Expense Category + Audit-Harness Carry-Forward (2026-05-01)
+
+- **US3 (P1 / MVP-prerequisite) — Progressive bracket calc refactor**: `calc/accumulateToFire.js` v2 → v3. New `_computeYearTax` helper computes federal tax via IRS 2024 progressive brackets (10/12/22/24/32/35/37%) and FICA via SSA 2024 constants (SS 6.2% to wage base $168,600, Medicare 1.45%, additional Medicare 0.9% over $200k single / $250k MFJ). New per-row outputs: `ficaTax`, `federalTaxBreakdown`, `ficaBreakdown`. Flat-rate `taxRate` override path preserved for backwards-compat. New pure-data module `calc/taxBrackets.js` ships the 2024 bracket constants.
+- **US3 Investment-tab Auto toggle**: New "Auto" checkbox next to existing `taxRate` slider in both HTMLs. Default ON for new users / blank `taxRate`; OFF for existing users with non-zero saved `taxRate`. When ON, slider grays out and shows "Auto: 15.8%" effective rate label. Persisted via new localStorage key `taxRateAutoMode`. EN + zh-TW translations.
+- **US1 (P1 / MVP) — Income tax sub-row in Plan-tab Expenses pill**: New top-level **Tax** category with **Income tax** sub-row. Read-only, lock icon, monthly $ + effective rate %. Reads `(federalTax + ficaTax) / 12` from accumulation snapshot — single source of truth per Constitution III. Updates within one animation frame on slider drag. Tooltip explains it's already deducted on income side and does NOT add to monthly spend. Helper module `calc/taxExpenseRow.js`.
+- **US2 (P2) — Other tax manual entry**: Second sub-row under Tax category. Manually editable, sums into `monthlySpend`. Defaults to $0 for ALL countries (the per-country `comfortableSpend` / `normalSpend` budget tiers in `scenarios` array already absorb foreign tax owed by US-citizen retirees per Q2 clarification). Persisted via new localStorage key `exp_tax_other`. The scenarios-array `taxNote` strings surface alongside the row when `selectedScenario !== 'us'`.
+- **US4 (P3) — Strategy ranker hysteresis (B-020-4 carry-forward)**: `calc/strategyRanker.js` adds ±0.05yr equivalent score-margin hysteresis when `previousWinnerId` is provided. New helpers `_newWinnerBeats`, `_scoreDeltaToYears`, `_resolvePrimarySortKey`. PRESERVES Constitution IX (Mode/Objective orthogonality) — hysteresis is a tie-break refinement, not a sort-key change. NOTE: E3 audit findings remained at 17 LOW after fix because the audit's ±0.01yr perturbations cross simulator integer-accumulation-year boundaries (root cause is simulator-discreteness, not ranker noise) — see B-021-1 carry-forward.
+- **US5 (P2) — Audit harness in CI (B-020-6 carry-forward, RESOLVED)**: `.github/workflows/audit.yml` runs validation-audit harness on every push + PR. Posts finding counts as PR comment. CRITICAL fails the build; HIGH warns. 10-min timeout. awk parser sums across multiple harness summary lines.
+- **US6 (P3) — Harness fireAge ≤ endAge clamp (B-020-7 carry-forward, RESOLVED)**: One-line clamp in `tests/unit/validation-audit/harness.js` clears the lone HIGH C3 finding (`RR-edge-fire-at-endage`). Regression test pinned in `cross-chart-consistency.test.js`. **SC-009 (zero HIGH post-fixes) fully satisfied for the first time since feature 020 audit.**
+- **US7 (P3 OPTIONAL) — True fractional-year DWZ feasibility (B-020-5 carry-forward, DEFERRED)**: Investigated; deferred to feature 022 with 6 spec hooks documented. Three cross-cutting risks (monotonic-flip stability, growth-multiplier convention, sub-iteration split) exceed the spec § A4 "~1 day" budget.
+- **New audit invariant family** `tax-bracket-conservation` (`tests/unit/validation-audit/tax-bracket-conservation.test.js`): 5 invariants TBC-1 through TBC-5 running 460 cells (92 personas × 5). 0 findings — the new bracket math passes all conservation invariants on first run.
+- **Lockstep delivery**: both HTMLs shipped together. Test count: 414 → 450 (+36 net new tests, 1 intentional skip). Constitution VIII gate green throughout.
+- Spec / Plan / Tasks / audit-report / CLOSEOUT: see [`specs/021-tax-category-and-audit-cleanup/`](./specs/021-tax-category-and-audit-cleanup/) — awaiting user browser-smoke (T088) before merge to `main`.
+
+## New backlog items from feature 021 audit
+
+### B-021-1. Strategy ranker simulator-discreteness fix (carries 17 E3 LOW)
+
+US4 hysteresis shipped per FR-018, but E3 LOW count remained 17. Root cause: `_simulateStrategyLifetime`'s accumulation loop iterates integer years; `yrsToFire = fireAge − inp.agePerson1` truncates to integer; a 0.01yr perturbation shifts `yrsToFire` by a full year, producing score deltas of 0.08–11.44 years (above the 0.05yr hysteresis threshold). Fix: extend `_simulateStrategyLifetime` to accept fractional accumulation horizons OR quantize ranker age input to monthly precision before simulator iteration. Bundle with B-021-2 in feature 022 since both touch simulator integer-year handling.
+
+### B-021-2. US7 fractional-year DWZ feasibility (carries B-020-5)
+
+Investigated in feature 021 US7; deferred to feature 022 with 6 spec hooks: pick growth-multiplier convention (linear vs exponential), sub-iteration split at age 59.5 / `ssClaimAge` thresholds, tighten / replace monotonic-flip tolerance, add real-persona fractional-year tests, add `month-precision-feasibility` audit invariant, flip `month-precision-resolver.contract.md` Edge Case 4 default from (c) to (b). See `specs/021-tax-category-and-audit-cleanup/audit-report.md` Phase 9 deferral section for full rationale.
+
+---
+
 ## Done in feature 020 — Validation Audit + Cash-flow Rewrite (2026-04-30)
 
 - **US4 (P1 / MVP) — Cash-flow calc engine rewrite**: `calc/accumulateToFire.js` v2 algorithm tracks per-year `grossIncome`, `federalTax`, `annualSpending`, `pretax401kEmployee`, `empMatchToTrad`, `stockContribution`, `cashFlowToCash`, `cashFlowWarning`. Tax base per IRS Topic 424 (`(grossIncome − pretax401kEmployee) × taxRate`); employer match flows direct to Trad. Override hook: `pviCashflowOverrideEnabled` + `pviCashflowOverride`. Negative residual clamps cashFlow to $0 + emits `cashFlowWarning='NEGATIVE_RESIDUAL'`. Conservation invariant verified for RR-baseline ($0 exact).
@@ -445,18 +471,18 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 **1 MEDIUM finding (C2)**. `RR-edge-already-retired` (currentAge=65 ≥ planAge) showed pill 99% / progress card 108.9% — formula divergence. Cleared as a side effect of the B-020-1 fix (gate semantics tightening). The standalone "dedicated already-retired pill format" UX item remains a polish backlog item but is not blocking the audit.
 
-### B-020-4. Strategy ranker integer-year hysteresis
+### ~~B-020-4. Strategy ranker integer-year hysteresis~~ — PARTIALLY RESOLVED in feature 021 (2026-05-01); CARRIED TO B-021-1
 
-**17 LOW findings (E3)** (was 20; 3 cleared incidentally by B-020-1 fix). Ranker winner flips under ±0.01yr age perturbation across multiple personas (`trad-first ↔ bracket-fill-smoothed`, `proportional ↔ conventional`). Knife-edge near integer ages. Fix: add ±0.05yr hysteresis OR quantize the ranker's age input to monthly precision.
+**17 LOW findings (E3)**. Hysteresis SHIPPED in feature 021 per FR-018 (±0.05yr equivalent threshold) at commit `9f40bc1`, but E3 finding count remained 17 because the audit's ±0.01yr perturbations cross simulator integer-accumulation-year boundaries (yrsToFire = fireAge − age; subtracting 0.01yr adds a full extra year). Score deltas observed: 0.08–11.44 years — far above the 0.05yr threshold. Hysteresis is correctly shipped; the simulator-discreteness fix is now tracked as B-021-1.
 
-### B-020-5. Phase 4 Edge Case 4 — true fractional-year DWZ feasibility
+### ~~B-020-5. Phase 4 Edge Case 4 — true fractional-year DWZ feasibility~~ — DEFERRED in feature 021; CARRIED TO B-021-2
 
-`calc/fireAgeResolver.js` defaults to option (c) per contract: month-precision is UI display only; year-level feasibility check is unchanged. True month-level feasibility would require extending `simulateRetirementOnlySigned` to pro-rate the FIRE-year row by `(1 - m/12)`. Defer until users complain that the displayed months look misaligned with actual retire-now semantics.
+Investigated in feature 021 US7 (`commit 09c547d`). Three cross-cutting risks surfaced (monotonic-flip stability under fractional ages, growth-multiplier convention choice, sub-iteration split at age 59.5 / ssClaimAge thresholds) that require a dedicated spec, not a phase-9 carry-forward. 6 feature-022 spec hooks documented in `specs/021-tax-category-and-audit-cleanup/audit-report.md` Phase 9 deferral section. Carried forward to B-021-2.
 
-### B-020-7. Harness fireAge bound enforcement
+### ~~B-020-7. Harness fireAge bound enforcement~~ — RESOLVED in feature 021 (2026-05-01)
 
-**1 HIGH finding (C3 — `RR-edge-fire-at-endage`)**. The harness `_resolveFireAge` returns `currentAge + safeYears` regardless of `endAge`, so degenerate personas where `safeYears` makes `fireAge > endAge` produce spurious endBalance-mismatch warnings (signed-sim and chart-sim execute different code paths when the loop bound is exceeded). Fix: clamp the fallback to `min(currentAge + safeYears, endAge - 1)` in `tests/unit/validation-audit/harness.js::_resolveFireAge`. Trivial fix (~5 LOC); deferred only because it doesn't reflect a real calc-layer issue.
+**1 HIGH finding (C3 — `RR-edge-fire-at-endage`)** cleared at commit `b14f369`. Harness's `findFireAgeNumerical` invocation now clamps `fireAge ≤ endAge` to mirror the live UI behavior. C3 invariant count drops 1 → 0; SC-009 (zero HIGH post-fixes) fully satisfied for the first time since feature 020 audit.
 
-### B-020-6. Audit harness drives in CI
+### ~~B-020-6. Audit harness drives in CI~~ — RESOLVED in feature 021 (2026-05-01)
 
-Phase 10 ran the full audit manually. Future: add a CI job that runs `node --test tests/unit/validation-audit/` on every PR and posts findings count to PR comments. Lets us catch regressions in mode ordering / end-state / cross-chart consistency without re-running the full audit by hand.
+`.github/workflows/audit.yml` shipped at commit `85af431`. Runs validation-audit harness on every push + PR. Posts finding counts as PR comment via `gh pr comment`. CRITICAL fails the build; HIGH emits warning. 10-minute timeout. awk-based finding-count parser sums across multiple harness summary lines (handles 6+ test files).

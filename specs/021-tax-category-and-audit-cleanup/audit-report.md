@@ -1,8 +1,108 @@
 # Feature 021 — Audit Report
 
-**Status**: WORK IN PROGRESS. This file is built up incrementally through Phase 9
-(per-user-story interim deferral notes) and finalised in Phase 10 (full audit
-harness re-run + finding triage per tasks T079–T086).
+**Status**: FINAL — Phase 10 completed 2026-05-01.
+**Run date**: 2026-05-01
+**Branch**: `021-tax-category-and-audit-cleanup`
+**Persona matrix**: 92 personas (reused from feature 020)
+
+## Executive summary
+
+Six invariant families ran across 92 personas. Five families (A: mode-ordering, B: end-state-validity, C: cross-chart-consistency, the new TBC: tax-bracket-conservation, plus E1+E2 of drag-invariants) report **zero findings**. The sixth family — E3 strategy-ranker stability under ±0.01yr age perturbation — reports **17 LOW findings** that survived the US4 hysteresis fix because the perturbations cross simulator integer-age boundaries (yrsToFire = fireAge − age; a -0.01yr age shift adds a full extra accumulation year, producing score deltas 0.08–11.44 years — far above the 0.05yr hysteresis threshold from FR-018).
+
+**SC-005 (zero CRITICAL post-feature-021)**: ✓ 0 CRITICAL.
+**SC-009 (zero HIGH post-feature-021)**: ✓ **fully satisfied for the first time** since feature 020. The previous HIGH findings (B3 8 + C3 4 from feature 020 audit-report) were fixed in feature 020 + the harness clamp shipped in US6 cleared the last C3 HIGH (`RR-edge-fire-at-endage`).
+
+## Totals (post-Phase-10)
+
+| Severity | Findings | Status |
+|---:|---:|---|
+| CRITICAL | 0 | ✓ SC-005 satisfied |
+| HIGH | 0 | ✓ SC-009 satisfied (first time) |
+| MEDIUM | 0 | — |
+| LOW | 17 | DEFERRED to feature 022 (E3 simulator-discreteness — see B-021-1 below) |
+| **TOTAL** | **17** | All triaged |
+
+## By-invariant detail
+
+### A1 (CRITICAL) — fireAge mode ordering
+- Personas evaluated: 92
+- **Findings: 0** ✓
+
+### A2 (HIGH) — per-fireAge feasibility implication
+- Cells: 368
+- **Findings: 0** ✓
+
+### B1 (HIGH) — Safe trajectory + 20% terminal
+- **Findings: 0** ✓
+
+### B2 (MEDIUM) — Exact terminalBuffer
+- **Findings: 0** ✓
+
+### B3 (HIGH) — DWZ strict 0-shortfall + boundary check
+- **Findings: 0** ✓ (8 fixed in feature 020; regression test still locks).
+
+### C1 (HIGH) — Lifecycle ↔ Withdrawal Strategy chart parity
+- **Findings: 0** ✓
+
+### C2 (MEDIUM) — verdict pill ↔ Progress card directional agreement
+- **Findings: 0** ✓ (1 fixed in feature 020 incidentally via B3 fix).
+
+### C3 (HIGH) — endBalance-mismatch warnings under default operation
+- **Findings: 0** ✓ (3 fixed in feature 020; last 1 — `RR-edge-fire-at-endage` — fixed in this feature via US6 harness clamp shipped at commit `b14f369`).
+
+### E1 (MEDIUM) — Safe + Exact monotonic feasibility
+- **Findings: 0** ✓
+
+### E2 (MEDIUM) — DWZ boundary semantics
+- **Findings: 0** ✓ (5 fixed in feature 020 via B3 bundle).
+
+### E3 (LOW) — strategy ranker stability under ±0.01yr / ±$1 perturbation
+- **Findings: 17** — all DEFERRED to feature 022 (see backlog item B-021-1).
+- **Root cause analysis (US4 implementation)**: hysteresis was shipped per FR-018 with the literal 0.05-year threshold. However, the audit's ±0.01-year age perturbations cross simulator integer-accumulation-year boundaries. Specifically: `yrsToFire = fireAge − inp.agePerson1` truncates to integers in the accumulation loop; subtracting 0.01yr from `agePerson1` flips `yrsToFire` to an extra full year, producing dramatic score swings.
+- **Per-finding deltas observed**:
+
+  | Persona | yrsDelta |
+  |---|---:|
+  | RR-late-low-income | 0.08 |
+  | RR-no-mortgage-frugal | 0.76 |
+  | Generic-single-already-own (+0.01yr) | 0.87 |
+  | Generic-couple-taiwan-fat | 1.43 |
+  | Generic-japan-no-mortgage | 1.63 |
+  | RR-spend-frugal / Generic-couple-frugal / + 4 others | 1.76 |
+  | Generic-taiwan-mortgage / Generic-japan-prepay | 1.80 |
+  | RR-pessimistic-frugal | 2.48 |
+  | Generic-single-already-own (-0.01yr) | 2.86 |
+  | Generic-single-late-frugal | 8.00 |
+  | Generic-single-taiwan | 10.87 |
+  | Generic-japan-single / Generic-single-japan | 11.44 |
+
+- **Why hysteresis didn't clear them**: tightening the threshold above 11.44yr would effectively disable winner changes for any real user input. The fix belongs in `_simulateStrategyLifetime`'s integer-year-truncation, not the ranker. Documented as a feature 022 backlog item.
+- **Triage**: DEFER. SC-006 was based on the hypothesis that hysteresis alone would clear all 17. Empirical data shows the root cause is simulator-discreteness, not ranker noise. Hysteresis is correctly shipped per spec; the simulator-stability fix is a separate concern.
+
+### TBC-1, TBC-2, TBC-3, TBC-4, TBC-5 (HIGH/MEDIUM) — tax-bracket-conservation (NEW)
+- Cells: 460 (92 personas × 5 invariants)
+- **Findings: 0** ✓
+- Status: New invariant family added in feature 021 per FR-016b. The progressive-bracket math + FICA breakdowns produced by `calc/accumulateToFire.js` v3 satisfy all conservation invariants across the persona matrix.
+
+## Backlog handoff (feature 022)
+
+### B-021-1 — Strategy ranker simulator-discreteness fix (E3 → 0 LOW)
+
+**17 LOW findings**. The `_simulateStrategyLifetime` accumulation loop iterates integer years. A 0.01-year perturbation in `inp.agePerson1` flips `yrsToFire` by a full year (e.g., 12 → 13), producing score deltas of 0.08–11.44 years — far above the 0.05yr hysteresis threshold from feature 021 FR-018. Hysteresis cannot clear these without effectively disabling all winner changes (would require threshold > 11.44yr).
+
+**Suggested feature 022 fix**: extend `_simulateStrategyLifetime` to accept fractional accumulation horizons (matches the US7 deferral's pro-rate-FIRE-year work). Or quantize the ranker's age input to monthly precision before the simulator iteration — preserving the 0.01yr UI slider precision in feel while collapsing to month-precision in the calc layer.
+
+### B-021-2 — US7 deferred items (carry-forward of B-020-5)
+
+US7 (true fractional-year DWZ feasibility) was deferred per `audit-report.md` Phase 9 deferral section. 6 spec hooks documented; bundle into feature 022 alongside B-021-1 (both touch simulator integer-year handling).
+
+## Phase 10 work products
+
+- New audit invariant file: `tests/unit/validation-audit/tax-bracket-conservation.test.js` (T079, 5 invariants TBC-1 through TBC-5).
+- Full test gate at closeout: **450 tests, 449 pass, 1 skip, 0 fail** (was 414 pre-feature-021; +36 net new tests across all phases).
+- Constitution VIII gate (`spendingFloorPass.test.js`): **7/7 green** throughout.
+
+---
 
 ---
 
