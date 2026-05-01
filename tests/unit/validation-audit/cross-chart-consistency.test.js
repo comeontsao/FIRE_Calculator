@@ -724,3 +724,45 @@ test('Regression — C3 fix: signed-sim and chart-sim end balances agree for ret
       + ' exceeds $1000 threshold (regression of C3 fix)');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Regression test — C3-clamp fix (Feature 021 US6, B-020-7 carry-forward)
+//
+// Bug: harness's `findFireAgeNumerical` extraction did not include the live UI's
+// `fireAge ≤ endAge` clamp wrapper, so for the edge persona
+// `RR-edge-fire-at-endage` (currentAge=62, endAge=70, annualSpend=200000), the
+// raw fireAge exceeded endAge and was fed unclamped into projectFullLifecycle
+// and signedLifecycleEndBalance. The two simulators diverged on the
+// out-of-horizon row, producing an artificial endBalance-mismatch (delta
+// ~$74k, the lone HIGH C3 finding from feature 020 audit).
+//
+// Fix: harness.js buildHarnessContext now bounds defaultFireAge with
+// `Math.min(rawFireAge, endAge)` — mirroring the live UI behavior. This
+// regression test pins the persona-level behavior to prevent future drift.
+// ---------------------------------------------------------------------------
+
+test('C3-clamp-regression: RR-edge-fire-at-endage no longer produces endBalance-mismatch', { timeout: 60000 }, () => {
+  clearContextCache();
+  _auxByPersona.clear();
+
+  const personaUnderTest = personas.find(p => p.id === 'RR-edge-fire-at-endage');
+  assert.ok(personaUnderTest, 'persona RR-edge-fire-at-endage must exist in matrix');
+
+  // Run the harness with ONLY C3 across ONLY this persona — narrowest possible
+  // cell. Post-clamp, C3 should report zero findings for this persona.
+  const result = runHarness([personaUnderTest], [C3], { silent: true });
+  assert.strictEqual(result.totalCells, 1, 'expected exactly 1 cell (1 persona × 1 invariant)');
+  assert.strictEqual(
+    result.findings.length,
+    0,
+    'C3 should have zero findings for RR-edge-fire-at-endage post-clamp; got: '
+      + JSON.stringify(result.findings)
+  );
+
+  // Sanity: confirm the harness clamped fireAge to endAge.
+  const ctx = buildHarnessContext(personaUnderTest);
+  const endAge = personaUnderTest.inp.endAge || 100;
+  assert.ok(ctx._defaultFireAge <= endAge,
+    'harness must clamp defaultFireAge ≤ endAge; got '
+      + ctx._defaultFireAge + ' vs endAge=' + endAge);
+});

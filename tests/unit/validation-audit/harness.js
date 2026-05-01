@@ -579,9 +579,20 @@ function buildHarnessContext(persona) {
   // Use the 'safe' FIRE age for the primary lifecycle projection.
   const safeModeResult = fireAgeByMode['safe'];
   const currentAge = inp.agePerson1 != null ? inp.agePerson1 : (inp.ageRoger || 42);
-  const defaultFireAge = safeModeResult && safeModeResult.feasible
+  const rawFireAge = safeModeResult && safeModeResult.feasible
     ? currentAge + safeModeResult.years
     : currentAge + 13;  // fallback for unreachable FIRE scenarios
+  // B-020-7 / Feature 021 US6 clamp: bound fireAge ≤ endAge to mirror live UI.
+  // The browser dashboard clamps fireAge ≤ endAge in `findFireAgeNumerical`'s
+  // post-processing (so charts never project beyond the plan horizon). The
+  // harness's sandboxed extraction of findFireAgeNumerical does not include
+  // that clamp wrapper, so without this line edge personas like
+  // `RR-edge-fire-at-endage` (currentAge + accumulationYears > endAge) feed an
+  // out-of-horizon fireAge into projectFullLifecycle / signedLifecycleEndBalance,
+  // producing artificial endBalance-mismatch warnings (HIGH C3 finding in
+  // feature 020 audit). The clamp brings the harness in lockstep with the UI.
+  const endAge = inp.endAge || 100;
+  const defaultFireAge = Math.min(rawFireAge, endAge);
 
   // Run projectFullLifecycle for the chart context.
   let chart = [];
