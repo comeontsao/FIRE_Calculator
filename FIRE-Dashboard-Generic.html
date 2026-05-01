@@ -9023,6 +9023,11 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
   let pCash = inp.cashSavings + inp.otherAssets;
 
   // Mortgage upfront handling
+  // Feature 020 (C3 fix): use the safe deduction pattern from projectFullLifecycle —
+  // subtract from cash up to zero, then take the remainder from stocks. Previously
+  // signed sim let pCash go negative, which then compounded at 1.005 and skewed
+  // subsequent withdrawal calculations against the chart's cash-clamped behavior,
+  // producing systematic ~$575/year drift in `buying-in` and `buying-now` scenarios.
   const mtg = mortgageEnabled ? getMortgageInputs() : null;
   let mtgPurchased = false;
   let mtgPurchaseYear = 0;
@@ -9030,7 +9035,14 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
     if (mtg.ownership === 'buying-now') {
       mtgPurchased = true;
       mtgPurchaseYear = 0;
-      pCash -= (mtg.downPayment + mtg.closingCosts);
+      const _upfrontMtg = mtg.downPayment + mtg.closingCosts;
+      if (pCash >= _upfrontMtg) {
+        pCash -= _upfrontMtg;
+      } else {
+        const _remainder = _upfrontMtg - Math.max(0, pCash);
+        pCash = 0;
+        pStocks = Math.max(0, pStocks - _remainder);
+      }
     } else if (mtg.ownership === 'already-own') {
       mtgPurchased = true;
       mtgPurchaseYear = -mtg.yearsPaid;
@@ -9041,7 +9053,14 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
   let h2Purchased = false;
   let h2SaleAdded = false;
   if (secondHomeEnabled && h2 && h2.buyInYears === 0) {
-    pCash -= (h2.downPayment + h2.closingCosts);
+    const _upfrontH2 = h2.downPayment + h2.closingCosts;
+    if (pCash >= _upfrontH2) {
+      pCash -= _upfrontH2;
+    } else {
+      const _remainder = _upfrontH2 - Math.max(0, pCash);
+      pCash = 0;
+      pStocks = Math.max(0, pStocks - _remainder);
+    }
     h2Purchased = true;
   }
   let saleAdded = false;
@@ -9098,13 +9117,29 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
 
   for (let age = _accumStartAge; age < endAge; age++) {
     const yearsFromNow = age - inp.agePerson1;
+    // Feature 020 (C3 fix): safe upfront deduction (cash → stocks fallback) so
+    // signed sim matches projectFullLifecycle's clamp-to-zero invariant.
     if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && !mtgPurchased && yearsFromNow >= mtg.buyInYears) {
-      pCash -= (mtg.downPayment + mtg.closingCosts);
+      const _upfrontCost = mtg.downPayment + mtg.closingCosts;
+      if (pCash >= _upfrontCost) {
+        pCash -= _upfrontCost;
+      } else {
+        const _remainder = _upfrontCost - Math.max(0, pCash);
+        pCash = 0;
+        pStocks = Math.max(0, pStocks - _remainder);
+      }
       mtgPurchased = true;
       mtgPurchaseYear = mtg.buyInYears;
     }
     if (secondHomeEnabled && h2 && !h2Purchased && yearsFromNow >= h2.buyInYears) {
-      pCash -= (h2.downPayment + h2.closingCosts);
+      const _upfrontH2Loop = h2.downPayment + h2.closingCosts;
+      if (pCash >= _upfrontH2Loop) {
+        pCash -= _upfrontH2Loop;
+      } else {
+        const _remainder = _upfrontH2Loop - Math.max(0, pCash);
+        pCash = 0;
+        pStocks = Math.max(0, pStocks - _remainder);
+      }
       h2Purchased = true;
     }
 
@@ -9321,6 +9356,15 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
           if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
           const floor = (row.age < unlockAge) ? bufUnlockDWZ : bufSSDWZ;
           if (row.total < floor) return false;
+          // Feature 020 B3 fix: gate must reject any retirement-year shortfall.
+          // The chart's `hasShortfall=true` flag fires when the strategy could
+          // not fund the year's spending from accessible pools (e.g. pre-unlock
+          // years where 401k is locked and cash/stocks are exhausted). The
+          // existing `total < floor` check misses this because chart `total`
+          // sums ALL pools including locked Trad. Without this check, the DWZ
+          // gate said feasible while the chart visibly showed shortfall years
+          // — exactly the divergence audit invariant B3 was designed to catch.
+          if (row.hasShortfall === true) return false;
         }
         return true;
       } catch (_e) { /* fall through to signed-sim fallback */ }
@@ -9337,7 +9381,16 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
         const chart = projectFullLifecycle(inp, annualSpend, fireAge, true, chartOpts);
         const last = chart[chart.length - 1];
         const endBal = last ? last.total : 0;
-        return endBal >= tYears * annualSpend;
+        if (endBal < tYears * annualSpend) return false;
+        // Feature 020 B3 fix (mirrors Safe + DWZ). Reject any retirement-year
+        // shortfall — preserves mode-ordering invariant `dwz ≤ exact ≤ safe`
+        // when DWZ + Safe gates were tightened to honor `hasShortfall`.
+        for (let i = 0; i < chart.length; i++) {
+          const row = chart[i];
+          if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
+          if (row.hasShortfall === true) return false;
+        }
+        return true;
       } catch (_e) { /* fall through to signed-sim fallback */ }
     }
     return sim.endBalance >= tYears * annualSpend;
@@ -9374,6 +9427,11 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
         if (!row || typeof row.age !== 'number' || row.age < fireAge) continue;
         const floor = (row.age < unlockAge) ? bufUnlock : bufSS;
         if (row.total < floor) return false;
+        // Feature 020 B3 fix (mirrors DWZ gate above). The chart's
+        // `hasShortfall=true` flag captures cases where the strategy could
+        // not fund spending from accessible pools — `total < floor` alone
+        // misses these because clamped `total` includes locked-401k value.
+        if (row.hasShortfall === true) return false;
       }
       // Terminal-floor: the chart's last total must remain at least
       // SAFE_TERMINAL_FIRE_RATIO of the FIRE-moment balance, so the tail
@@ -9470,7 +9528,15 @@ function findFireAgeNumerical(inp, annualSpend, mode) {
     const candidateFireAge = agePerson1 + y;
     const sim = signedLifecycleEndBalance(inp, annualSpend, candidateFireAge);
     if (isFireAgeFeasible(sim, inp, annualSpend, mode, candidateFireAge)) {
-      if (mode === 'dieWithZero' && y > 0 && prevSim !== null) {
+      // Month-precise interpolation only works cleanly for single-constraint
+      // DWZ where the previous year was infeasible due to endBalance < 0
+      // (monotonic crossover). Feature 020 B3: with the chart-row hasShortfall
+      // check added to the DWZ gate, the boundary can also be shortfall-driven
+      // (a step-function transition unrelated to endBalance). Interpolating
+      // across that boundary picks an interpolated point that's STILL
+      // infeasible per the new gate, so guard interpolation to the
+      // strictly-negative prevSim.endBalance case.
+      if (mode === 'dieWithZero' && y > 0 && prevSim !== null && prevSim.endBalance < 0) {
         const span = sim.endBalance - prevSim.endBalance;
         const f = span > 0 ? Math.max(0, Math.min(1, -prevSim.endBalance / span)) : 0;
         const totalMonths = Math.max(0, Math.min(maxYrs * 12, Math.ceil((y - 1) * 12 + f * 12)));

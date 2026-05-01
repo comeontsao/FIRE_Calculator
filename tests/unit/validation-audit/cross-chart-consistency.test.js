@@ -669,3 +669,58 @@ test('Phase 7 — Cross-chart consistency invariants (C1, C2, C3) across persona
     'totalCells must equal active personas × active invariants'
   );
 });
+
+// ---------------------------------------------------------------------------
+// Regression test — C3 fix (Feature 020 audit, 2026-04-30)
+//
+// Bug: signed-sim end balance diverged from chart-sim end balance for personas
+// where the mortgage buy-in fell during the retirement phase (yrsToFire <
+// buyInYears). Root cause: signedLifecycleEndBalance subtracted the upfront
+// down payment + closing costs unconditionally from pCash, letting it go
+// negative; that negative cash then compounded at 1.005 and skewed subsequent
+// withdrawal mixes against the chart's clamp-to-zero invariant. Same bug
+// affected the buying-now upfront and the second-home delayed-purchase paths.
+//
+// Fix: align signed sim's upfront-deduction logic with projectFullLifecycle's
+// safe pattern (cash → stocks fallback, never go negative). Applied to both
+// FIRE-Dashboard.html and FIRE-Dashboard-Generic.html.
+//
+// Locked invariant: for personas whose buy-in falls in retirement, the signed-
+// sim and chart-sim end balances MUST agree within $1000 (the audit warning
+// threshold). Listed personas previously produced $76k-$139k mismatches.
+// ---------------------------------------------------------------------------
+
+test('Regression — C3 fix: signed-sim and chart-sim end balances agree for retirement-phase buy-in personas', { timeout: 60000 }, () => {
+  clearContextCache();
+  const { buildHarnessContext } = require(HARNESS_PATH);
+
+  // Personas whose buy-in falls in the retirement phase (yrsToFire < buyInYears).
+  // Pre-fix these all produced endBalance-mismatch warnings of $76k+.
+  const subjects = ['RR-age-late', 'Generic-couple-late', 'RR-late-prepay'];
+
+  for (const id of subjects) {
+    const persona = personas.find(p => p.id === id);
+    assert.ok(persona, 'persona ' + id + ' must exist in matrix');
+
+    const ctx = buildHarnessContext(persona);
+    const fireAge = ctx._defaultFireAge;
+    const annualSpend = persona.inp.annualSpend || 72700;
+
+    const signed = ctx._api.signedLifecycleEndBalance(persona.inp, annualSpend, fireAge);
+    const chart  = ctx._api.projectFullLifecycle(persona.inp, annualSpend, fireAge, true, undefined);
+
+    assert.ok(signed && typeof signed.endBalance === 'number',
+      id + ': signedLifecycleEndBalance must return numeric endBalance');
+    assert.ok(Array.isArray(chart) && chart.length > 0,
+      id + ': projectFullLifecycle must return non-empty rows');
+
+    const chartEnd = chart[chart.length - 1].total;
+    const delta = Math.abs(signed.endBalance - chartEnd);
+    // Threshold: $1000 — the same threshold _invariantA in calcAudit.js uses
+    // to flag endBalance-mismatch warnings.
+    assert.ok(delta <= 1000,
+      id + ': signed (' + Math.round(signed.endBalance) + ') vs chart ('
+      + Math.round(chartEnd) + ') delta = $' + Math.round(delta)
+      + ' exceeds $1000 threshold (regression of C3 fix)');
+  }
+});

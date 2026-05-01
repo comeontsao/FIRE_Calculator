@@ -434,6 +434,58 @@ test('end-state-validity invariants are well-formed and runnable in isolation', 
 });
 
 // ---------------------------------------------------------------------------
+// B3 regression test (feature 020 fix, 2026-04-30) — pin the eight personas
+// that previously triggered B3 findings to ensure the DWZ + Safe + Exact gates
+// continue to honor the chart's per-row `hasShortfall` flag. If any of these
+// regresses, the gate has drifted out of sync with the chart again.
+//
+// Root cause (now fixed): the gates iterated chart rows checking
+// `row.total < floor` only. Chart `total` sums ALL pools including locked
+// 401k, so the check passed even when the chart visibly showed shortfall
+// years (mix.shortfall > 0 from taxOptimizedWithdrawal pre-unlock branch).
+// Adding `if (row.hasShortfall === true) return false;` to each gate aligns
+// the gate's notion of feasibility with the chart's hasShortfall semantics.
+// Also fixed: DWZ month-precise interpolation now guards on
+// `prevSim.endBalance < 0` (interpolation only sound across endBalance
+// crossover, not shortfall step-function transitions).
+// ---------------------------------------------------------------------------
+
+const B3_REGRESSION_PERSONAS = [
+  'RR-age-young',
+  'Generic-single-frugal',
+  'Generic-couple-young',
+  'RR-edge-fire-at-endage',
+  'Generic-edge-single-zero-person2',
+  'RR-young-high-income',
+  'RR-late-low-income',
+  'RR-inflation-fat',
+];
+
+test('B3 regression: previously-flagged personas have zero shortfall rows at gate-determined DWZ fireAge', () => {
+  clearContextCache();
+
+  const offendingPersonas = personas.filter(p => B3_REGRESSION_PERSONAS.includes(p.id));
+  assert.strictEqual(
+    offendingPersonas.length,
+    B3_REGRESSION_PERSONAS.length,
+    'all 8 B3-affected personas must exist in the matrix'
+  );
+
+  const result = runHarness(offendingPersonas, [invariantB3], { silent: true });
+
+  assert.strictEqual(
+    result.failed,
+    0,
+    'B3 regression: gates must reject any retirement-year shortfall (' +
+      'expected 0 findings across the 8 previously-affected personas, got ' +
+      result.failed + '). Findings: ' + JSON.stringify(result.findings.map(f => ({
+        persona: f.personaId,
+        observed: f.observed,
+      })), null, 2)
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Module exports — expose invariants so other modules can reuse them.
 // ---------------------------------------------------------------------------
 
