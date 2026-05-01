@@ -11476,7 +11476,14 @@ function getStrategies() { return window.__STRATEGIES_V008__; }
 // Since US1's T017 thread `mortgageStrategyOverride` through every projectFullLifecycle
 // call site (chart, FIRE-age search, ranker), the ranker's input automatically
 // changes when strategy changes. No code change required here.
-function scoreAndRank(inp, fireAge, mode, objective) {
+// Feature 021 US4 (B-020-4): optional 5th arg `previousWinnerId` enables
+// hysteresis at the integer-age boundary. When omitted, the function falls
+// back to reading `_lastStrategyResults?.winnerId` from the closure-scoped
+// global so existing call sites (recalcAll path) get hysteresis without a
+// signature change. When _lastStrategyResults is unavailable (Node-test
+// sandbox), hysteresis is skipped — preserves first-call behavior across
+// every existing test (modeObjectiveOrthogonality, strategies, thetaSweep).
+function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
   const strategies = getStrategies();
   const endAge = inp.endAge || 95;
   const realReturnStocks = inp.returnRate - inp.inflationRate;
@@ -11815,7 +11822,55 @@ function scoreAndRank(inp, fireAge, mode, objective) {
     }
     return best;
   });
-  return rankByObjective(results, objective || 'leave-more-behind', mode);
+  const ranked = rankByObjective(results, objective || 'leave-more-behind', mode);
+
+  // Feature 021 US4 (B-020-4): apply hysteresis at the integer-age boundary.
+  // Per FR-018 + research R5: a winner change requires the new contender to
+  // beat the previous winner by more than HYSTERESIS_YEARS (0.05) of
+  // equivalent score margin. Without this guard, ±0.01yr age perturbations
+  // (or ±$1 spend perturbations) flip the ranker winner across 17 personas
+  // in the feature 020 audit's E3 invariant. See calc/strategyRanker.js
+  // _newWinnerBeats / _scoreDeltaToYears for the per-sort-key normalization.
+  let prevWinnerId = previousWinnerId;
+  if (prevWinnerId === undefined && typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults) {
+    prevWinnerId = _lastStrategyResults.winnerId;
+  }
+  if (prevWinnerId
+      && ranked && Array.isArray(ranked.rows) && ranked.rows.length > 0
+      && ranked.winnerId && ranked.winnerId !== prevWinnerId
+      && typeof _newWinnerBeats === 'function') {
+    const newWinnerRow = ranked.rows[0];
+    const prevWinnerRow = ranked.rows.find(r => r.strategyId === prevWinnerId);
+    // Only apply hysteresis when the prior winner is still in the ranking
+    // AND still feasible — if the prior winner became infeasible under the
+    // new inputs, an ordinary winner change is correct, not a noise flip.
+    if (prevWinnerRow && prevWinnerRow.feasibleUnderCurrentMode !== false) {
+      const _annualSpend = (typeof inp.annualSpend === 'number' && inp.annualSpend > 0)
+        ? inp.annualSpend : 72700;
+      let _beats = true;
+      try {
+        _beats = _newWinnerBeats(prevWinnerRow, newWinnerRow,
+                                 mode, objective || 'leave-more-behind',
+                                 _annualSpend);
+      } catch (_e) {
+        _beats = true; // fail-open on any helper error
+      }
+      if (!_beats) {
+        // Hysteresis blocks the flip — promote prev winner back to rows[0]
+        // (preserves objective ordering of the rest by index).
+        const idxPrev = ranked.rows.indexOf(prevWinnerRow);
+        if (idxPrev > 0) {
+          const reordered = ranked.rows.slice();
+          reordered.splice(idxPrev, 1);
+          reordered.unshift(prevWinnerRow);
+          ranked.rows = reordered;
+        }
+        ranked.winnerId = prevWinnerId;
+        ranked.hysteresisBlocked = true; // observability flag for audit dump
+      }
+    }
+  }
+  return ranked;
 }
 
 // Sort-only operation. Called on objective toggle (no re-simulation).
