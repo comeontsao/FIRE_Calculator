@@ -103,19 +103,29 @@
 // ---------------------------------------------------------------------------
 // Tax brackets + FICA constants — imported from calc/taxBrackets.js (feature 021).
 // Pattern: Node require() in tests, globalThis.taxBrackets in browser via UMD wrapper.
+//
+// HOTFIX (feature 022 post-021): Browser classic-script load shares a SINGLE
+// global script scope across all <script src=> tags. calc/taxBrackets.js
+// declares its constants as top-level `const BRACKETS_MFJ_2024 = ...` etc.
+// If we ALSO declare top-level `const BRACKETS_MFJ_2024 = _taxBrackets.X`
+// here, the browser throws SyntaxError "Identifier already declared" before
+// any function runs — which cascades into "[_simulateStrategyLifetime]
+// accumulateToFire is required" because this module never loads. Underscored
+// local names sidestep the collision; behavior unchanged in Node tests
+// (each module gets its own scope).
 // ---------------------------------------------------------------------------
 const _taxBrackets = (typeof require !== 'undefined')
   ? require('./taxBrackets.js')
   : (typeof globalThis !== 'undefined' ? globalThis.taxBrackets : null);
-const BRACKETS_MFJ_2024 = _taxBrackets && _taxBrackets.BRACKETS_MFJ_2024;
-const BRACKETS_SINGLE_2024 = _taxBrackets && _taxBrackets.BRACKETS_SINGLE_2024;
-const FICA_SS_RATE = _taxBrackets ? _taxBrackets.FICA_SS_RATE : 0.062;
-const FICA_SS_WAGE_BASE_2024 = _taxBrackets ? _taxBrackets.FICA_SS_WAGE_BASE_2024 : 168600;
-const FICA_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_MEDICARE_RATE : 0.0145;
-const FICA_ADDITIONAL_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_RATE : 0.009;
-const FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
+const _BRACKETS_MFJ_2024 = _taxBrackets && _taxBrackets.BRACKETS_MFJ_2024;
+const _BRACKETS_SINGLE_2024 = _taxBrackets && _taxBrackets.BRACKETS_SINGLE_2024;
+const _FICA_SS_RATE = _taxBrackets ? _taxBrackets.FICA_SS_RATE : 0.062;
+const _FICA_SS_WAGE_BASE_2024 = _taxBrackets ? _taxBrackets.FICA_SS_WAGE_BASE_2024 : 168600;
+const _FICA_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_MEDICARE_RATE : 0.0145;
+const _FICA_ADDITIONAL_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_RATE : 0.009;
+const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE : 200000;
-const FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
+const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
 
 /**
@@ -158,7 +168,7 @@ function _computeYearTax(grossIncome, pretax401kEmployee, inp) {
 
   // Auto path — progressive brackets + FICA.
   const filingStatus = (inp.adultCount === 1) ? 'single' : 'mfj';
-  const brackets = (filingStatus === 'mfj') ? BRACKETS_MFJ_2024 : BRACKETS_SINGLE_2024;
+  const brackets = (filingStatus === 'mfj') ? _BRACKETS_MFJ_2024 : _BRACKETS_SINGLE_2024;
   const stdDed = brackets.standardDeduction;
   const taxableIncome = Math.max(0, grossIncome - pretax401kEmployee - stdDed);
 
@@ -186,17 +196,17 @@ function _computeYearTax(grossIncome, pretax401kEmployee, inp) {
   // FICA: split income equally between earners for MFJ; SS cap applies per individual.
   const earnerCount = (filingStatus === 'mfj') ? 2 : 1;
   const incomePerEarner = grossIncome / earnerCount;
-  const ssTaxablePerEarner = Math.min(incomePerEarner, FICA_SS_WAGE_BASE_2024);
-  const ssTax = ssTaxablePerEarner * FICA_SS_RATE * earnerCount;
-  const ssWageBaseHit = (incomePerEarner > FICA_SS_WAGE_BASE_2024);
+  const ssTaxablePerEarner = Math.min(incomePerEarner, _FICA_SS_WAGE_BASE_2024);
+  const ssTax = ssTaxablePerEarner * _FICA_SS_RATE * earnerCount;
+  const ssWageBaseHit = (incomePerEarner > _FICA_SS_WAGE_BASE_2024);
 
-  const medicareTax = grossIncome * FICA_MEDICARE_RATE;
+  const medicareTax = grossIncome * _FICA_MEDICARE_RATE;
 
   const additionalMedicareThreshold = (filingStatus === 'mfj')
-    ? FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ
-    : FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE;
+    ? _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ
+    : _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE;
   const additionalMedicare = Math.max(0, grossIncome - additionalMedicareThreshold)
-                             * FICA_ADDITIONAL_MEDICARE_RATE;
+                             * _FICA_ADDITIONAL_MEDICARE_RATE;
 
   const ficaTax = ssTax + medicareTax + additionalMedicare;
   const ficaBreakdown = {
