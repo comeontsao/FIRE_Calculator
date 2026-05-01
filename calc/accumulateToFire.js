@@ -78,19 +78,25 @@
  *   VIII — Spending Funded First is a RETIREMENT-phase contract; not modified here.
  *
  * FRAME (feature 022 / FR-009):
- *   Dominant frame: mixed (PRE-US3 state — real-$ pool growth + nominal-$
- *     income/spending; US3/Wave 3 will reconcile to single-frame real-$).
+ *   Dominant frame: real-$ (POST-US3 / Wave 3 fix — single-frame residual).
+ *   All accumulation arithmetic — pool growth, contributions, income, spending,
+ *   tax, and cash-flow residual — is performed in today's-$ frame. Display-time
+ *   conversion to nominal/Book Value happens centrally in recalcAll() via
+ *   calc/displayConverter.js (feature 022 US1).
  *   Frame-conversion sites:
- *     - Line 285 (PvI passthrough): inflation rate forwarded to payoffVsInvest;
- *       not a $-conversion site itself but feeds nominal-$ math downstream.
- *     - Lines 333–335: inflationRate / realReturnStocks / realReturn401k —
+ *     - Line ~301 (PvI passthrough): inflation rate forwarded to payoffVsInvest;
+ *       not a $-conversion site itself.
+ *     - Lines ~351–355: inflationRate / realReturnStocks / realReturn401k —
  *       real-return constants in real-$ frame.
- *     - Line 348: raiseRate read — feeds nominal-$ income inflation.
- *     - Line 530: grossIncome inflated to nominal-$ by raiseRate^yearsFromNow.
- *     - Line 545: annualSpending inflated to nominal-$ by inflationRate^yearsFromNow.
- *     - Lines 605–607: pool growth at realReturn — real-$ frame.
- *     - Cash-flow residual (line 559): MIXED — gross/spend are nominal,
- *       but pool-of-record is real-$. This is the US3 reconciliation target.
+ *     - Line ~370: raiseRate read — used at the income-real conversion site below.
+ *     - Income (real-$ at conversion site below): grossIncomeReal computed via
+ *       (1 + raiseRate − inflationRate)^t — real wage growth.
+ *     - Spending (real-$): annualSpendingReal === baseAnnualSpend (constant in today's $).
+ *     - Tax (real-$): _computeYearTax invoked with grossIncomeReal; 2024 brackets
+ *       and SSA wage base treated as today's-$ values per FR-015.
+ *     - Cash-flow residual (real-$, single-frame): residual = grossIncomeReal
+ *       − federalTax − ficaTax − pretax401kEmployee − annualSpendingReal − stockContribution.
+ *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at 0.5%/yr.
  * =============================================================================
  */
 
@@ -365,8 +371,9 @@ function accumulateToFire(inp, fireAge, options) {
   // --- v2 Cash-flow inputs ---
   const annualIncomeBase = inp.annualIncome || 0;   // gross annual income at currentAge
   const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
-  // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); used
-  //        downstream at line 530 to inflate income into nominal-$ frame.
+  // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); combined
+  //        with inflationRate at the income conversion site below to compute
+  //        real wage growth = (1 + raiseRate − inflationRate)^t.
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
   // Base annual spend: prefer inp.annualSpend (explicit), fall back to monthlySpend*12,
   // then fall back to 0 (backwards-compatible — v1 callers may not supply these fields).
@@ -547,34 +554,41 @@ function accumulateToFire(inp, fireAge, options) {
     // Keep v1 alias for backwards-compatible row field.
     const effectiveAnnualSavings = stockContribution;
 
-    // --- v2 Cash-flow accounting (FR-015 steps 1–7) ---
-    // Step 1: Gross income (real-terms, raised by raiseRate each year).
-    // FRAME: nominal-$ (PRE-US3) — grossIncome here is inflated by raiseRate
-    //        making it a nominal-$ value at year `yearsFromNow`. US3 will
-    //        reconcile this to real-$ by dividing back by inflation factor.
-    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate, yearsFromNow);
+    // --- v4 Cash-flow accounting (feature 022 US3 — single-frame real-$) ---
+    // Step 1: Gross income in real-$ frame. (1 + raiseRate − inflationRate)^t
+    //        is the real wage growth multiplier. raiseRate == inflationRate →
+    //        constant; > → real growth; < → real wage cut. Per FR-012 / FR-013.
+    // FRAME: real-$ — income converted from nominal to real before residual.
+    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate - inflationRate, yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
+    // FRAME: real-$ — 401k contribution caps are constant in today's $ (the
+    //        slider sets contribution amount in today's purchasing power).
     const pretax401kEmployee = emp401kTrad + emp401kRoth;
 
-    // Step 3: Tax computation (v3 — feature 021).
-    // Flat-rate path (taxRate > 0) is byte-identical to v2.
-    // Auto path (taxRate = 0 / blank) computes progressive brackets + FICA.
+    // Step 3: Tax computation in real-$ frame.
+    // FRAME: real-$ — _computeYearTax invoked with REAL income. 2024 IRS brackets
+    //        and SSA wage base ($168,600) treated as today's-$ values per
+    //        FR-015. Mirrors real-world bracket inflation indexing, which
+    //        roughly tracks wage inflation. ficaTax = 0 in flat-rate mode.
     const taxResult = _computeYearTax(grossIncome, pretax401kEmployee, inp);
     const federalTax = taxResult.federalTax;
     const ficaTax = taxResult.ficaTax;
     const federalTaxBreakdown = taxResult.federalTaxBreakdown;
     const ficaBreakdown = taxResult.ficaBreakdown;
 
-    // Step 4: Annual spending (inflation-adjusted).
-    // FRAME: nominal-$ (PRE-US3) — baseAnnualSpend × (1+inflationRate)^t puts
-    //        annualSpending in nominal-$ at year `yearsFromNow`. US3 will
-    //        reconcile by holding spend constant in real-$ frame.
-    const annualSpending = baseAnnualSpend * Math.pow(1 + inflationRate, yearsFromNow);
+    // Step 4: Annual spending in real-$ frame.
+    // FRAME: real-$ — spend stays constant in today's-$ (slider input is in
+    //        today's purchasing power). Per-spec FR-014.
+    const annualSpending = baseAnnualSpend;
 
     // Step 5: Stock contribution (already computed above as effectiveAnnualSavings).
+    // FRAME: real-$ — savings amount is constant in today's $.
 
-    // Step 6: Cash flow residual (signed).
+    // Step 6: Cash flow residual — single-frame (real-$).
+    // FRAME: real-$ — every term on the RHS is in today's-$; residual feeds
+    //        pCash which already grows at real-return frame. No cross-frame
+    //        contamination. Per-spec FR-016 + research R4.
     let cashFlowToCash;
     let cashFlowWarning;
 
@@ -582,8 +596,8 @@ function accumulateToFire(inp, fireAge, options) {
       // Override active: bypass computed residual.
       cashFlowToCash = cashflowOverrideValue;
     } else if (annualIncomeBase > 0 || taxRate > 0) {
-      // v3 cash-flow model: residual = gross - federalTax - ficaTax - 401k - spend - stock.
-      // ficaTax = 0 in flat-rate mode → reduces to v2 formula automatically.
+      // v4 single-frame residual: gross - federalTax - ficaTax - 401k - spend - stock.
+      // ficaTax = 0 in flat-rate mode → reduces to flat-rate formula automatically.
       const residual = grossIncome - federalTax - ficaTax - pretax401kEmployee
                        - annualSpending - stockContribution;
       if (residual < 0) {
