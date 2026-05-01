@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
-**Active feature**: 020 (validation-audit) on branch `020-validation-audit`. PAUSED 2026-04-30 after Phase 3 Wave 1 (cash-flow calc rewrite, commit `354b0f5`); user reviewing before Wave 2 (Plan-tab UI). Resume per [`PICKUP.md`](./specs/020-validation-audit/PICKUP.md). Tests: 389 green, 0 failures, Constitution VIII gate passes. Spec [`spec.md`](./specs/020-validation-audit/spec.md), Plan [`plan.md`](./specs/020-validation-audit/plan.md), Tasks [`tasks.md`](./specs/020-validation-audit/tasks.md). Phase 1 + 2 + 3 Wave 1 done; Wave 2 (T032–T039) is the next dispatch. Predecessors 018 + 019 merged to main 2026-04-30.
+**Active feature**: 020 (validation-audit) — **AWAITING USER BROWSER-SMOKE (T080) before merge to `main`**. All 84 implementation tasks complete (Phases 1–10). Tests: **409 green, 0 failures** (397 unit + 12 audit harness). Constitution VIII gate passes. Spec [`spec.md`](./specs/020-validation-audit/spec.md), Plan [`plan.md`](./specs/020-validation-audit/plan.md), Tasks [`tasks.md`](./specs/020-validation-audit/tasks.md), Audit Report [`audit-report.md`](./specs/020-validation-audit/audit-report.md), CLOSEOUT [`CLOSEOUT.md`](./specs/020-validation-audit/CLOSEOUT.md). 0 CRITICAL findings ✓; 12 HIGH + 6 MEDIUM + 20 LOW all DEFERRED to feature 021 (see backlog `B-020-1` … `B-020-6`). Predecessors 018 + 019 merged to main 2026-04-30.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
@@ -404,6 +404,60 @@ semantics or needs updating in the same change set.
 prefer adding a sibling field (`actualDrawdown`) over redefining the
 original (`paidOff`). Preserves backwards-compat readability and makes the
 diff-of-record clean.
+
+### Audit-harness wiring needs persona-aware DOM stubs and explicit constants
+
+Two systemic harness gaps surfaced ~250 false-positive findings during
+feature 020's first audit run. Both are sandbox-only — the calc layer is
+unaffected — but they teach a discipline for any future harness work.
+
+**Gap 1 — static `DOC_STUB` returns wrong values for persona-driven fields.**
+Any HTML helper that reads from `document.getElementById(<id>).value` for a
+field that varies by persona (`terminalBuffer`, `safetyMargin`, `bufferUnlock`,
+`bufferSS`, `irmaaThreshold`, etc.) must have its DOM stub built **per
+persona**, not cached at sandbox-factory time. A static stub of
+`terminalBuffer: '0'` made Exact-mode trivially feasible at currentAge for
+all 92 personas — ~91 false-positive A1 + B2 findings. Fix pattern: bind
+the doc stub inside the per-persona `boundFactory` closure and read from
+`persona.inp[<id>]` with a sane fallback.
+
+**Gap 2 — top-level constants in HTML need explicit `OVERRIDES` redeclaration.**
+The harness's brace-balanced extractor only captures function declarations,
+not `const`s. Top-level constants like `SAFE_TERMINAL_FIRE_RATIO = 0.20`
+(declared at line 8889 RR) must be redeclared in the harness `OVERRIDES`
+code string. Without it, every Safe-mode `findFireAgeNumerical` call threw
+inside the sandbox, and Safe-dependent invariants silently skipped. Fix
+pattern: add `var <CONST_NAME> = <value>;` to the `OVERRIDES` string when
+adding a new audit invariant that exercises a code path reading the constant.
+
+**Apply:** when adding a new persona axis or a new invariant family that
+exercises a previously-unrun code path, audit (a) every `document.getElementById`
+call in the helpers it touches and confirm the stub serves the right
+persona-driven value, AND (b) every top-level `const` referenced by those
+helpers is present in `OVERRIDES`. The cost of skipping these checks is
+hours of false-positive triage.
+
+### Multi-agent dispatch produces lockstep results when each agent gets the contract path
+
+Wave 1 of feature 020's resume run dispatched 5 parallel agents (Frontend
+Wave 2 UI, Backend Phase 4 module, two QA Engineers for Phase 5–8, and a
+Research Agent for Phase 9). All 5 succeeded on first dispatch with no
+re-work needed. The pattern that made this work:
+
+1. Each agent prompt named the exact contract / spec doc(s) to read first.
+2. Each agent prompt named the EXACT files to edit (and which to leave alone).
+3. Each agent prompt named the test suite to run before declaring done.
+4. Independent agents touched disjoint files (UI agent → HTMLs; Backend →
+   `calc/*.js` + new test file; QA1 → `mode-ordering.test.js` +
+   `end-state-validity.test.js`; QA2 → `cross-chart-consistency.test.js` +
+   `drag-invariants.test.js`; Research → `withdrawal-strategy-survey.md`).
+5. Each agent reported uncommitted work; Manager committed at the end.
+
+**Apply:** when a feature has phase parallelism (e.g., calc + UI + tests +
+research), prefer multi-agent parallel dispatch over sequential single-agent
+work. The throughput gain is 4–5× for a multi-phase feature. The risk is
+file-scope conflicts; mitigate by reviewing the file ownership table per
+agent before dispatching.
 
 ## Spec-Driven Development
 

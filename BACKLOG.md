@@ -416,3 +416,41 @@ When ready, extend `calc/simulateLifecycle.js` to interpret a non-null `noiseMod
 ### B-015-5. Manager-driven browser smoke walks on both HTML files
 
 Remaining manual gate: open both files in a real browser, run the 5-step smoke per `CLAUDE.md > Browser smoke before claiming a feature "done"`, plus the wave-specific checks in `specs/015-calc-debt-cleanup/quickstart.md`. Cannot be automated.
+
+---
+
+## Done in feature 020 — Validation Audit + Cash-flow Rewrite (2026-04-30)
+
+- **US4 (P1 / MVP) — Cash-flow calc engine rewrite**: `calc/accumulateToFire.js` v2 algorithm tracks per-year `grossIncome`, `federalTax`, `annualSpending`, `pretax401kEmployee`, `empMatchToTrad`, `stockContribution`, `cashFlowToCash`, `cashFlowWarning`. Tax base per IRS Topic 424 (`(grossIncome − pretax401kEmployee) × taxRate`); employer match flows direct to Trad. Override hook: `pviCashflowOverrideEnabled` + `pviCashflowOverride`. Negative residual clamps cashFlow to $0 + emits `cashFlowWarning='NEGATIVE_RESIDUAL'`. Conservation invariant verified for RR-baseline ($0 exact).
+- **US4 Wave 2 — Plan tab UI**: new "Annual cash flow to savings" input + override toggle (mirrors `pviEffRateOverrideEnabled` pattern); negative-residual amber warning callout (auto-shows when any pre-FIRE row has cashFlowWarning, auto-clears when residual goes positive); `monthlySavings` relabeled "Monthly Stock Contribution" with new tooltip clarifying post-tax brokerage semantics. 6 new EN + zh-TW translation keys; Translation Catalog updated.
+- **US4c (P2) — Month-precision FIRE-age header + verdict**: new `calc/fireAgeResolver.js` UMD module with year-then-month two-stage search + monotonic-flip stability fallback. KPI card renders "X Years Y Months" when month-precision applies; verdict pill renders "FIRE in X years Y months". Edge Case 4 default = option (c): UI-display refinement only; year-level feasibility unchanged.
+- **US1+US2+US3+US5 — Validation audit harness**: 5 invariant test files (mode-ordering, end-state-validity, cross-chart-consistency, drag-invariants) running 1,150+ persona×invariant cells across 92 personas. After harness wiring fixes (`SAFE_TERMINAL_FIRE_RATIO` + persona-aware DOC_STUB), audit produced 38 real findings: 0 CRITICAL ✓, 12 HIGH (DEFERRED to feature 021), 6 MEDIUM, 20 LOW.
+- **US6 (P3) — Withdrawal strategy survey**: `specs/020-validation-audit/withdrawal-strategy-survey.md` — 6 strategies (4% rule, VPW, Guyton-Klinger, Bucket, Vanguard Dynamic Spending, RMD-based) with definitions, citations, model-fit assessments, recommendations. **RMD-based recommended IMPLEMENT-NEXT** (only strategy that ships on existing deterministic chassis). Others DEFER pending Monte Carlo or are SKIP.
+- **Lockstep delivery**: both HTMLs shipped together. Test count: 397 unit + 12 audit harness = **409 tests, 0 failures**. Constitution VIII gate green.
+- Spec / Plan / Tasks / audit-report / CLOSEOUT: see [`specs/020-validation-audit/`](./specs/020-validation-audit/) — awaiting user browser-smoke (T080) before merge to `main`.
+
+## New backlog items from feature 020 audit
+
+### B-020-1. DWZ shortfall semantics harmonization (bundled feature 021)
+
+Bundles **B3 (8 HIGH findings) + E2 (5 MEDIUM findings)**. The `findFireAgeNumerical(mode='dieWithZero')` feasibility helper considers DWZ feasible at ages where the year-by-year chart sim raises `hasShortfall:true` flags on intermediate rows (rows still total > 0). Affected personas: young (age <30 fireAge), edge-fire-at-endage, RR-late-low-income, RR-inflation-fat. Root cause: chart sim's `hasShortfall` flag fires when a single pool can't fund spending (even if cross-pool draws ultimately cover it); year-level feasibility helper only checks aggregate trajectory. Fix: harmonize semantics so both use the same shortfall criterion.
+
+### B-020-2. Bracket-fill parity in stress regimes (bundled feature 021)
+
+**4 HIGH findings (C3)**. `endBalance-mismatch` warnings between `signedLifecycleEndBalance` and chart's `projectFullLifecycle` for stress-spend / pessimistic-return / inflation-fat personas. Magnitudes $500K–$4.6M. Inherited from features 014 + 018 known LTCG/bracket-fill divergence. Fix: align signed sim and chart sim on bracket-fill behavior under stress.
+
+### B-020-3. Already-retired verdict pill UX
+
+**1 MEDIUM finding (C2)**. `RR-edge-already-retired` (currentAge=65 ≥ planAge) shows pill 99% / progress card 108.9% — formula divergence. Fix: dedicated already-retired pill format; suppress the % comparison entirely.
+
+### B-020-4. Strategy ranker integer-year hysteresis
+
+**20 LOW findings (E3)**. Ranker winner flips under ±0.01yr age perturbation across multiple personas (`trad-first ↔ bracket-fill-smoothed`, `proportional ↔ conventional`). Knife-edge near integer ages. Fix: add ±0.05yr hysteresis OR quantize the ranker's age input to monthly precision.
+
+### B-020-5. Phase 4 Edge Case 4 — true fractional-year DWZ feasibility
+
+`calc/fireAgeResolver.js` defaults to option (c) per contract: month-precision is UI display only; year-level feasibility check is unchanged. True month-level feasibility would require extending `simulateRetirementOnlySigned` to pro-rate the FIRE-year row by `(1 - m/12)`. Defer until users complain that the displayed months look misaligned with actual retire-now semantics.
+
+### B-020-6. Audit harness drives in CI
+
+Phase 10 ran the full audit manually. Future: add a CI job that runs `node --test tests/unit/validation-audit/` on every PR and posts findings count to PR comments. Lets us catch regressions in mode ordering / end-state / cross-chart consistency without re-running the full audit by hand.
