@@ -54,6 +54,10 @@
  * 'window', 'document', 'localStorage', etc. are forbidden in non-comment
  * lines of calc/*.js. This file complies — every reference to those globals
  * lives behind an injected parameter named storage or win.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (UI routing controller; no $-valued state).
+ *   Frame-conversion sites: NONE.
  */
 
 // ---------------------------------------------------------------------------

@@ -56,6 +56,15 @@
  * byte-identical to v2. New v3 output fields (homeSaleEvent, postSaleBrokerageAtFire,
  * mortgageActivePayoffAge) are additive.
  *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (every $ field — brokerage, mortgage balance,
+ *     extra payment, lump-sum, home sale — lives in today's purchasing power
+ *     per v3 contract). Aligns with the v3 module-header `real dollars`
+ *     declarations on lines 14, 41, 50.
+ *   Frame-conversion sites: NONE inside this module. Inflation rate enters
+ *     as `inflation` config but is used only to derive the real return for
+ *     stocks (nominal − inflation) — itself a real-$ rate.
+ *
  * The 20% terminal-floor / Safe-mode logic in the rest of the project is
  * unrelated to this module — Payoff-vs-Invest is a side analysis that does
  * NOT participate in FIRE-age search or strategy ranking.

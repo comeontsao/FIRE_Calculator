@@ -76,6 +76,16 @@
  *   be retired when T048/T049 completes the HTML→canonical migration.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O, no module-scope mutation.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (every pool field, withdrawal, ssIncome, healthcare,
+ *     mortgage carry, college, etc., lives in today's purchasing power).
+ *   Frame-conversion sites:
+ *     - Line 162–164: validateInputs reads inflationRate range (pure-data check).
+ *     - Line 282 (healthcareForYear): nominal→real conversion via inflation.toReal
+ *       at the FR-017 boundary when scenario.healthcareOverrideNominal is present.
+ *     - Lines 319, 338, 345: inflationRate plumbing into helpers (forwarded to
+ *       makeInflation / projectSS — both real-$ producers).
  */
 
 import { makeInflation } from './inflation.js';
@@ -159,6 +169,7 @@ function validateInputs(inp) {
       `lifecycle: returnRateCashReal must be within [-0.10, 0.20], got ${inp.returnRateCashReal}`,
     );
   }
+  // FRAME: pure-data — inflationRate range check (decimal scaling factor)
   if (!(inp.inflationRate >= -0.05 && inp.inflationRate <= 0.20)) {
     throw new Error(
       `lifecycle: inflationRate must be within [-0.05, 0.20], got ${inp.inflationRate}`,
@@ -316,6 +327,8 @@ export function runLifecycle(args) {
   validateInputs(inputs);
 
   const baseYear = typeof inputs.baseYear === 'number' ? inputs.baseYear : DEFAULT_BASE_YEAR;
+  // FRAME: conversion (boundary helper) — inflationRate forwarded to
+  //        makeInflation; module-internal $ math stays in real-$ frame.
   const inflation = helpers.inflation ?? makeInflation(inputs.inflationRate, baseYear);
   const withdrawalFn = helpers.withdrawal ?? computeWithdrawal;
   const ssFn = helpers.socialSecurity ?? projectSS;
@@ -331,12 +344,14 @@ export function runLifecycle(args) {
   const householdSize = hasSecondary ? 2 : 1;
 
   // Pre-compute per-person SS projections (pure; once per call).
+  // FRAME: pure-data — inflationRate forwarded to projectSS for AIME indexing
   const ssProjPrimary = ssFn({
     currentAge: inputs.currentAgePrimary,
     ssStartAge: ssStartAgePrimary,
     earnings: inputs.ssPrimary ?? null,
     inflationRate: inputs.inflationRate,
   });
+  // FRAME: pure-data — inflationRate forwarded to projectSS for secondary
   const ssProjSecondary = hasSecondary && ssStartAgeSecondary !== undefined
     ? ssFn({
         currentAge: inputs.currentAgeSecondary,

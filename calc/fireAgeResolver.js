@@ -62,6 +62,11 @@
  *   II  — pure module, contract-documented.
  *   V   — UMD-classic-script (CommonJS + globalThis assign).
  *   VI  — Consumers list above is canonical.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (operates on age scalars + integer year/month
+ *     counters; no $-valued state lives in this module).
+ *   Frame-conversion sites: NONE.
  * =============================================================================
  */
 

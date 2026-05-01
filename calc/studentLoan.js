@@ -47,6 +47,11 @@
  *   distinct import and tests fixture the two contracts independently.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O, no module-scope mutation.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (every $ field — principalReal, paymentReal,
+ *     balanceRemainingReal — lives in today's purchasing power).
+ *   Frame-conversion sites: NONE — caller supplies real rate (nominal − inflation).
  */
 
 import { computeMortgage } from './mortgage.js';

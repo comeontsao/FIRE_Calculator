@@ -68,6 +68,13 @@
  *   - Only US is modeled in defaults. Non-US scenarios currently share the
  *     US defaults — add per-country baselines here when the scenario
  *     registry gains other countries.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (annualCostReal output and HEALTHCARE_BY_COUNTRY
+ *     baselines all in today's USD per existing module comment).
+ *   Frame-conversion sites: NONE — nominal→real conversion (when scenario
+ *     supplies healthcareOverrideNominal) happens in calc/lifecycle.js's
+ *     healthcareForYear() at the FR-017 boundary, not here.
  */
 
 /** Per-adult real-dollar baselines by phase (US). */

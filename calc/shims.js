@@ -34,6 +34,11 @@
  *
  * Unit tests in tests/unit/shims.test.js MUST stub the canonical helper (or
  * `getCanonicalInputs`) to throw and assert each fallback + `[shim-name] canonical threw:` prefix.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (glue layer — forwards values; no $ math here).
+ *   Frame-conversion sites: NONE — every $ figure is delegated to canonical
+ *     calc modules, each of which carries its own FRAME documentation.
  */
 
 /**

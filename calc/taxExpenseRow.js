@@ -30,6 +30,13 @@
  *   - Constitution Principle II (pure module, contract-documented).
  *   - Constitution Principle V (UMD-classic-script: CommonJS for Node, globalThis
  *     for the browser inline script context).
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (snapshot fields produced by accumulateToFire.js
+ *     are real-$ post-US3; the Plan-tab Expenses pill displays today's $).
+ *   Frame-conversion sites: NONE — the formatter only reads scalars and
+ *     divides by 12 for monthly display. Wave 4 (US1) will add a sibling
+ *     bookValue read path; that boundary will be a conversion site there.
  * =============================================================================
  */
 

@@ -26,6 +26,12 @@
  *   - tests/unit/strategyRankerHysteresis.test.js (US4 hysteresis tests)
  *
  * Pure: no DOM, no globals, no localStorage. Node-importable for unit tests.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (sums federalTax / total over real-$ perYearRows
+ *     produced by accumulateToFire / projectFullLifecycle; comparison scalars
+ *     are unitless margins of real-$ aggregates).
+ *   Frame-conversion sites: NONE — every scalar consumed lives in real-$.
  */
 
 'use strict';

@@ -24,6 +24,14 @@
  * Defaults applied (documented so consumers know what's automatic):
  *   - returnRate → 0.07 (nominal); inflationRate → 0.03; returnRateCashReal → 0.005
  *   - annualSpendReal → scenario-table lookup (selectedScenario → USD/yr)
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (adapter; mostly forwards canonical fields).
+ *   Frame-conversion sites:
+ *     - Line 212: returnRateReal = nominal − inflation (real return derivation;
+ *       result fed into lifecycle in real-$ frame).
+ *     - Line 268: inflationRate forwarded into canonical Inputs (consumed by
+ *       lifecycle.js, socialSecurity.js, healthcare.js — all real-$ modules).
  *   - solverMode → inp.fireMode ?? 'safe'
  *   - ssStartAgePrimary → inp.ssClaimAge ?? 67
  *   - endAge → inp.endAge ?? 95
@@ -208,7 +216,10 @@ export function getCanonicalInputs(inp) {
   // Returns / inflation — sliders are nominal; canonical needs REAL decimals.
   // -------------------------------------------------------------------------
   const returnNominal = inp.returnRate ?? 0.07;
+  // FRAME: pure-data — inflationRate is a decimal scaling factor (non-$);
+  //        forwarded downstream into real-$ modules.
   const inflationRate = inp.inflationRate ?? 0.03;
+  // FRAME: real-$ — returnRateReal feeds canonical real-frame pool growth.
   const returnRateReal = returnNominal - inflationRate;
   // Inline cash pool grows at CASH_ANNUAL_GROWTH = 1.005 → 0.5% real.
   const returnRateCashReal = 0.005;
@@ -265,6 +276,7 @@ export function getCanonicalInputs(inp) {
     annualSpendReal,
     returnRateReal,
     returnRateCashReal,
+    // FRAME: pure-data — inflationRate forwarded into canonical Inputs
     inflationRate,
     tax: DEFAULT_TAX_CONFIG,
     solverMode,

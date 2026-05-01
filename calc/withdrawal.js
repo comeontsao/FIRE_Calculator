@@ -58,6 +58,11 @@
  *   - Tax convergence: up to 8 gross-up iterations to settle the
  *     withdrawal-creates-tax-creates-more-withdrawal fixed point. Residual
  *     drift is absorbed by an extra draw pass before feasibility is decided.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (annualSpendReal, pool balances, taxOwedReal,
+ *     ssIncomeReal — all real dollars per existing invariant).
+ *   Frame-conversion sites: NONE.
  */
 
 import { computeTax } from './tax.js';

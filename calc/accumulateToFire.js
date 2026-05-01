@@ -76,6 +76,21 @@
  *   V   — CommonJS (UMD-style globalThis assign for browser compat).
  *   VI  — Consumers list above is canonical.
  *   VIII — Spending Funded First is a RETIREMENT-phase contract; not modified here.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: mixed (PRE-US3 state — real-$ pool growth + nominal-$
+ *     income/spending; US3/Wave 3 will reconcile to single-frame real-$).
+ *   Frame-conversion sites:
+ *     - Line 285 (PvI passthrough): inflation rate forwarded to payoffVsInvest;
+ *       not a $-conversion site itself but feeds nominal-$ math downstream.
+ *     - Lines 333–335: inflationRate / realReturnStocks / realReturn401k —
+ *       real-return constants in real-$ frame.
+ *     - Line 348: raiseRate read — feeds nominal-$ income inflation.
+ *     - Line 530: grossIncome inflated to nominal-$ by raiseRate^yearsFromNow.
+ *     - Line 545: annualSpending inflated to nominal-$ by inflationRate^yearsFromNow.
+ *     - Lines 605–607: pool growth at realReturn — real-$ frame.
+ *     - Cash-flow residual (line 559): MIXED — gross/spend are nominal,
+ *       but pool-of-record is real-$. This is the US3 reconciliation target.
  * =============================================================================
  */
 
@@ -282,6 +297,7 @@ function _fetchPviData(inp, currentAge, fireAge, mtg, mortgageStrategy, sellAtFi
       sellAtFire,
       mfjStatus,
       stocksReturn: inp.returnRate,
+      // FRAME: pure-data — inflationRate forwarded to payoffVsInvest config
       inflation: inp.inflationRate,
       ltcgRate,
       stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
@@ -330,8 +346,12 @@ function accumulateToFire(inp, fireAge, options) {
   const currentAge = inp.agePerson1 != null ? inp.agePerson1 : inp.ageRoger;
 
   // --- Real returns (line 9318–9319 in HTML) ---
+  // FRAME: real-$ — real-frame return constants; pool growth at these
+  //        rates keeps balances in today's purchasing power.
   const inflationRate = inp.inflationRate || 0;
+  // FRAME: real-$ — stocks real return (nominal − inflation)
   const realReturnStocks = inp.returnRate - inflationRate;
+  // FRAME: real-$ — 401k real return (nominal − inflation)
   const realReturn401k = inp.return401k - inflationRate;
 
   // --- Contribution constants (line 9320–9322) ---
@@ -345,6 +365,8 @@ function accumulateToFire(inp, fireAge, options) {
   // --- v2 Cash-flow inputs ---
   const annualIncomeBase = inp.annualIncome || 0;   // gross annual income at currentAge
   const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
+  // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); used
+  //        downstream at line 530 to inflate income into nominal-$ frame.
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
   // Base annual spend: prefer inp.annualSpend (explicit), fall back to monthlySpend*12,
   // then fall back to 0 (backwards-compatible — v1 callers may not supply these fields).
@@ -527,6 +549,9 @@ function accumulateToFire(inp, fireAge, options) {
 
     // --- v2 Cash-flow accounting (FR-015 steps 1–7) ---
     // Step 1: Gross income (real-terms, raised by raiseRate each year).
+    // FRAME: nominal-$ (PRE-US3) — grossIncome here is inflated by raiseRate
+    //        making it a nominal-$ value at year `yearsFromNow`. US3 will
+    //        reconcile this to real-$ by dividing back by inflation factor.
     const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate, yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
@@ -542,6 +567,9 @@ function accumulateToFire(inp, fireAge, options) {
     const ficaBreakdown = taxResult.ficaBreakdown;
 
     // Step 4: Annual spending (inflation-adjusted).
+    // FRAME: nominal-$ (PRE-US3) — baseAnnualSpend × (1+inflationRate)^t puts
+    //        annualSpending in nominal-$ at year `yearsFromNow`. US3 will
+    //        reconcile by holding spend constant in real-$ frame.
     const annualSpending = baseAnnualSpend * Math.pow(1 + inflationRate, yearsFromNow);
 
     // Step 5: Stock contribution (already computed above as effectiveAnnualSavings).
@@ -602,8 +630,11 @@ function accumulateToFire(inp, fireAge, options) {
 
     // --- Accumulation arithmetic (steps 8–9 per v2 contract) ---
     // Step 8: Pool updates (order: pTrad/pRoth/pStocks absorb contributions, pCash absorbs cashFlow).
+    // FRAME: real-$ — pTrad grows at realReturn401k; contributions in real-$
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
+    // FRAME: real-$ — pRoth grows at realReturn401k; contributions in real-$
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
+    // FRAME: real-$ — pStocks grows at realReturnStocks; contributions in real-$
     pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
     pCash = pCash + cashFlowToCash;
 
