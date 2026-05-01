@@ -911,6 +911,6 @@ const _api = { assembleAuditSnapshot: assembleAuditSnapshot };
 if (typeof module !== 'undefined' && module && module.exports) {
   module.exports = _api;
 }
-if (typeof window !== 'undefined') {
-  window.assembleAuditSnapshot = assembleAuditSnapshot;
+if (typeof globalThis !== 'undefined') {
+  globalThis.assembleAuditSnapshot = assembleAuditSnapshot;
 }

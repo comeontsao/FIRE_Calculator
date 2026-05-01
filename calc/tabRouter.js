@@ -699,10 +699,10 @@ const _tabRouterApi = {
 if (typeof module !== 'undefined' && module && module.exports) {
   module.exports = _tabRouterApi;
 }
-if (typeof window !== 'undefined') {
-  window.createTabRouter = createTabRouter;
-  window.TABS = TABS;
+if (typeof globalThis !== 'undefined') {
+  globalThis.createTabRouter = createTabRouter;
+  globalThis.TABS = TABS;
   // Expose the full API on a namespaced handle for any future caller that
-  // needs the lower-level helpers (parseHash etc.) without polluting window.
-  window.tabRouterModule = _tabRouterApi;
+  // needs the lower-level helpers (parseHash etc.) without polluting globalThis.
+  globalThis.tabRouterModule = _tabRouterApi;
 }

@@ -7,7 +7,7 @@
  * Contract (v2): specs/017-payoff-vs-invest-stages-and-lumpsum/contracts/payoffVsInvest-calc-v2.contract.md
  * Contract (v3): specs/018-lifecycle-payoff-merge/contracts/payoffVsInvest-calc-v3.contract.md
  *
- * Inputs : PrepayInvestComparisonInputs (see data-model.md). Pure record;
+ * Inputs: PrepayInvestComparisonInputs (see data-model.md). Pure record;
  *          assembled by the renderer from existing dashboard state.
  *          v2 adds: lumpSumPayoff?: boolean (default false). When true, the
  *          Invest strategy fires a lump-sum payoff the first month its
@@ -379,7 +379,7 @@ function computePayoffVsInvest(inputs) {
   const isBuyingInDeferred = inputs.mortgage.ownership === 'buying-in' && (inputs.mortgage.buyInYears || 0) > 0;
   const windowStartAge = inputs.currentAge + (isBuyingInDeferred ? (inputs.mortgage.buyInYears || 0) : 0);
   if (isBuyingInDeferred) {
-    subSteps.push('window starts at buy-in age (year offset ' + (inputs.mortgage.buyInYears || 0) + ')');
+    subSteps.push('horizon starts at buy-in age (year offset ' + (inputs.mortgage.buyInYears || 0) + ')');
   }
 
   // Refi clamping: refiYear cannot precede mortgage start (buyInYears).
