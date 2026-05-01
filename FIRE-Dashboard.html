@@ -10,7 +10,9 @@
 <script src="calc/tabRouter.js"></script>
 <script src="calc/calcAudit.js"></script>
 <script src="calc/payoffVsInvest.js"></script>
+<script src="calc/taxBrackets.js"></script>
 <script src="calc/accumulateToFire.js"></script>
+<script src="calc/taxExpenseRow.js"></script>
 <script src="calc/fireAgeResolver.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
@@ -3053,6 +3055,14 @@
     <div class="input-group">
       <label data-i18n="profile.taxRate">Effective Tax Rate (%)</label>
       <input type="number" id="taxRate" value="28" onchange="recalcAll()">
+      <!-- Feature 021 — Auto progressive-bracket toggle (US3 FR-015) -->
+      <div class="tax-rate-auto-row" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.9em;cursor:pointer">
+          <input type="checkbox" id="taxRateAutoMode" onchange="onTaxRateAutoToggle()">
+          <span data-i18n="invest.taxRateAuto" data-i18n-tip="invest.taxRateAutoTooltip">Auto</span>
+        </label>
+        <span id="taxRateAutoLabel" style="font-size:0.85em;color:var(--accent2,#0d8);display:none"></span>
+      </div>
     </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
@@ -3544,6 +3554,45 @@
               onclick="addExpenseRow(document.getElementById('expenseLibraryPicker').value)"
               data-i18n="exp.add.button">+ Add expense</button>
     </div>
+    <!-- ========== Feature 021 — Tax category (US1 + US2) ========== -->
+    <!-- Top-level Tax category with two sub-rows. Income tax is read-only (lock
+         icon, auto-computed from accumulateToFire.js v3 federalTax + ficaTax).
+         Other tax is a manual expense bucket that sums into monthlySpend. -->
+    <table class="expense-table" id="taxCategoryTable" style="margin-top:18px">
+      <thead>
+        <tr>
+          <th colspan="5" style="font-weight:700;color:var(--accent2,#0d8)">
+            <span data-i18n="expenses.tax.category">Tax</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr id="taxIncomeRow">
+          <td>
+            <span class="exp-locked-badge" title="Auto-computed from your gross income, pretax 401(k), and 2024 IRS / SSA tables">🔒</span>
+            <span data-i18n="expenses.tax.income" data-i18n-tip="expenses.tax.incomeTooltip">Income tax</span>
+            <span id="taxIncomeCountryNote" style="display:none;font-size:0.8em;color:var(--text-dim);margin-left:8px"></span>
+          </td>
+          <td><span id="taxIncomeAmount">—</span></td>
+          <td>—</td>
+          <td><span id="taxIncomeRate">—</span></td>
+          <td aria-hidden="true"></td>
+        </tr>
+        <tr id="taxOtherRow">
+          <td><span data-i18n="expenses.tax.other">Other tax</span></td>
+          <td>
+            <input type="number" id="exp_tax_other" min="0" value="0"
+                   placeholder="0"
+                   data-i18n-placeholder="expenses.tax.otherPlaceholder"
+                   onchange="recalcAll()" style="width:100px">
+          </td>
+          <td>—</td>
+          <td>—</td>
+          <td aria-hidden="true"></td>
+        </tr>
+      </tbody>
+    </table>
+    <!-- ========== End Feature 021 ========== -->
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
@@ -5250,6 +5299,16 @@ const TRANSLATIONS = {
     'profile.income': 'Annual Gross Income (Combined)',
     'profile.raise': 'Annual Raise',
     'profile.taxRate': 'Effective Tax Rate (%)',
+    // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+    'invest.taxRateAuto': 'Auto',
+    'invest.taxRateAutoLabel': 'Auto: {0}%',
+    'invest.taxRateAutoTooltip': 'Use progressive US tax brackets + FICA. Toggle off to enter a flat rate manually.',
+    // Feature 021 — Tax expense category (US1 / US2)
+    'expenses.tax.category': 'Tax',
+    'expenses.tax.income': 'Income tax',
+    'expenses.tax.incomeTooltip': 'Income tax = federal income tax + FICA (Social Security + Medicare). Computed automatically from your gross income, pretax 401(k) contributions, filing status, and the 2024 IRS / SSA tables. Already deducted from your income on the savings side; does NOT add to your monthly spend budget.',
+    'expenses.tax.other': 'Other tax',
+    'expenses.tax.otherPlaceholder': 'e.g., state income tax, sales tax',
     'assets.accessible': '🟢 Accessible Now (funds pre-59.5 FIRE)',
     'assets.locked': '🔒 Locked until 59.5 (401K)',
     'assets.rogerStocks': "Roger's Stocks/Brokerage",
@@ -6318,6 +6377,16 @@ const TRANSLATIONS = {
     'profile.income': '年度總收入（合併）',
     'profile.raise': '年度加薪率',
     'profile.taxRate': '有效稅率 (%)',
+    // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+    'invest.taxRateAuto': '自動',
+    'invest.taxRateAutoLabel': '自動: {0}%',
+    'invest.taxRateAutoTooltip': '使用美國累進稅率 + FICA。關閉切換可手動輸入單一稅率。',
+    // Feature 021 — Tax expense category (US1 / US2)
+    'expenses.tax.category': '稅',
+    'expenses.tax.income': '所得稅',
+    'expenses.tax.incomeTooltip': '所得稅 = 聯邦所得稅 + FICA（社會安全稅 + 醫療保險稅）。根據您的總收入、稅前 401(k) 提撥、申報狀態以及 2024 年 IRS / SSA 稅表自動計算。已從收入端扣除，不計入月支出預算。',
+    'expenses.tax.other': '其他稅',
+    'expenses.tax.otherPlaceholder': '例如：州所得稅、銷售稅',
     'assets.accessible': '🟢 可用資金（59.5 歲前 FIRE 用）',
     'assets.locked': '🔒 鎖定至 59.5 歲 (401K)',
     'assets.rogerStocks': 'Roger 股票/券商帳戶',
@@ -7502,7 +7571,13 @@ function getExpenses() {
 }
 
 function getTotalMonthlyExpenses() {
-  return getExpenses().reduce((sum, e) => sum + e.monthly, 0);
+  // Feature 021 (US2 / T052) — Other tax sub-row sums into monthlySpend (FR-007).
+  // Income tax is NOT added (FR-006: already deducted on the income side via
+  // accumulateToFire.js v2 cash-flow math).
+  const _baseSum = getExpenses().reduce((sum, e) => sum + e.monthly, 0);
+  const _otherTaxEl = document.getElementById('exp_tax_other');
+  const _otherTax = _otherTaxEl ? (parseFloat(_otherTaxEl.value) || 0) : 0;
+  return _baseSum + _otherTax;
 }
 
 // ----- Add / remove handlers -----
@@ -7593,7 +7668,14 @@ function getInputs() {
     stockGainPct: (parseFloat((document.getElementById('stockGainPct')||{}).value) || 60) / 100,
     annualIncome: parseFloat(document.getElementById('annualIncome').value),
     raiseRate: parseFloat(document.getElementById('raiseRate').value) / 100,
-    taxRate: parseFloat(document.getElementById('taxRate').value) / 100,
+    // Feature 021 — when Auto toggle is ON, pass taxRate=0 so accumulateToFire
+    // takes the progressive-bracket + FICA path (US3 / FR-015). When Auto is OFF,
+    // the user-entered flat-rate value drives the v2 byte-identical override path.
+    taxRate: (function() {
+      const _autoEl = document.getElementById('taxRateAutoMode');
+      if (_autoEl && _autoEl.checked) return 0;
+      return parseFloat(document.getElementById('taxRate').value) / 100;
+    })(),
     // 401K is split into Traditional (pre-tax) + Roth (after-tax).
     // #roger401k stays as the Traditional balance (for CSV back-compat).
     // #roger401kRoth is the new Roth balance input.
@@ -9839,6 +9921,10 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         stockContribution: _ay.stockContribution,
         cashFlowToCash: _ay.cashFlowToCash,
         cashFlowWarning: _ay.cashFlowWarning,
+        // v3 cash-flow fields (feature 021, US3 — progressive brackets + FICA)
+        ficaTax: _ay.ficaTax,
+        federalTaxBreakdown: _ay.federalTaxBreakdown,
+        ficaBreakdown: _ay.ficaBreakdown,
       });
     }
     // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
@@ -11003,7 +11089,14 @@ function getStrategies() { return window.__STRATEGIES_V008__; }
 // Since US1's T017 thread `mortgageStrategyOverride` through every projectFullLifecycle
 // call site (chart, FIRE-age search, ranker), the ranker's input automatically
 // changes when strategy changes. No code change required here.
-function scoreAndRank(inp, fireAge, mode, objective) {
+// Feature 021 US4 (B-020-4): optional 5th arg `previousWinnerId` enables
+// hysteresis at the integer-age boundary. When omitted, the function falls
+// back to reading `_lastStrategyResults?.winnerId` from the closure-scoped
+// global so existing call sites (recalcAll path) get hysteresis without a
+// signature change. When _lastStrategyResults is unavailable (Node-test
+// sandbox), hysteresis is skipped — preserves first-call behavior across
+// every existing test (modeObjectiveOrthogonality, strategies, thetaSweep).
+function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
   const strategies = getStrategies();
   const endAge = inp.endAge || 95;
   const realReturnStocks = inp.returnRate - inp.inflationRate;
@@ -11342,7 +11435,55 @@ function scoreAndRank(inp, fireAge, mode, objective) {
     }
     return best;
   });
-  return rankByObjective(results, objective || 'leave-more-behind', mode);
+  const ranked = rankByObjective(results, objective || 'leave-more-behind', mode);
+
+  // Feature 021 US4 (B-020-4): apply hysteresis at the integer-age boundary.
+  // Per FR-018 + research R5: a winner change requires the new contender to
+  // beat the previous winner by more than HYSTERESIS_YEARS (0.05) of
+  // equivalent score margin. Without this guard, ±0.01yr age perturbations
+  // (or ±$1 spend perturbations) flip the ranker winner across 17 personas
+  // in the feature 020 audit's E3 invariant. See calc/strategyRanker.js
+  // _newWinnerBeats / _scoreDeltaToYears for the per-sort-key normalization.
+  let prevWinnerId = previousWinnerId;
+  if (prevWinnerId === undefined && typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults) {
+    prevWinnerId = _lastStrategyResults.winnerId;
+  }
+  if (prevWinnerId
+      && ranked && Array.isArray(ranked.rows) && ranked.rows.length > 0
+      && ranked.winnerId && ranked.winnerId !== prevWinnerId
+      && typeof _newWinnerBeats === 'function') {
+    const newWinnerRow = ranked.rows[0];
+    const prevWinnerRow = ranked.rows.find(r => r.strategyId === prevWinnerId);
+    // Only apply hysteresis when the prior winner is still in the ranking
+    // AND still feasible — if the prior winner became infeasible under the
+    // new inputs, an ordinary winner change is correct, not a noise flip.
+    if (prevWinnerRow && prevWinnerRow.feasibleUnderCurrentMode !== false) {
+      const _annualSpend = (typeof inp.annualSpend === 'number' && inp.annualSpend > 0)
+        ? inp.annualSpend : 72700;
+      let _beats = true;
+      try {
+        _beats = _newWinnerBeats(prevWinnerRow, newWinnerRow,
+                                 mode, objective || 'leave-more-behind',
+                                 _annualSpend);
+      } catch (_e) {
+        _beats = true; // fail-open on any helper error
+      }
+      if (!_beats) {
+        // Hysteresis blocks the flip — promote prev winner back to rows[0]
+        // (preserves objective ordering of the rest by index).
+        const idxPrev = ranked.rows.indexOf(prevWinnerRow);
+        if (idxPrev > 0) {
+          const reordered = ranked.rows.slice();
+          reordered.splice(idxPrev, 1);
+          reordered.unshift(prevWinnerRow);
+          ranked.rows = reordered;
+        }
+        ranked.winnerId = prevWinnerId;
+        ranked.hysteresisBlocked = true; // observability flag for audit dump
+      }
+    }
+  }
+  return ranked;
 }
 
 // Sort-only operation. Called on objective toggle (no re-simulation).
@@ -12003,6 +12144,11 @@ function recalcAll() {
   // into the pure resolver in calc/fireAgeResolver.js. Stash on the snapshot
   // so renderKpiCards + verdict pill can read it without re-running the search.
   let _fireAgeResult = null;
+  // Feature 021 (US1 / T041) — capture the first-year accumulation row so the
+  // Income tax sub-row renderer + Auto-rate label can read federalTax/ficaTax
+  // from the same calc snapshot the chart consumes (single source of truth,
+  // Constitution Principle III).
+  let _firstAccumRow = null;
   try {
     if (typeof findEarliestFeasibleAge === 'function'
       && typeof simulateRetirementOnlySigned === 'function'
@@ -12014,6 +12160,11 @@ function recalcAll() {
         : 'invest-keep-paying';
       const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
       const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+      // Capture year-0 accumulation row for the tax UI.
+      if (_accumResult && Array.isArray(_accumResult.perYearRows)
+          && _accumResult.perYearRows.length > 0) {
+        _firstAccumRow = _accumResult.perYearRows[0];
+      }
       _fireAgeResult = findEarliestFeasibleAge(inp, fireMode, {
         annualSpend: effectiveSpend,
         simulateRetirementOnlySigned: simulateRetirementOnlySigned,
@@ -12030,6 +12181,20 @@ function recalcAll() {
     _fireAgeResult = null;
     if (typeof console !== 'undefined' && console.error) {
       console.error('[fireAgeResolver] resolution threw:', _e);
+    }
+  }
+
+  // Feature 021 (US1 / T041) — render the Plan-tab Expenses pill "Income tax"
+  // sub-row + the Investment-tab Auto-rate label. Both consume the same
+  // first-year accumulation row so the UI cannot diverge from the calc.
+  // Defensive: wrapped in try/catch so any DOM/calc throw never breaks recalcAll.
+  try {
+    const _taxSnap = { lifecycleProjection: { accumulationRows: _firstAccumRow ? [_firstAccumRow] : [] } };
+    if (typeof _renderTaxIncomeRow === 'function') _renderTaxIncomeRow(_taxSnap);
+    if (typeof _taxRateAutoUpdateLabel === 'function') _taxRateAutoUpdateLabel(_taxSnap);
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[tax-row] renderer threw:', _e);
     }
   }
 
@@ -14382,6 +14547,111 @@ function _pviUpdateOverrideVisibility() {
   if (cb && wrap) wrap.hidden = !cb.checked;
 }
 
+// ==================== Feature 021 — Tax-rate Auto toggle (US3 / FR-015) ====================
+// When Auto is ON, the flat-rate input is disabled (visually grayed out) and a
+// sibling label shows the auto-computed effective rate "(federalTax + ficaTax) / grossIncome".
+// When Auto is OFF, the slider is fully active and label is hidden.
+function onTaxRateAutoToggle() {
+  const cb = document.getElementById('taxRateAutoMode');
+  const slider = document.getElementById('taxRate');
+  const label = document.getElementById('taxRateAutoLabel');
+  if (!cb || !slider) return;
+  if (cb.checked) {
+    slider.disabled = true;
+    slider.style.opacity = '0.5';
+    if (label) label.style.display = '';
+  } else {
+    slider.disabled = false;
+    slider.style.opacity = '';
+    if (label) label.style.display = 'none';
+  }
+  if (typeof recalcAll === 'function') recalcAll();
+}
+
+// Update the "Auto: X.X%" sibling label with the effective rate from the
+// active accumulation snapshot. Called by recalcAll() after lifecycleProjection
+// is computed. Reads (federalTax + ficaTax) / grossIncome from the first
+// accumulation row.
+function _taxRateAutoUpdateLabel(snap) {
+  const cb = document.getElementById('taxRateAutoMode');
+  const label = document.getElementById('taxRateAutoLabel');
+  if (!cb || !label) return;
+  if (!cb.checked) { label.style.display = 'none'; label.textContent = ''; return; }
+  let pct = 0;
+  try {
+    const rows = snap && snap.lifecycleProjection && snap.lifecycleProjection.accumulationRows;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const r0 = rows[0];
+      const gross = (r0 && typeof r0.grossIncome === 'number') ? r0.grossIncome : 0;
+      const fed = (r0 && typeof r0.federalTax === 'number') ? r0.federalTax : 0;
+      const fica = (r0 && typeof r0.ficaTax === 'number') ? r0.ficaTax : 0;
+      if (gross > 0) pct = ((fed + fica) / gross) * 100;
+    }
+  } catch (_e) { /* defensive: leave pct at 0 */ }
+  const i18n = (typeof translations !== 'undefined' && typeof currentLanguage !== 'undefined'
+                && translations[currentLanguage] && translations[currentLanguage]['invest.taxRateAutoLabel'])
+    ? translations[currentLanguage]['invest.taxRateAutoLabel']
+    : 'Auto: {0}%';
+  label.textContent = i18n.replace('{0}', pct.toFixed(1));
+  label.style.display = '';
+}
+
+// ==================== Feature 021 — Income tax sub-row renderer (US1 / FR-005) ====================
+// Reads (federalTax + ficaTax) / 12 from the active accumulation snapshot and
+// formats per data-model.md §TaxExpenseRow derivation rules. Single source of
+// truth — no recomputation in the UI layer (Constitution Principle III).
+//
+// Snapshot shape: snap.lifecycleProjection.accumulationRows[0] is the first
+// accumulation year. Falls back to no-op when the snapshot/row is missing
+// (cold render before recalcAll, defensive).
+function _renderTaxIncomeRow(snap) {
+  const amountEl = document.getElementById('taxIncomeAmount');
+  const rateEl = document.getElementById('taxIncomeRate');
+  if (!amountEl || !rateEl) return;
+  // Pull the calc-engine snapshot for the first accumulation year.
+  let row0 = null;
+  try {
+    const rows = snap && snap.lifecycleProjection && snap.lifecycleProjection.accumulationRows;
+    if (Array.isArray(rows) && rows.length > 0) row0 = rows[0];
+  } catch (_e) { row0 = null; }
+  // Format via the pure helper (calc/taxExpenseRow.js). Defensive: if helper is
+  // missing for any reason, fall back to a zero-row display rather than NaN.
+  const _api = (typeof globalThis !== 'undefined' && globalThis.taxExpenseRow) ? globalThis.taxExpenseRow : null;
+  const formatted = (_api && typeof _api.formatTaxIncomeRow === 'function')
+    ? _api.formatTaxIncomeRow(row0)
+    : { monthlyAmount: 0, effectiveRate: 0, isLocked: true };
+  amountEl.textContent = '$' + Number(formatted.monthlyAmount || 0).toLocaleString();
+  rateEl.textContent = (Number(formatted.effectiveRate || 0).toFixed(1)) + '%';
+
+  // FR-009a: surface the per-country taxNote alongside the Income tax row when
+  // selectedScenario !== 'us'. Reuses the existing scenarios array's taxNote field.
+  const noteEl = document.getElementById('taxIncomeCountryNote');
+  if (noteEl) {
+    let shouldShow = false;
+    let noteText = '';
+    try {
+      if (typeof selectedScenario !== 'undefined' && selectedScenario && selectedScenario !== 'us'
+          && typeof scenarios !== 'undefined' && Array.isArray(scenarios)) {
+        const s = scenarios.find(x => x && x.id === selectedScenario);
+        if (s && typeof s.taxNote === 'string' && s.taxNote.length > 0) {
+          // Use translated tax note when available (mirrors line ~13177 pattern).
+          const _scKey = 'scenario.tax.' + s.id;
+          const _scTrans = (typeof t === 'function') ? t(_scKey) : _scKey;
+          noteText = (_scTrans && _scTrans !== _scKey) ? _scTrans : s.taxNote;
+          shouldShow = true;
+        }
+      }
+    } catch (_e) { shouldShow = false; }
+    if (shouldShow) {
+      noteEl.textContent = '(' + noteText + ')';
+      noteEl.style.display = '';
+    } else {
+      noteEl.textContent = '';
+      noteEl.style.display = 'none';
+    }
+  }
+}
+
 // ==================== Feature 020 — Cash-flow override visibility + warning ====================
 // Mirrors `_pviUpdateOverrideVisibility` — toggles the override input panel
 // based on the override checkbox state.
@@ -15565,6 +15835,10 @@ const PERSIST_IDS = [
   'safetyMargin', 'rule55Enabled', 'rule55SeparationAge', 'irmaaThreshold',
   // Feature 020 — Cash-flow override (US4 / FR-015.5)
   'pviCashflowOverrideEnabled', 'pviCashflowOverride',
+  // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+  'taxRateAutoMode',
+  // Feature 021 — Other tax manual entry (US2 / FR-007)
+  'exp_tax_other',
 ];
 
 // Slider label IDs that need updating when values are restored
@@ -17944,14 +18218,18 @@ function copyDebugInfo() {
       synthConv: Math.round(d.syntheticConversion || 0),
     }));
     // Feature 020 (T028): lifecycleProjection with v2 cash-flow fields + conservation block.
+    // Feature 021 (T033 US3): extended with v3 fields — ficaTax, federalTaxBreakdown,
+    // ficaBreakdown per row, and totalFicaTax aggregate. Conservation residual now
+    // also subtracts ficaSum so v3 invariant holds.
     const _accumRows = lc.filter(d => d.phase === 'accumulation');
     let _totalCashFlow = 0;
-    let _grossSum = 0, _taxSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
+    let _grossSum = 0, _taxSum = 0, _ficaSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
     for (const _r of _accumRows) {
       const _cf = _r.cashFlowToCash || 0;
       _totalCashFlow += _cf;
       _grossSum += (_r.grossIncome || 0);
       _taxSum += (_r.federalTax || 0);
+      _ficaSum += (_r.ficaTax || 0);
       _spendSum += (_r.annualSpending || 0);
       _contribSum += (_r.pretax401kEmployee || 0);
       _stockSum += (_r.stockContribution || 0);
@@ -17962,6 +18240,10 @@ function copyDebugInfo() {
         age: _r.age,
         grossIncome: Math.round(_r.grossIncome || 0),
         federalTax: Math.round(_r.federalTax || 0),
+        // v3 (021): per-row FICA + breakdowns
+        ficaTax: Math.round(_r.ficaTax || 0),
+        federalTaxBreakdown: _r.federalTaxBreakdown || {},
+        ficaBreakdown: _r.ficaBreakdown || {},
         annualSpending: Math.round(_r.annualSpending || 0),
         pretax401kEmployee: Math.round(_r.pretax401kEmployee || 0),
         empMatchToTrad: Math.round(_r.empMatchToTrad || 0),
@@ -17973,16 +18255,20 @@ function copyDebugInfo() {
       })),
       summary: {
         totalCashFlow: Math.round(_totalCashFlow),
+        // v3 (021): aggregate FICA across accumulation horizon
+        totalFicaTax: Math.round(_ficaSum),
         accumYears: _accumRows.length,
       },
       cashFlowConservation: {
         grossSum: Math.round(_grossSum),
         taxSum: Math.round(_taxSum),
+        // v3 (021): ficaSum included so residual reduces to ±$0 under conservation.
+        ficaSum: Math.round(_ficaSum),
         spendSum: Math.round(_spendSum),
         contribSum: Math.round(_contribSum),
         stockSum: Math.round(_stockSum),
         cashSum: Math.round(_cashSum),
-        residual: Math.round(_grossSum - _taxSum - _spendSum - _contribSum - _stockSum - _cashSum),
+        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum),
       },
     };
     // v3 (feature 018, T049 US3) — Capture Payoff-vs-Invest state per FR-019:

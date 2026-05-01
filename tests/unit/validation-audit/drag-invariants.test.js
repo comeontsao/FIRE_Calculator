@@ -249,7 +249,11 @@ const E3 = {
     for (const c of cases) {
       let r;
       try {
-        r = api.scoreAndRank(c.inp, fireAge, 'safe', 'leave-more-behind');
+        // Feature 021 US4 (B-020-4): pass baselineWinner as previousWinnerId
+        // so the ranker's hysteresis gate can block sub-threshold flips
+        // (±0.01yr / ±$1 perturbations whose primary-metric delta lies
+        // within HYSTERESIS_YEARS = 0.05 years' equivalent score margin).
+        r = api.scoreAndRank(c.inp, fireAge, 'safe', 'leave-more-behind', baselineWinner);
       } catch (_e) {
         continue; // skip this perturbation if ranker throws
       }

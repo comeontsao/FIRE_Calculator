@@ -1,0 +1,168 @@
+# =============================================================================
+# .github/workflows/audit.yml
+#
+# Feature 021 — User Story 5: Audit Harness in CI (carry-forward B-020-6)
+# Spec: specs/021-tax-category-and-audit-cleanup/spec.md § US5 + FR-019 + FR-020
+# Research: specs/021-tax-category-and-audit-cleanup/research.md § R4
+# Tasks: T067, T068, T069
+#
+# Runs the validation-audit harness (tests/unit/validation-audit/) on every
+# push and pull-request, parses finding counts by severity from the harness
+# summary lines, posts a PR comment, and fails the build on any CRITICAL
+# finding. HIGH findings emit a warning but do NOT fail the build.
+#
+# Constitution Principle V (zero-dep) preserved:
+#   - Only `gh` CLI (preinstalled on ubuntu-latest) and `node:test` (built-in).
+#   - No `npm install`, no marketplace JS-eval actions.
+#
+# Output-format note:
+#   The harness emits one summary line per `runHarness(...)` invocation:
+#     # [harness] N cells, M passed, K failed (CRITICAL=A HIGH=B MEDIUM=C LOW=D). Duration X.Ys.
+#   Multiple test files call `runHarness`, so we SUM across all summary
+#   lines via `awk` (R4's `head -1` example would undercount). If the
+#   harness's output format ever changes, update the awk regex below in
+#   lockstep with `tests/unit/validation-audit/harness.js` runHarness().
+#
+# Soft-fail design:
+#   - The audit-run step uses `continue-on-error: true` so the PR comment
+#     still posts even if `node --test` exits non-zero (e.g., individual
+#     test failures, harness crash). The CRITICAL gate is enforced as a
+#     separate trailing step that explicitly fails on `critical > 0`.
+#   - If the job hits the 10-minute timeout (SC-008), GitHub auto-cancels
+#     the run. The PR comment may not post in that case; users see the
+#     timeout in the Actions UI.
+# =============================================================================
+
+name: Validation Audit
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: ['**']
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # SC-008: workflow posts comment within 10 min
+    permissions:
+      contents: read
+      pull-requests: write  # required for `gh pr comment`
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run validation-audit harness
+        id: audit
+        continue-on-error: true  # let PR comment post even on test failure
+        run: |
+          # Run harness; capture stdout+stderr. `|| true` so non-zero exit
+          # (e.g., a failing invariant test) doesn't short-circuit parsing.
+          node --test tests/unit/validation-audit/*.test.js > audit-output.txt 2>&1 || true
+
+          # Sum finding counts across ALL harness summary lines.
+          # Each line looks like:
+          #   # [harness] N cells, M passed, K failed (CRITICAL=A HIGH=B MEDIUM=C LOW=D). Duration X.Ys.
+          # We sum because multiple test files invoke `runHarness` independently.
+          COUNTS=$(awk '
+            /CRITICAL=/ {
+              match($0, /CRITICAL=([0-9]+)/, a)
+              match($0, /HIGH=([0-9]+)/, b)
+              match($0, /MEDIUM=([0-9]+)/, c)
+              match($0, /LOW=([0-9]+)/, d)
+              crit += a[1]; high += b[1]; med += c[1]; low += d[1]
+            }
+            END { print crit"|"high"|"med"|"low }
+          ' audit-output.txt)
+
+          CRITICAL=$(echo "$COUNTS" | cut -d'|' -f1)
+          HIGH=$(echo "$COUNTS"     | cut -d'|' -f2)
+          MEDIUM=$(echo "$COUNTS"   | cut -d'|' -f3)
+          LOW=$(echo "$COUNTS"      | cut -d'|' -f4)
+
+          # Default empty (no harness lines emitted) to 0
+          CRITICAL=${CRITICAL:-0}
+          HIGH=${HIGH:-0}
+          MEDIUM=${MEDIUM:-0}
+          LOW=${LOW:-0}
+
+          echo "critical=$CRITICAL" >> "$GITHUB_OUTPUT"
+          echo "high=$HIGH"         >> "$GITHUB_OUTPUT"
+          echo "medium=$MEDIUM"     >> "$GITHUB_OUTPUT"
+          echo "low=$LOW"           >> "$GITHUB_OUTPUT"
+
+          # Print summary to the workflow log
+          echo "::group::Audit summary"
+          echo "CRITICAL: $CRITICAL"
+          echo "HIGH:     $HIGH"
+          echo "MEDIUM:   $MEDIUM"
+          echo "LOW:      $LOW"
+          echo "::endgroup::"
+
+          # Tail the harness output for log-diving
+          echo "::group::Harness output (last 50 lines)"
+          tail -50 audit-output.txt || true
+          echo "::endgroup::"
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CRITICAL='${{ steps.audit.outputs.critical }}'
+          HIGH='${{ steps.audit.outputs.high }}'
+          MEDIUM='${{ steps.audit.outputs.medium }}'
+          LOW='${{ steps.audit.outputs.low }}'
+
+          # Choose a status icon based on severity findings
+          if [ "${CRITICAL:-0}" -gt 0 ]; then
+            STATUS="FAIL (CRITICAL findings present)"
+          elif [ "${HIGH:-0}" -gt 0 ]; then
+            STATUS="WARN (HIGH findings present)"
+          else
+            STATUS="PASS"
+          fi
+
+          BODY=$(cat <<EOF
+          ## Validation Audit — $STATUS
+
+          | Severity | Count |
+          |---:|---:|
+          | CRITICAL | ${CRITICAL:-0} |
+          | HIGH | ${HIGH:-0} |
+          | MEDIUM | ${MEDIUM:-0} |
+          | LOW | ${LOW:-0} |
+
+          - CRITICAL findings fail the build.
+          - HIGH findings emit this warning but do not fail the build.
+          - See workflow logs for the full harness output.
+
+          _Source: \`tests/unit/validation-audit/\` via \`.github/workflows/audit.yml\`._
+          EOF
+          )
+
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "$BODY"
+
+      - name: Fail on CRITICAL findings
+        run: |
+          CRITICAL='${{ steps.audit.outputs.critical }}'
+          if [ "${CRITICAL:-0}" -gt 0 ]; then
+            echo "::error::Audit found ${CRITICAL} CRITICAL finding(s) — failing the build."
+            exit 1
+          fi
+          echo "No CRITICAL findings — audit gate passes."
+
+      - name: Warn on HIGH findings
+        if: always()
+        run: |
+          HIGH='${{ steps.audit.outputs.high }}'
+          if [ "${HIGH:-0}" -gt 0 ]; then
+            echo "::warning::Audit found ${HIGH} HIGH finding(s) — review recommended (does not fail build)."
+          fi

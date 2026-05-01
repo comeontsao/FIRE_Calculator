@@ -49,6 +49,25 @@ const HTML_PATHS = {
 // Load accumulateToFire from the canonical CommonJS module.
 const { accumulateToFire: _accumulateToFire } = require(path.join(REPO_ROOT, 'calc', 'accumulateToFire.js'));
 
+// Feature 021 US4 (B-020-4): inject strategy-ranker hysteresis helpers into
+// the sandbox so the extracted scoreAndRank() can apply hysteresis. Without
+// this, `typeof _newWinnerBeats === 'function'` is false in the sandbox and
+// hysteresis is silently skipped — defeating the E3 invariant fix.
+//
+// Strip the trailing CommonJS export + globalThis-registration block (which
+// would pollute the Node global from inside `new Function`) and keep only
+// the function declarations + HYSTERESIS_YEARS const that the sandbox needs.
+const _STRATEGY_RANKER_FULL_SRC = fs.readFileSync(
+  path.join(REPO_ROOT, 'calc', 'strategyRanker.js'), 'utf8'
+);
+const _STRATEGY_RANKER_INJECTED_SRC = (function() {
+  const cutMarker = '// ---- Module exports ----';
+  const cutIdx = _STRATEGY_RANKER_FULL_SRC.indexOf(cutMarker);
+  return cutIdx > 0
+    ? _STRATEGY_RANKER_FULL_SRC.slice(0, cutIdx)
+    : _STRATEGY_RANKER_FULL_SRC;
+})();
+
 // ---------------------------------------------------------------------------
 // HTML loading — cached once per dashboard key so repeated calls are fast.
 // ---------------------------------------------------------------------------
@@ -442,7 +461,11 @@ function getFullEarningsHistory(fireAge) {
 
   // Build the full sandbox code string.
   // Parameters: _harnessPersonaInp, _harnessSelectedScenario, document, window, accumulateToFire
+  // Feature 021 US4: prepend the strategy-ranker hysteresis source so
+  // _newWinnerBeats / _scoreDeltaToYears / HYSTERESIS_YEARS are in scope for
+  // the extracted scoreAndRank() to call.
   const sandboxCode = [
+    _STRATEGY_RANKER_INJECTED_SRC,
     fnCode,
     strategiesBlock,
     scoreAndRankFn,
@@ -579,9 +602,20 @@ function buildHarnessContext(persona) {
   // Use the 'safe' FIRE age for the primary lifecycle projection.
   const safeModeResult = fireAgeByMode['safe'];
   const currentAge = inp.agePerson1 != null ? inp.agePerson1 : (inp.ageRoger || 42);
-  const defaultFireAge = safeModeResult && safeModeResult.feasible
+  const rawFireAge = safeModeResult && safeModeResult.feasible
     ? currentAge + safeModeResult.years
     : currentAge + 13;  // fallback for unreachable FIRE scenarios
+  // B-020-7 / Feature 021 US6 clamp: bound fireAge ≤ endAge to mirror live UI.
+  // The browser dashboard clamps fireAge ≤ endAge in `findFireAgeNumerical`'s
+  // post-processing (so charts never project beyond the plan horizon). The
+  // harness's sandboxed extraction of findFireAgeNumerical does not include
+  // that clamp wrapper, so without this line edge personas like
+  // `RR-edge-fire-at-endage` (currentAge + accumulationYears > endAge) feed an
+  // out-of-horizon fireAge into projectFullLifecycle / signedLifecycleEndBalance,
+  // producing artificial endBalance-mismatch warnings (HIGH C3 finding in
+  // feature 020 audit). The clamp brings the harness in lockstep with the UI.
+  const endAge = inp.endAge || 100;
+  const defaultFireAge = Math.min(rawFireAge, endAge);
 
   // Run projectFullLifecycle for the chart context.
   let chart = [];

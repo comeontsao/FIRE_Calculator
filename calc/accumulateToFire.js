@@ -1,13 +1,23 @@
 /*
  * =============================================================================
- * MODULE: calc/accumulateToFire.js
+ * MODULE: calc/accumulateToFire.js  (v3 — feature 021)
  *
- * Feature: 020-validation-audit (extends feature 019-accumulation-drift-fix)
- * Spec: specs/020-validation-audit/spec.md US4 / FR-015
- * Contract: specs/020-validation-audit/contracts/accumulate-to-fire-v2.contract.md
+ * Feature: 021-tax-category-and-audit-cleanup (extends 020 v2 cash-flow rewrite,
+ *          which extended 019 accumulation-drift fix).
+ * Spec:    specs/021-tax-category-and-audit-cleanup/spec.md US3
+ * Contract: specs/021-tax-category-and-audit-cleanup/contracts/accumulateToFire-v3.contract.md
+ *
+ * v3 changes vs v2:
+ *   - Adds progressive-bracket federal tax computation when inp.taxRate is blank/0
+ *     (auto path) using IRS 2024 brackets imported from calc/taxBrackets.js.
+ *   - Adds FICA tax (Social Security + Medicare + additional Medicare) on the same
+ *     auto path.
+ *   - Adds per-row fields: ficaTax, federalTaxBreakdown, ficaBreakdown.
+ *   - The flat-rate path (inp.taxRate > 0) is preserved byte-identical for
+ *     backwards compatibility — see _computeYearTax() override branch.
  *
  * Inputs: inp (dashboard state record), fireAge (number), options (object)
- *   See spec §4.2–4.3 for the full field list. Key inp fields:
+ *   Key inp fields (v2 + v3):
  *   - ageRoger / agePerson1          — current age (dual fallback for RR vs Generic)
  *   - roger401kTrad / person1_401kTrad
  *   - roger401kRoth / person1_401kRoth
@@ -15,64 +25,174 @@
  *   - cashSavings, otherAssets
  *   - returnRate, return401k, inflationRate
  *   - monthlySavings, contrib401kTrad, contrib401kRoth, empMatch
- *   - raiseRate (income trajectory — used in v2 grossIncome computation)
- *   - annualIncome — gross annual income (used in v2 cash-flow accounting)
- *   - taxRate — effective tax rate applied to (grossIncome − pretax401kEmployee)
- *   - annualSpend / monthlySpend — annual spending (v2: inflation-adjusted per year)
- *   - pviCashflowOverrideEnabled (boolean) — when true, bypass computed residual
- *   - pviCashflowOverride (number) — annual cash-flow override amount (when enabled)
- *   options fields:
- *   - mortgageEnabled, mortgageInputs (MortgageShape)
- *   - mortgageStrategyOverride ('invest-keep-paying' | 'prepay-extra' | 'invest-lump-sum')
- *   - secondHomeEnabled, secondHomeInputs (SecondHomeShape)
- *   - rentMonthly (number) — baseline rent used in mtgSavingsAdjust
- *   - collegeFn (inp, yearsFromNow) => number — annual college cost during accumulation
- *   - payoffVsInvestFn (inputs) => PvIOutputs | null — injected for strategy-aware P&I
- *   - mfjStatus ('mfj' | 'single') — passed to PvI invocation
- *   - pviExtraMonthly (number) — extra monthly payment passed to PvI
+ *   - raiseRate (income trajectory — used in grossIncome)
+ *   - annualIncome — gross annual income
+ *   - taxRate — when > 0, flat-rate override (v2 path); when 0/blank, auto path (v3)
+ *   - adultCount — 1 (single) or 2 (mfj); v3 uses for filing status detection
+ *   - annualSpend / monthlySpend — annual spending (inflation-adjusted)
+ *   - pviCashflowOverrideEnabled / pviCashflowOverride
+ *   options fields: see Predecessor v2 contract.
  *
  * Outputs: { end: { pTrad, pRoth, pStocks, pCash }, perYearRows: [...] }
- *   end — post-loop pool state entering the FIRE year (pre-retirement-phase simulation)
- *   perYearRows — one row per accumulation year (age = currentAge..fireAge-1):
+ *   perYearRows v3 fields (additive over v2):
  *     v1 fields (unchanged):
  *       { age, pTrad, pRoth, pStocks, pCash, mtgPurchasedThisYear, h2PurchasedThisYear,
  *         lumpSumDrainThisYear, contributions, effectiveAnnualSavings, mtgSavingsAdjust,
  *         collegeDrain, h2Drain }
- *     v2 fields (NEW — feature 020 cash-flow accounting):
+ *     v2 fields (preserved):
  *       { grossIncome, federalTax, annualSpending, pretax401kEmployee,
  *         empMatchToTrad, stockContribution, cashFlowToCash, cashFlowWarning }
- *   Each row is a snapshot AT THE START of that age (pre-mutations, pre-growth).
+ *     v3 fields (NEW — feature 021):
+ *       { ficaTax, federalTaxBreakdown, ficaBreakdown }
  *
  * Consumers:
  *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch).
- *      Feature 020 removes the typeof-guarded inline fallback (plan §Phase 2).
  *   2. FIRE-Dashboard.html → _simulateStrategyLifetime. Consumes end only.
  *   3. FIRE-Dashboard.html → computeWithdrawalStrategy. Consumes end only.
  *   4. FIRE-Dashboard.html → signedLifecycleEndBalance. Consumes end only.
- *   5. FIRE-Dashboard.html → copyDebugInfo() audit dump — perYearRows v2 fields.
+ *   5. FIRE-Dashboard.html → copyDebugInfo() audit dump — perYearRows v2 + v3 fields.
+ *   6. FIRE-Dashboard.html → Plan-tab Expenses pill "Income tax" sub-row (US1, T036+).
+ *      Reads (federalTax + ficaTax) / 12 → monthly $ for the row.
  *   (and the corresponding lines in FIRE-Dashboard-Generic.html — lockstep mirror)
  *
  * Policy:
  *   - PURE. No DOM, no window/document/localStorage, no global mutable state.
- *   - Node-importable via CommonJS module.exports (matches calc/payoffVsInvest.js pattern).
- *   - Cash growth: 1.005/yr (hardcoded — locked decision per plan §6 item 2).
- *   - Stocks/401k: real return (nominal − inflation).
- *   - Federal tax computed on (grossIncome − pretax401kEmployee) × taxRate per IRS R1.
- *   - pCash grows by cashFlowToCash (clamped at 0) — no phantom debt.
- *   - Employer match is a non-cash inflow to pTrad; NOT part of the conservation invariant LHS.
+ *   - Node-importable via CommonJS module.exports.
+ *   - Tax brackets + FICA constants imported from calc/taxBrackets.js (require for
+ *     Node, globalThis.taxBrackets for browser — see UMD-classic-script pattern).
+ *   - Cash growth: 1.005/yr.
+ *   - Federal tax: progressive brackets (auto) OR flat rate × (gross − pretax401k).
+ *   - FICA: 0 in flat-rate mode; full SS+Medicare+addtlMedicare in auto mode.
  *
- * Conservation invariant (v2, FR-015.2, SC-012):
- *   For non-clamped years:
- *   grossIncome − federalTax − annualSpending − pretax401kEmployee − stockContribution
- *     === cashFlowToCash (within floating-point tolerance)
+ * Conservation invariant (v3, FR-015.2 extended):
+ *   For non-clamped years (auto OR flat-rate):
+ *   grossIncome − federalTax − ficaTax − annualSpending − pretax401kEmployee
+ *     − stockContribution === cashFlowToCash (within ±$1)
+ *   (v2 invariant remains valid — ficaTax = 0 in flat-rate mode means the LHS
+ *    reduces to the v2 formula automatically.)
  *
  * Constitution Principles:
  *   II  — pure module, contract-documented.
- *   V   — CommonJS (no `export` keyword; UMD-style globalThis assign for browser compat).
+ *   V   — CommonJS (UMD-style globalThis assign for browser compat).
  *   VI  — Consumers list above is canonical.
  *   VIII — Spending Funded First is a RETIREMENT-phase contract; not modified here.
  * =============================================================================
  */
+
+// ---------------------------------------------------------------------------
+// Tax brackets + FICA constants — imported from calc/taxBrackets.js (feature 021).
+// Pattern: Node require() in tests, globalThis.taxBrackets in browser via UMD wrapper.
+// ---------------------------------------------------------------------------
+const _taxBrackets = (typeof require !== 'undefined')
+  ? require('./taxBrackets.js')
+  : (typeof globalThis !== 'undefined' ? globalThis.taxBrackets : null);
+const BRACKETS_MFJ_2024 = _taxBrackets && _taxBrackets.BRACKETS_MFJ_2024;
+const BRACKETS_SINGLE_2024 = _taxBrackets && _taxBrackets.BRACKETS_SINGLE_2024;
+const FICA_SS_RATE = _taxBrackets ? _taxBrackets.FICA_SS_RATE : 0.062;
+const FICA_SS_WAGE_BASE_2024 = _taxBrackets ? _taxBrackets.FICA_SS_WAGE_BASE_2024 : 168600;
+const FICA_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_MEDICARE_RATE : 0.0145;
+const FICA_ADDITIONAL_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_RATE : 0.009;
+const FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
+  ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE : 200000;
+const FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
+  ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
+
+/**
+ * v3 tax computation helper (feature 021). Pure: no I/O.
+ *
+ * Two paths:
+ *   - Override (flat-rate): inp.taxRate > 0 → v2 byte-identical output, ficaTax = 0,
+ *     breakdowns empty. Backwards compatibility for personas with pinned taxRate.
+ *   - Auto (progressive brackets + FICA): default path when taxRate is 0/blank.
+ *     Uses IRS 2024 brackets and SSA 2024 FICA constants from calc/taxBrackets.js.
+ *
+ * Filing status detection: inp.adultCount === 1 → single; otherwise (2 or undefined)
+ * → MFJ. RR dashboard never sets adultCount and is always couple → MFJ default.
+ *
+ * FICA model: income split equally between earners for MFJ; SS wage-base cap applies
+ * per individual; Medicare on full grossIncome; additional Medicare above threshold.
+ *
+ * @param {number} grossIncome
+ * @param {number} pretax401kEmployee
+ * @param {object} inp  Dashboard state record.
+ * @returns {{
+ *   federalTax: number,
+ *   ficaTax: number,
+ *   federalTaxBreakdown: object,
+ *   ficaBreakdown: object,
+ *   computedFromBrackets: boolean,
+ * }}
+ */
+function _computeYearTax(grossIncome, pretax401kEmployee, inp) {
+  // Flat-rate override path: preserves v2 behavior.
+  if (Number.isFinite(inp.taxRate) && inp.taxRate > 0) {
+    return {
+      federalTax: Math.max(0, (grossIncome - pretax401kEmployee) * inp.taxRate),
+      ficaTax: 0,
+      federalTaxBreakdown: {},
+      ficaBreakdown: {},
+      computedFromBrackets: false,
+    };
+  }
+
+  // Auto path — progressive brackets + FICA.
+  const filingStatus = (inp.adultCount === 1) ? 'single' : 'mfj';
+  const brackets = (filingStatus === 'mfj') ? BRACKETS_MFJ_2024 : BRACKETS_SINGLE_2024;
+  const stdDed = brackets.standardDeduction;
+  const taxableIncome = Math.max(0, grossIncome - pretax401kEmployee - stdDed);
+
+  // Walk brackets; accumulate per-bracket dollars.
+  const breakdown = {
+    bracket10: 0, bracket12: 0, bracket22: 0, bracket24: 0,
+    bracket32: 0, bracket35: 0, bracket37: 0,
+    standardDeduction: stdDed,
+    taxableIncome,
+  };
+  let federalTax = 0;
+  let prevBound = 0;
+  for (const b of brackets.brackets) {
+    if (taxableIncome <= prevBound) break;
+    const inThisBracket = Math.min(taxableIncome, b.upperBound) - prevBound;
+    if (inThisBracket > 0) {
+      const taxFromThisBracket = inThisBracket * b.rate;
+      const key = 'bracket' + Math.round(b.rate * 100);
+      breakdown[key] = Math.round(taxFromThisBracket);
+      federalTax += taxFromThisBracket;
+    }
+    prevBound = b.upperBound;
+  }
+
+  // FICA: split income equally between earners for MFJ; SS cap applies per individual.
+  const earnerCount = (filingStatus === 'mfj') ? 2 : 1;
+  const incomePerEarner = grossIncome / earnerCount;
+  const ssTaxablePerEarner = Math.min(incomePerEarner, FICA_SS_WAGE_BASE_2024);
+  const ssTax = ssTaxablePerEarner * FICA_SS_RATE * earnerCount;
+  const ssWageBaseHit = (incomePerEarner > FICA_SS_WAGE_BASE_2024);
+
+  const medicareTax = grossIncome * FICA_MEDICARE_RATE;
+
+  const additionalMedicareThreshold = (filingStatus === 'mfj')
+    ? FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ
+    : FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE;
+  const additionalMedicare = Math.max(0, grossIncome - additionalMedicareThreshold)
+                             * FICA_ADDITIONAL_MEDICARE_RATE;
+
+  const ficaTax = ssTax + medicareTax + additionalMedicare;
+  const ficaBreakdown = {
+    socialSecurity: Math.round(ssTax),
+    medicare: Math.round(medicareTax),
+    additionalMedicare: Math.round(additionalMedicare),
+    ssWageBaseHit,
+  };
+
+  return {
+    federalTax: Math.round(federalTax),
+    ficaTax: Math.round(ficaTax),
+    federalTaxBreakdown: breakdown,
+    ficaBreakdown,
+    computedFromBrackets: true,
+  };
+}
 
 /**
  * Pure monthly-payment calculator.
@@ -412,8 +532,14 @@ function accumulateToFire(inp, fireAge, options) {
     // Step 2: Pre-tax 401(k) employee contributions.
     const pretax401kEmployee = emp401kTrad + emp401kRoth;
 
-    // Step 3: Federal tax on (grossIncome − pretax401kEmployee) × taxRate (IRS R1).
-    const federalTax = (grossIncome - pretax401kEmployee) * taxRate;
+    // Step 3: Tax computation (v3 — feature 021).
+    // Flat-rate path (taxRate > 0) is byte-identical to v2.
+    // Auto path (taxRate = 0 / blank) computes progressive brackets + FICA.
+    const taxResult = _computeYearTax(grossIncome, pretax401kEmployee, inp);
+    const federalTax = taxResult.federalTax;
+    const ficaTax = taxResult.ficaTax;
+    const federalTaxBreakdown = taxResult.federalTaxBreakdown;
+    const ficaBreakdown = taxResult.ficaBreakdown;
 
     // Step 4: Annual spending (inflation-adjusted).
     const annualSpending = baseAnnualSpend * Math.pow(1 + inflationRate, yearsFromNow);
@@ -428,8 +554,10 @@ function accumulateToFire(inp, fireAge, options) {
       // Override active: bypass computed residual.
       cashFlowToCash = cashflowOverrideValue;
     } else if (annualIncomeBase > 0 || taxRate > 0) {
-      // v2 cash-flow model: compute residual from income/tax/spend/contributions.
-      const residual = grossIncome - federalTax - pretax401kEmployee - annualSpending - stockContribution;
+      // v3 cash-flow model: residual = gross - federalTax - ficaTax - 401k - spend - stock.
+      // ficaTax = 0 in flat-rate mode → reduces to v2 formula automatically.
+      const residual = grossIncome - federalTax - ficaTax - pretax401kEmployee
+                       - annualSpending - stockContribution;
       if (residual < 0) {
         cashFlowToCash = 0;
         cashFlowWarning = 'NEGATIVE_RESIDUAL';
@@ -466,6 +594,10 @@ function accumulateToFire(inp, fireAge, options) {
       stockContribution,
       cashFlowToCash,
       cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | undefined
+      // v3 fields (NEW — feature 021 progressive-bracket + FICA)
+      ficaTax,
+      federalTaxBreakdown,
+      ficaBreakdown,
     });
 
     // --- Accumulation arithmetic (steps 8–9 per v2 contract) ---

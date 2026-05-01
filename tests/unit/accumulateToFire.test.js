@@ -1396,3 +1396,291 @@ test('v2-CF-10: conservation invariant across 50-year accumulation (SC-012)', ()
     `v2-CF-10: global conservation violated: Σ(gross-tax-spend-401k-stock)=${globalConservation.toFixed(2)}, Σ(cashFlow)=${sumCashFlow.toFixed(2)}, tolerance=${tolerance}`
   );
 });
+
+// ===========================================================================
+// FEATURE 021 — v3 Progressive Bracket + FICA tests (T010–T021)
+// Spec: specs/021-tax-category-and-audit-cleanup/contracts/accumulateToFire-v3.contract.md
+// All cases set inp.taxRate = 0 (or omit it) to trigger the auto/progressive path.
+// Reference 2024 IRS / SSA values (computed from frozen brackets in calc/taxBrackets.js).
+// ===========================================================================
+
+/**
+ * Helper to build a single-year accumulation persona for v3 tax tests.
+ * Eliminates noise from raises, growth, and other moving parts.
+ */
+function v3TaxBaseInp(overrides) {
+  return Object.assign({
+    ageRoger: 42,
+    roger401kTrad: 0,
+    roger401kRoth: 0,
+    rogerStocks: 0,
+    rebeccaStocks: 0,
+    cashSavings: 0,
+    otherAssets: 0,
+    returnRate: 0.0,
+    return401k: 0.0,
+    inflationRate: 0.0,
+    monthlySavings: 0,
+    contrib401kTrad: 0,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    endAge: 95,
+    raiseRate: 0.0,
+    annualIncome: 100000,
+    taxRate: 0,            // triggers progressive auto path
+    annualSpend: 0,
+    monthlySpend: 0,
+    ssClaimAge: 67,
+  }, overrides || {});
+}
+
+// T010: v3-TX-01 — MFJ $50k income, $0 pretax 401k
+test('v3-TX-01: progressive-bracket MFJ $50k income — federalTax + ficaTax match IRS/SSA tables', () => {
+  const inp = v3TaxBaseInp({ annualIncome: 50000 });
+  // adultCount undefined → MFJ default
+  const fireAge = 43; // 1 year of accumulation
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  // Taxable income = max(0, 50000 - 0 - 29200) = 20800
+  // Federal tax: 10% × 20800 = $2,080
+  assert.ok(row0.federalTax !== undefined, 'v3-TX-01: federalTax must exist');
+  assert.ok(Math.abs(row0.federalTax - 2080) <= 1,
+    `v3-TX-01: federalTax expected ~$2,080, got $${row0.federalTax}`);
+
+  // FICA (MFJ, 2 earners @ $25k each — under SS wage base):
+  //   ssTax = $25k × 0.062 × 2 = $3,100
+  //   medicare = $50k × 0.0145 = $725
+  //   addMed = max(0, 50000 - 250000) × 0.009 = 0
+  //   ficaTax = $3,825
+  assert.ok(row0.ficaTax !== undefined, 'v3-TX-01: ficaTax must exist');
+  assert.ok(Math.abs(row0.ficaTax - 3825) <= 1,
+    `v3-TX-01: ficaTax expected ~$3,825, got $${row0.ficaTax}`);
+});
+
+// T011: v3-TX-02 — MFJ $150k income, $20k pretax 401k
+test('v3-TX-02: progressive-bracket MFJ $150k income, $20k pretax — matches spec independent test', () => {
+  const inp = v3TaxBaseInp({
+    annualIncome: 150000,
+    contrib401kTrad: 20000,
+  });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  // Taxable income = max(0, 150000 - 20000 - 29200) = 100800
+  // Federal tax (MFJ): 10%×23200 + 12%×71100 + 22%×6500 = 2320 + 8532 + 1430 = 12282
+  // (spec says ~$12,300 — within tolerance)
+  assert.ok(Math.abs(row0.federalTax - 12282) <= 50,
+    `v3-TX-02: federalTax expected ~$12,282, got $${row0.federalTax}`);
+
+  // FICA: 2 earners @ $75k each (under wage base $168.6k):
+  //   ssTax = $75k × 0.062 × 2 = $9,300
+  //   medicare = $150k × 0.0145 = $2,175
+  //   addMed = 0 (150k < 250k)
+  //   ficaTax = $11,475
+  assert.ok(Math.abs(row0.ficaTax - 11475) <= 1,
+    `v3-TX-02: ficaTax expected ~$11,475, got $${row0.ficaTax}`);
+});
+
+// T012: v3-TX-03 — MFJ $250k at additional-Medicare threshold (== threshold, not exceeded)
+test('v3-TX-03: progressive-bracket MFJ $250k income — additionalMedicare === 0 at threshold', () => {
+  const inp = v3TaxBaseInp({ annualIncome: 250000 });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  assert.ok(row0.ficaBreakdown !== undefined, 'v3-TX-03: ficaBreakdown must exist');
+  assert.strictEqual(row0.ficaBreakdown.additionalMedicare, 0,
+    `v3-TX-03: additionalMedicare must be 0 at threshold; got ${row0.ficaBreakdown.additionalMedicare}`);
+});
+
+// T013: v3-TX-04 — MFJ $300k income, additional-Medicare active
+test('v3-TX-04: progressive-bracket MFJ $300k income — additionalMedicare = $450', () => {
+  const inp = v3TaxBaseInp({ annualIncome: 300000 });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  // additionalMedicare = (300000 - 250000) * 0.009 = $450
+  assert.ok(Math.abs(row0.ficaBreakdown.additionalMedicare - 450) <= 1,
+    `v3-TX-04: additionalMedicare expected ~$450, got $${row0.ficaBreakdown.additionalMedicare}`);
+});
+
+// T014: v3-TX-05 — single filer $50k income (uses single brackets)
+test('v3-TX-05: progressive-bracket single $50k income — different from MFJ at same income', () => {
+  // Generic dashboard sets adultCount=1 for single-person mode.
+  const inp = v3TaxBaseInp({
+    annualIncome: 50000,
+    adultCount: 1,
+  });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  // Single: taxable = max(0, 50000 - 14600) = 35400
+  //   10% × 11600 + 12% × 23800 = 1160 + 2856 = 4016
+  assert.ok(Math.abs(row0.federalTax - 4016) <= 1,
+    `v3-TX-05: single federalTax expected ~$4,016, got $${row0.federalTax}`);
+  // Confirm differs from MFJ at same income (MFJ would be $2,080).
+  assert.notStrictEqual(row0.federalTax, 2080,
+    'v3-TX-05: single federalTax must differ from MFJ at same income');
+});
+
+// T015: v3-TX-06 — SS wage base cap (single high earner)
+test('v3-TX-06: SS wage base cap — single $200k earner caps SS tax at $168,600 × 6.2%', () => {
+  const inp = v3TaxBaseInp({
+    annualIncome: 200000,
+    adultCount: 1,
+  });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  assert.strictEqual(row0.ficaBreakdown.ssWageBaseHit, true,
+    'v3-TX-06: ssWageBaseHit must be true when single earner > $168,600');
+  // socialSecurity = $168,600 × 0.062 = $10,453.20 → rounds to $10,453
+  assert.ok(Math.abs(row0.ficaBreakdown.socialSecurity - 10453) <= 1,
+    `v3-TX-06: ssTax (capped) expected ~$10,453, got $${row0.ficaBreakdown.socialSecurity}`);
+});
+
+// T016: v3-TX-07 — flat-rate override path backwards-compat
+test('v3-TX-07: flat-rate override path — taxRate=0.22 produces v2-byte-identical output', () => {
+  const inp = v3TaxBaseInp({
+    annualIncome: 150000,
+    contrib401kTrad: 20000,
+    taxRate: 0.22,         // override active
+  });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  // federalTax = (150000 - 20000) * 0.22 = 28600 (v2 formula)
+  assert.ok(Math.abs(row0.federalTax - 28600) <= 1,
+    `v3-TX-07: flat-rate federalTax expected $28,600, got $${row0.federalTax}`);
+  // ficaTax must be 0 in flat-rate override mode
+  assert.strictEqual(row0.ficaTax, 0,
+    `v3-TX-07: ficaTax must be 0 in flat-rate mode; got ${row0.ficaTax}`);
+  // Breakdowns must be empty objects
+  assert.deepStrictEqual(row0.federalTaxBreakdown, {},
+    'v3-TX-07: federalTaxBreakdown must be empty in flat-rate mode');
+  assert.deepStrictEqual(row0.ficaBreakdown, {},
+    'v3-TX-07: ficaBreakdown must be empty in flat-rate mode');
+});
+
+// T017: v3-TX-08 — federal-tax-breakdown conservation
+test('v3-TX-08: federal-tax-breakdown conservation — Σ(bracket10..37) === federalTax', () => {
+  const inp = v3TaxBaseInp({ annualIncome: 150000, contrib401kTrad: 20000 });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  const bd = row0.federalTaxBreakdown;
+  assert.ok(bd, 'v3-TX-08: federalTaxBreakdown must exist');
+  const sumBrackets = (bd.bracket10 || 0) + (bd.bracket12 || 0) + (bd.bracket22 || 0)
+                    + (bd.bracket24 || 0) + (bd.bracket32 || 0) + (bd.bracket35 || 0)
+                    + (bd.bracket37 || 0);
+  assert.ok(Math.abs(sumBrackets - row0.federalTax) <= 1,
+    `v3-TX-08: bracket sum ${sumBrackets} must equal federalTax ${row0.federalTax} (±$1)`);
+});
+
+// T018: v3-TX-09 — FICA-breakdown conservation
+test('v3-TX-09: FICA-breakdown conservation — socialSecurity + medicare + additionalMedicare === ficaTax', () => {
+  const inp = v3TaxBaseInp({ annualIncome: 300000 });
+  const fireAge = 43;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const row0 = result.perYearRows[0];
+
+  const fb = row0.ficaBreakdown;
+  const sumFica = fb.socialSecurity + fb.medicare + fb.additionalMedicare;
+  assert.ok(Math.abs(sumFica - row0.ficaTax) <= 1,
+    `v3-TX-09: FICA breakdown sum ${sumFica} must equal ficaTax ${row0.ficaTax} (±$1)`);
+});
+
+// T019: v3-TX-10 — taxableIncome definition
+test('v3-TX-10: taxableIncome === max(0, grossIncome − pretax401kEmployee − standardDeduction)', () => {
+  // Case A: typical
+  let inp = v3TaxBaseInp({ annualIncome: 150000, contrib401kTrad: 20000 });
+  let row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.taxableIncome, 150000 - 20000 - 29200,
+    'v3-TX-10A: MFJ taxable income mismatch');
+  assert.strictEqual(row.federalTaxBreakdown.standardDeduction, 29200,
+    'v3-TX-10A: MFJ stdDed must be $29,200');
+
+  // Case B: low income — clamped at 0 (gross < stdDed)
+  inp = v3TaxBaseInp({ annualIncome: 20000 });
+  row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.taxableIncome, 0,
+    'v3-TX-10B: taxableIncome must clamp at 0');
+
+  // Case C: single
+  inp = v3TaxBaseInp({ annualIncome: 50000, adultCount: 1 });
+  row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.taxableIncome, 50000 - 14600,
+    'v3-TX-10C: single taxable income mismatch');
+});
+
+// T020: v3-TX-11 — filing status detection
+test('v3-TX-11: filing status detection — adultCount=1 → single, =2 → mfj, undefined → mfj', () => {
+  // Case A: adultCount=2 → MFJ
+  let inp = v3TaxBaseInp({ annualIncome: 100000, adultCount: 2 });
+  let row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.standardDeduction, 29200,
+    'v3-TX-11A: adultCount=2 must use MFJ stdDed');
+
+  // Case B: adultCount=1 → single
+  inp = v3TaxBaseInp({ annualIncome: 100000, adultCount: 1 });
+  row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.standardDeduction, 14600,
+    'v3-TX-11B: adultCount=1 must use single stdDed');
+
+  // Case C: adultCount undefined (RR default) → MFJ
+  inp = v3TaxBaseInp({ annualIncome: 100000 });
+  delete inp.adultCount;
+  row = accumulateToFire(inp, 43, baseOptions()).perYearRows[0];
+  assert.strictEqual(row.federalTaxBreakdown.standardDeduction, 29200,
+    'v3-TX-11C: adultCount undefined must default to MFJ stdDed');
+});
+
+// T021: v3-TX-12 — conservation invariant integration with v2 cash-flow
+test('v3-TX-12: conservation invariant — Σ(gross) − Σ(fed) − Σ(fica) − Σ(spend) − Σ(401k) − Σ(stock) === Σ(cashFlow) ±$1/yr', () => {
+  // 50-year horizon at age 30 → 80, MFJ, with realistic income/spend/contributions.
+  const inp = v3TaxBaseInp({
+    ageRoger: 30,
+    annualIncome: 200000,
+    contrib401kTrad: 20000,
+    contrib401kRoth: 5000,
+    empMatch: 8000,
+    monthlySavings: 2000,
+    inflationRate: 0.0,
+    raiseRate: 0.0,
+    returnRate: 0.0,
+    return401k: 0.0,
+    annualSpend: 80000,
+    monthlySpend: 80000 / 12,
+  });
+  const fireAge = 80; // 50 accumulation years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  let sumGross = 0, sumFed = 0, sumFica = 0, sumSpend = 0, sumPretax = 0, sumStock = 0, sumCashFlow = 0;
+  let nonClampedCount = 0;
+  for (const row of result.perYearRows) {
+    if (row.cashFlowWarning) continue;
+    sumGross += row.grossIncome;
+    sumFed += row.federalTax;
+    sumFica += row.ficaTax;
+    sumSpend += row.annualSpending;
+    sumPretax += row.pretax401kEmployee;
+    sumStock += row.stockContribution;
+    sumCashFlow += row.cashFlowToCash;
+    nonClampedCount++;
+  }
+  // v3 conservation: residual = gross - fed - fica - 401k - spend - stock
+  const conserved = sumGross - sumFed - sumFica - sumPretax - sumSpend - sumStock;
+  const tolerance = nonClampedCount * 1;
+  assert.ok(
+    Math.abs(conserved - sumCashFlow) < tolerance,
+    `v3-TX-12: 50-year v3 conservation violated: conserved=${conserved.toFixed(2)}, ` +
+    `cashFlow=${sumCashFlow.toFixed(2)}, tol=${tolerance}`
+  );
+});
