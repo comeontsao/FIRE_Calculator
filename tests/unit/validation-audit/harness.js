@@ -327,6 +327,11 @@ function getSelectedVisaCostAnnual() { return 0; }
 // Stub: yearsToFIREcache — used by projectFullLifecycle when overrideFireAge is null
 var yearsToFIREcache = 10;
 
+// Constant: SAFE_TERMINAL_FIRE_RATIO — defined at top-level in HTML (line 8889);
+// brace-balanced extractor only captures function declarations, so we redeclare here
+// so isFireAgeFeasible / findFireAgeNumerical can resolve it under Safe mode.
+var SAFE_TERMINAL_FIRE_RATIO = 0.20;
+
 // Stub: _lastStrategyResults / _previewStrategyId — no active strategy preview
 var _lastStrategyResults = null;
 var _previewStrategyId   = null;
@@ -468,11 +473,36 @@ function getFullEarningsHistory(fireAge) {
   }
 
   // Wrap factory to also pass the doc stub and a minimal window stub.
+  // Build the DOC_STUB PER-PERSONA so persona-driven fields (terminalBuffer,
+  // safetyMargin, etc.) flow into HTML helpers that read via document.getElementById.
+  // Otherwise findFireAgeNumerical falls back to static stubs (e.g.,
+  // terminalBuffer='0') and produces trivially-feasible results.
   const boundFactory = function(inp, scenario) {
     const _win = {
       computePayoffVsInvest: null,  // no PvI in harness baseline
     };
-    return factory(inp, scenario, DOC_STUB, _win, _accumulateToFire);
+    inp = inp || {};
+    const _v = function(key, fb) { return (inp[key] != null) ? { value: String(inp[key]) } : { value: fb }; };
+    const _c = function(key, fb) { return { checked: (inp[key] != null) ? !!inp[key] : fb }; };
+    const _personaVals = {
+      terminalBuffer:           _v('terminalBuffer', '2'),
+      exp_0:                    _v('exp_0', '2690'),
+      endAge:                   _v('endAge', '100'),
+      rule55Enabled:            _c('rule55Enabled', false),
+      rule55SeparationAge:      _v('rule55SeparationAge', '54'),
+      safetyMargin:             _v('safetyMargin', '5'),
+      irmaaThreshold:           _v('irmaaThreshold', '212000'),
+      twStdDed:                 _v('twStdDed', '30000'),
+      twTop12:                  _v('twTop12', '94300'),
+      twTop22:                  _v('twTop22', '201050'),
+      adultCount:               _v('adultCount', '2'),
+      pviStrategyPrepay:        _c('pviStrategyPrepay', false),
+      pviStrategyInvestLumpSum: _c('pviStrategyInvestLumpSum', false),
+      bufferUnlock:             _v('bufferUnlock', '1.5'),
+      bufferSS:                 _v('bufferSS', '1.0'),
+    };
+    const _personaDoc = { getElementById: function(id) { return _personaVals[id] || null; } };
+    return factory(inp, scenario, _personaDoc, _win, _accumulateToFire);
   };
 
   _sandboxFactoryCache.set(dashboard, boundFactory);
