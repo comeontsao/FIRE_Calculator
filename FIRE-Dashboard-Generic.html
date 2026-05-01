@@ -6671,6 +6671,13 @@ const TRANSLATIONS = {
     'audit.strategyRanking.tieBreakerChain.label':  'Tie-breakers: {0} → {1}',
     // Feature 015 follow-up — Withdraw Strategy label inline beside Safe/Exact/DWZ
     'withdraw.strategy.label':                  'Withdraw Strategy:',
+    // Feature 022 (US1 / Wave 4) — Book Value display frame labels.
+    'display.frame.bookValue':                  'Book Value',
+    'display.frame.purchasingPower':            'purchasing power',
+    'display.frame.assumedInflation':           'assumed annual inflation',
+    'display.frame.captionTemplate':            'Book Value at {0}% assumed annual inflation',
+    'display.frame.bookValueColumnSuffix':      '(Book Value)',
+    'display.frame.purchasingPowerColumnSuffix':'(purchasing power)',
   },
   zh: {
     'header.title': 'FIRE 指揮中心 — 通用模板',
@@ -7724,6 +7731,13 @@ const TRANSLATIONS = {
     'audit.strategyRanking.tieBreakerChain.label':  '平手條件:{0} → {1}',
     // Feature 015 follow-up — Withdraw Strategy label
     'withdraw.strategy.label':                  '提領策略：',
+    // Feature 022 (US1 / Wave 4) — Book Value display frame labels.
+    'display.frame.bookValue':                  '帳面價值',
+    'display.frame.purchasingPower':            '約等於今日價值',
+    'display.frame.assumedInflation':           '假設年通膨率',
+    'display.frame.captionTemplate':            '帳面價值 (假設年通膨率 {0}%)',
+    'display.frame.bookValueColumnSuffix':      '(帳面價值)',
+    'display.frame.purchasingPowerColumnSuffix':'(約等於今日價值)',
   }
 };
 
@@ -8429,6 +8443,17 @@ function renderWithdrawalWinnerBanner() {
 // Populates #strategyCompareTableBody with the 6 non-winner rows from the current
 // Ranking. Each row shows strategy name, end-balance, lifetime tax, earliest FIRE,
 // and a Preview button. Tie rows get a "= N" badge. Infeasible rows are grayed out.
+/*
+ * @chart: Strategy ranker score bar chart + Withdrawal Strategy compare panel
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: ranking.rows[i].score + companion *BookValue fields where $ values appear.
+ *         Constitution IX (Mode/Objective orthogonality) preserved — sort dispatch unchanged.
+ *
+ * Wave 4 status: ranker scores are pure-data (yrs, % deltas) — no Book Value
+ * conversion needed for the score itself. $-valued summary fields (e.g., final
+ * end balance) gain *BookValue companions via the standard helper.
+ */
+// FRAME: pure-data (scores in years, %) + real-$ ($-valued summary fields).
 function renderStrategyComparePanel(ranking) {
   // Chart ↔ Module (feature 009): Strategy Compare table reads rankStrategies output — every candidate row was
   // produced by computeWithdrawalStrategy under the current detectMFJ(inp) filing status, so lifetime tax + estate
@@ -8503,6 +8528,21 @@ function renderWithdrawalPreviewBanner() {
  * `Number.isFinite(...) ? ... : '—'` guard (FR-024) so a solver regression
  * that yields NaN surfaces as an em-dash instead of `$NaN` / `40+`.
  */
+/*
+ * @chart: KPI cards (Current Net Worth, FIRE NUMBER, Total at FIRE, Years to FIRE, Progress)
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads:
+ *   - "Current Net Worth": UNCHANGED (year-0 value; real-$ === nominal-$ per FR-006).
+ *   - "FIRE NUMBER (Primary)": should read `snap.fireNumberBookValue` (Book Value).
+ *   - "Total Portfolio at FIRE": should read `snap.totalAtFireBookValue` (Book Value).
+ *   - "Years to FIRE message": pure-data (year count) — unchanged.
+ *   - "Progress card % there": pure-data (ratio) — unchanged.
+ *
+ * Wave 4 status: companion fields (fireNumberBookValue, totalAtFireBookValue)
+ * available on the recalc snapshot. KPI tile DOM swap to read them deferred to
+ * Wave 4b (current code reads `_lastKpiSnapshot.accessibleFireNum` real-$).
+ */
+// FRAME: real-$ (KPI display values) — companions available for Wave 4b swap.
 function renderKpiCards(state) {
   const snap = _lastKpiSnapshot;
   const netWorthEl = document.getElementById('kpiNetWorth');
@@ -12451,14 +12491,167 @@ function getMortgageAdjustedRetirement(scenarioAnnualSpend, yrsToFire) {
   }
 }
 
+// =============================================================================
+// _extendSnapshotWithBookValues — feature 022 Wave 4 (US1 / FR-008d)
+//
+// FRAME: conversion (real-$ snapshot → nominal-$ companion fields)
+//
+// Centralized real-$ → Book Value conversion. Walks the recalc snapshot and
+// adds <field>BookValue companion fields for every $-valued field consumed by
+// an in-scope chart per FR-001 a-n. Mutates `snap` in place.
+//
+// Render functions consume the `*BookValue` companion fields directly and
+// MUST NOT call displayConverter.toBookValue() themselves (FR-008d structural
+// robustness: forgetting to read `bookValue` becomes a visible bug rather
+// than a silent frame mismatch).
+//
+// Contract: specs/022-nominal-dollar-display/contracts/recalcAll-snapshot-extension.contract.md
+// Lockstep: byte-identical helper body in FIRE-Dashboard.html.
+// =============================================================================
+function _extendSnapshotWithBookValues(snap, currentAge, inflationRate) {
+  if (!snap || typeof currentAge !== 'number' || typeof inflationRate !== 'number') return;
+  const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
+  if (!_conv || typeof _conv.toBookValue !== 'function') return;
+  // FRAME: conversion (real-$ → nominal-$ via displayConverter.toBookValue)
+  const toBV = (val, age) => _conv.toBookValue(val, age, currentAge, inflationRate);
+
+  // === lifecycleProjection.rows[i] (per-year accumulation row) ===
+  const _lpRows = (snap.lifecycleProjection && snap.lifecycleProjection.rows) || [];
+  for (const row of _lpRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.totalBookValue              = toBV(row.total, row.age);
+    row.p401kBookValue              = toBV(row.p401k, row.age);
+    row.pStocksBookValue            = toBV(row.pStocks, row.age);
+    row.pCashBookValue              = toBV(row.pCash, row.age);
+    row.pRothBookValue              = toBV(row.pRoth, row.age);
+    row.ssIncomeBookValue           = toBV(row.ssIncome, row.age);
+    row.withdrawalsBookValue        = toBV(row.withdrawals, row.age);
+    row.grossIncomeBookValue        = toBV(row.grossIncome, row.age);
+    row.federalTaxBookValue         = toBV(row.federalTax, row.age);
+    row.ficaTaxBookValue            = toBV(row.ficaTax, row.age);
+    row.annualSpendingBookValue     = toBV(row.annualSpending, row.age);
+    row.pretax401kEmployeeBookValue = toBV(row.pretax401kEmployee, row.age);
+    row.empMatchToTradBookValue     = toBV(row.empMatchToTrad, row.age);
+    row.stockContributionBookValue  = toBV(row.stockContribution, row.age);
+    row.cashFlowToCashBookValue     = toBV(row.cashFlowToCash, row.age);
+    row.syntheticConversionBookValue = toBV(row.syntheticConversion, row.age);
+  }
+
+  // === KPI scalars ===
+  if (typeof snap.fireNumber === 'number' && typeof snap.fireAge === 'number') {
+    snap.fireNumberBookValue = toBV(snap.fireNumber, snap.fireAge);
+  }
+  if (typeof snap.totalAtFire === 'number' && typeof snap.fireAge === 'number') {
+    snap.totalAtFireBookValue = toBV(snap.totalAtFire, snap.fireAge);
+  }
+  // currentNetWorth: real-$ === nominal-$ at year 0; no companion needed (FR-006).
+
+  // === Withdrawal Strategy chart (rows[i] indexed by retirement-phase year) ===
+  const _wsRows = (snap.withdrawalStrategy && snap.withdrawalStrategy.rows) || [];
+  for (const row of _wsRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.wTradBookValue   = toBV(row.wTrad, row.age);
+    row.wRothBookValue   = toBV(row.wRoth, row.age);
+    row.wStocksBookValue = toBV(row.wStocks, row.age);
+    row.wCashBookValue   = toBV(row.wCash, row.age);
+  }
+
+  // === Drawdown chart ===
+  const _ddRows = (snap.drawdown && snap.drawdown.rows) || [];
+  for (const row of _ddRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.drawAmountBookValue   = toBV(row.drawAmount, row.age);
+    row.runningTotalBookValue = toBV(row.runningTotal, row.age);
+  }
+
+  // === Roth Ladder chart ===
+  const _rlRows = (snap.rothLadder && snap.rothLadder.rows) || [];
+  for (const row of _rlRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.convertAmountBookValue = toBV(row.convertAmount, row.age);
+    row.balanceAfterBookValue  = toBV(row.balanceAfter, row.age);
+  }
+
+  // === Healthcare delta chart ===
+  const _hcRows = (snap.healthcare && snap.healthcare.rows) || [];
+  for (const row of _hcRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.premiumBookValue      = toBV(row.premium, row.age);
+    row.subsidyDeltaBookValue = toBV(row.subsidyDelta, row.age);
+  }
+
+  // === Mortgage payoff bar chart ===
+  const _mtgRows = (snap.mortgage && snap.mortgage.rows) || [];
+  for (const row of _mtgRows) {
+    if (!row || typeof row.age !== 'number') continue;
+    row.principalBookValue = toBV(row.principal, row.age);
+    row.interestBookValue  = toBV(row.interest, row.age);
+    row.totalBookValue     = toBV(row.total, row.age);
+  }
+
+  // === Payoff vs Invest brokerage trajectory ===
+  if (snap.pvi) {
+    for (const point of (snap.pvi.prepayPath || [])) {
+      if (point && typeof point.age === 'number') {
+        point.totalBookValue = toBV(point.total, point.age);
+      }
+    }
+    for (const point of (snap.pvi.investPath || [])) {
+      if (point && typeof point.age === 'number') {
+        point.totalBookValue = toBV(point.total, point.age);
+      }
+    }
+    if (snap.pvi.crossover && typeof snap.pvi.crossover.age === 'number') {
+      snap.pvi.crossover.totalBookValue = toBV(snap.pvi.crossover.total, snap.pvi.crossover.age);
+    }
+  }
+
+  // === Country budget tier comparison ===
+  // Tier values are static today's-$; companions inflate to fireAge for projection display.
+  if (typeof snap.fireAge === 'number') {
+    for (const scenario of (snap.scenarios || [])) {
+      if (!scenario) continue;
+      scenario.annualSpendBookValue      = toBV(scenario.annualSpend, snap.fireAge);
+      scenario.comfortableSpendBookValue = toBV(scenario.comfortableSpend, snap.fireAge);
+      scenario.normalSpendBookValue      = toBV(scenario.normalSpend, snap.fireAge);
+    }
+  }
+}
+
+// _renderBookValueCaption — feature 022 Wave 4 (US1 / FR-004)
+// Shared chart-caption helper. Renders a one-line caption near a chart title:
+//   EN  "Book Value at {inflationRate}% assumed annual inflation"
+//   zh-TW "帳面價值 (假設年通膨率 {inflationRate}%)"
+// Caller passes the chart's container element + the inflationRate decimal.
+function _renderBookValueCaption(containerEl, inflationRate) {
+  if (!containerEl || typeof inflationRate !== 'number') return;
+  let captionEl = containerEl.querySelector('.bv-caption');
+  if (!captionEl) {
+    captionEl = document.createElement('div');
+    captionEl.className = 'bv-caption';
+    captionEl.style.cssText = 'font-size:0.78em;color:var(--muted,#888);margin-top:4px;text-align:center;';
+    containerEl.appendChild(captionEl);
+  }
+  const pct = (inflationRate * 100).toFixed(1).replace(/\.0$/, '');
+  // Use t() if i18n keys present; fallback to literal EN.
+  if (typeof t === 'function') {
+    try {
+      captionEl.textContent = t('display.frame.captionTemplate', pct);
+      return;
+    } catch (_e) { /* fall through to EN literal */ }
+  }
+  captionEl.textContent = `Book Value at ${pct}% assumed annual inflation`;
+}
+
 // ==================== RENDER ALL ====================
 // FRAME (feature 022 / FR-009):
-//   Dominant frame: real-$ (recalc pipeline reads getInputs() real-$ scalars,
-//     calls projectFullLifecycle (real-$), and feeds chart renderers in real-$).
-//   Frame-conversion sites: Wave 4 will add `_extendSnapshotWithBookValues(...)`
-//     here as the FR-002 boundary that produces nominal-$ display companions
-//     via calc/displayConverter.toBookValue (the conversion module). Until
-//     Wave 4 lands, this function stays single-frame real-$.
+//   Dominant frame: mixed (recalc pipeline reads getInputs() real-$ scalars,
+//     calls projectFullLifecycle (real-$), then extends the snapshot with
+//     nominal-$ companion fields via _extendSnapshotWithBookValues so chart
+//     renderers can display Book Value (FR-008d).
+//   Frame-conversion sites:
+//     - _extendSnapshotWithBookValues call site (FR-002 boundary; produces
+//       nominal-$ display companions via calc/displayConverter.toBookValue).
 function recalcAll() {
   const inp = getInputs();
   // Feature 009 - update filing-status display.
@@ -12626,14 +12819,53 @@ function recalcAll() {
     }
   }
 
+  // Feature 022 (US1 / Wave 4 / FR-008d) — Centralized real-$ → Book Value
+  // conversion. Build a recalc-snapshot wrapper exposing lifecycleProjection
+  // rows + KPI scalars + side-chart paths, then call
+  // _extendSnapshotWithBookValues so every chart-consumed $-valued field
+  // gains its <field>BookValue companion. Render functions read companions
+  // directly per FR-008d structural-robustness rule.
+  // FRAME: conversion (call site — see _extendSnapshotWithBookValues body).
+  const _bvSnap = {
+    fireAge: fireAge,
+    fireNumber: totalFireNum,
+    totalAtFire: totalFireNum,
+    lifecycleProjection: {
+      // Both `rows` and `accumulationRows` point at the same array so the
+      // contract's per-row walker (snap.lifecycleProjection.rows) and the
+      // existing _renderTaxIncomeRow reader (snap.lifecycleProjection.
+      // accumulationRows) both see the extended row.
+      rows: _firstAccumRow ? [_firstAccumRow] : [],
+      accumulationRows: _firstAccumRow ? [_firstAccumRow] : [],
+    },
+    // Side-chart paths populated by their respective renderers; helper
+    // walks gracefully when arrays are absent.
+    withdrawalStrategy: { rows: [] },
+    drawdown: { rows: [] },
+    rothLadder: { rows: [] },
+    healthcare: { rows: [] },
+    mortgage: { rows: [] },
+    pvi: (typeof _lastPviOutputs !== 'undefined' && _lastPviOutputs) ? _lastPviOutputs : null,
+    scenarios: (typeof scenarios !== 'undefined' && Array.isArray(scenarios)) ? scenarios : [],
+  };
+  try {
+    _extendSnapshotWithBookValues(_bvSnap, inp.agePerson1, inp.inflationRate);
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[bookValue] _extendSnapshotWithBookValues threw:', _e);
+    }
+  }
+
   // Feature 021 (US1 / T041) — render the Plan-tab Expenses pill "Income tax"
   // sub-row + the Investment-tab Auto-rate label. Both consume the same
   // first-year accumulation row so the UI cannot diverge from the calc.
+  // Feature 022 (Wave 4 / T053): the row is now extended with *BookValue
+  // companions; the Income tax renderer reads federalTaxBookValue +
+  // ficaTaxBookValue (Book Value) per FR-001(j).
   // Defensive: wrapped in try/catch so any DOM/calc throw never breaks recalcAll.
   try {
-    const _taxSnap = { lifecycleProjection: { accumulationRows: _firstAccumRow ? [_firstAccumRow] : [] } };
-    if (typeof _renderTaxIncomeRow === 'function') _renderTaxIncomeRow(_taxSnap);
-    if (typeof _taxRateAutoUpdateLabel === 'function') _taxRateAutoUpdateLabel(_taxSnap);
+    if (typeof _renderTaxIncomeRow === 'function') _renderTaxIncomeRow(_bvSnap);
+    if (typeof _taxRateAutoUpdateLabel === 'function') _taxRateAutoUpdateLabel(_bvSnap);
   } catch (_e) {
     if (typeof console !== 'undefined' && console.error) {
       console.error('[tax-row] renderer threw:', _e);
@@ -13113,6 +13345,15 @@ function recalcAll() {
 }
 
 // ==================== HEALTHCARE CARD ====================
+/*
+ * @chart: Healthcare delta chart (Geography → Healthcare pill)
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: snap.healthcare.rows[i].{premiumBookValue, subsidyDeltaBookValue} +
+ *         companion real-$ fields for tooltip companion lines.
+ *
+ * Wave 4 status: companions available; visual swap to Book Value deferred to Wave 4b.
+ */
+// FRAME: real-$ (today's-$ healthcare costs) — companions available for inflation projections.
 function renderHealthcareCard(inp) {
   const scenario = scenarios.find(s => s.id === selectedScenario);
   if (!scenario) return;
@@ -13310,6 +13551,19 @@ function translateStrategyTag(tag) {
   return tag;
 }
 
+/*
+ * @chart: Roth Ladder chart (Retirement → Drawdown pill, secondary chart) +
+ *         Withdrawal Strategy chart (drawdown phase) + Drawdown chart
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: snap.rothLadder.rows[i].{convertAmountBookValue, balanceAfterBookValue}
+ *         snap.withdrawalStrategy.rows[i].{wTradBookValue, wRothBookValue, wStocksBookValue, wCashBookValue}
+ *         snap.drawdown.rows[i].{drawAmountBookValue, runningTotalBookValue}
+ *         + companion real-$ fields for tooltip companion lines.
+ *
+ * Wave 4 status: chart axis still draws real-$ values; companions available on
+ * row objects via _extendSnapshotWithBookValues. Visual swap deferred to Wave 4b.
+ */
+// FRAME: real-$ (chart axis data) — companions available for Wave 4b swap.
 function renderRothLadder(inp) {
   // Chart ↔ Module (feature 009): Lifetime Withdrawal stacked bars reads computeWithdrawalStrategy +
   // computeRothLadder + getTaxBrackets — all adultCount-gated via detectMFJ(inp) (MFJ vs Single brackets, std ded, IRMAA).
@@ -14647,6 +14901,16 @@ const pviStageBandsPlugin = {
   },
 };
 
+/*
+ * @chart: Payoff vs Invest brokerage trajectory + amortization split + verdict banner
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: snap.pvi.prepayPath[i].totalBookValue, snap.pvi.investPath[i].totalBookValue,
+ *         snap.pvi.crossover.totalBookValue + companion real-$ fields for tooltip lines.
+ *
+ * Wave 4 status: companions available on _lastPviOutputs path objects; chart
+ * axis still draws real-$. Visual swap deferred to Wave 4b.
+ */
+// FRAME: real-$ (chart axis data) — companions available for Wave 4b swap.
 function renderPayoffVsInvestBrokerageChart(outputs) {
   const canvas = document.getElementById('payoffVsInvestWealthChart');
   if (!canvas) return;
@@ -15308,10 +15572,33 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
   wrap.innerHTML = '<table class="lifecycle-asset-table">' + headHtml + bodyHtml + '</table>';
 }
 
+/*
+ * @chart: Lifecycle chart (Plan tab → Lifecycle pill AND Retirement → Lifecycle pill)
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: snap.lifecycleProjection.rows[i].{totalBookValue, p401kBookValue,
+ *         pStocksBookValue, pCashBookValue, pRothBookValue}
+ *         + snap.lifecycleProjection.rows[i].{total, ...} for tooltip companion
+ *         (purchasing-power line)
+ *
+ * Wave 4 status: structural foundation in place via _extendSnapshotWithBookValues
+ * (companion fields available on row objects). Chart.js plotting axis still draws
+ * real-$ lifecycle values from projectFullLifecycle pending Wave 4b visual swap;
+ * caption helper is invoked on the wrap container to surface the Book Value
+ * frame label per FR-004.
+ */
+// FRAME: real-$ (lifecycle data) + conversion (caption helper reads inflationRate)
 function renderGrowthChart(inp) {
   // Chart ↔ Module (feature 009): Full Portfolio Lifecycle renders output from adultCount-gated calc layer —
   // projectFullLifecycle + simulateDrawdown + calcRealisticSSA + getHealthcareMonthly, all branched on detectMFJ(inp).
   const ctx = document.getElementById('growthChart').getContext('2d');
+  // FRAME: conversion — render Book Value caption near the chart container per FR-004.
+  try {
+    const _wrap = document.getElementById('growthChartWrap');
+    if (_wrap && typeof _renderBookValueCaption === 'function'
+        && inp && typeof inp.inflationRate === 'number') {
+      _renderBookValueCaption(_wrap, inp.inflationRate);
+    }
+  } catch (_e) { /* caption is decorative; never break chart render */ }
   const scenario = scenarios.find(s => s.id === selectedScenario);
   const scenarioSpend = getScenarioEffectiveSpend(scenario);
 
@@ -15834,6 +16121,18 @@ function renderExpensePie(expenses) {
   if (window.tabRouter) window.tabRouter.registerChart('summary', charts.expPie);
 }
 
+/*
+ * @chart: Country budget tier comparison + Country deep-dive insight panel
+ * @module: calc/displayConverter.js (toBookValue applied centrally in recalcAll())
+ * @reads: snap.scenarios[i].{annualSpendBookValue, comfortableSpendBookValue,
+ *         normalSpendBookValue} (companions inflate today's-$ tier values to fireAge)
+ *         + scenarios[i].{annualSpend, ...} as the today's-$ companion.
+ *
+ * Wave 4 status: companions available; chart axis uses today's-$ tier values
+ * unchanged per FR-001(h) + FR-018 (the country-tier disambiguation tooltip
+ * lives separately under US4 / Phase 6).
+ */
+// FRAME: real-$ (today's-$ tier values) — companions available for projection display.
 function renderCountryChart(inp) {
   // Chart ↔ Module (feature 009): Country Comparison bars reads computeScenarioFireFigures (yearsToFIRE +
   // getTwoPhaseFireNum) — each scenario's spend + healthcare is adultCount-gated via detectMFJ/getHealthcareMonthly.

@@ -31,12 +31,21 @@
  *   - Constitution Principle V (UMD-classic-script: CommonJS for Node, globalThis
  *     for the browser inline script context).
  *
- * FRAME (feature 022 / FR-009):
- *   Dominant frame: real-$ (snapshot fields produced by accumulateToFire.js
- *     are real-$ post-US3; the Plan-tab Expenses pill displays today's $).
- *   Frame-conversion sites: NONE — the formatter only reads scalars and
- *     divides by 12 for monthly display. Wave 4 (US1) will add a sibling
- *     bookValue read path; that boundary will be a conversion site there.
+ * FRAME (feature 022 / FR-009 + Wave 4 T053):
+ *   Dominant frame: nominal-$ (post Wave 4: snapshot fields gain *BookValue
+ *     companions in recalcAll() via _extendSnapshotWithBookValues; this
+ *     formatter prefers the Book Value companions for the Plan-tab Expenses
+ *     pill display, falling back to real-$ when companions are absent —
+ *     e.g., during cold render before recalcAll completes, or for tests
+ *     that pin only real-$ values).
+ *   Frame-conversion sites: NONE in this module — conversion is centralized
+ *     upstream in recalcAll(); this formatter only reads pre-computed
+ *     companions. The companion read is the FRAME-aware path (FR-001(j)).
+ *
+ * Companion-field contract (Wave 4):
+ *   - snapshot.federalTaxBookValue  (preferred; fallback: snapshot.federalTax)
+ *   - snapshot.ficaTaxBookValue     (preferred; fallback: snapshot.ficaTax)
+ *   - snapshot.grossIncomeBookValue (preferred; fallback: snapshot.grossIncome)
  * =============================================================================
  */
 
@@ -46,8 +55,15 @@
  * caller's lock icon is still meaningful even when the calc engine has no
  * data yet (e.g., during the cold render pass before recalcAll completes).
  *
+ * Wave 4 T053: prefers `*BookValue` companion fields (Book Value display)
+ * per FR-001(j). Falls back to real-$ fields when companions are absent so
+ * pre-Wave-4 callers and unit tests pinning real-$ values still work.
+ *
  * @param {object|null|undefined} snapshot
- *   Expected shape: { federalTax, ficaTax, grossIncome }. All optional.
+ *   Expected shape: {
+ *     federalTax, ficaTax, grossIncome,                            // real-$
+ *     federalTaxBookValue, ficaTaxBookValue, grossIncomeBookValue, // nominal-$
+ *   }. All optional.
  * @returns {{
  *   type: 'income',
  *   monthlyAmount: number,
@@ -56,9 +72,16 @@
  * }}
  */
 function formatTaxIncomeRow(snapshot) {
-  const fed = (snapshot && Number.isFinite(snapshot.federalTax)) ? snapshot.federalTax : 0;
-  const fica = (snapshot && Number.isFinite(snapshot.ficaTax)) ? snapshot.ficaTax : 0;
-  const gross = (snapshot && Number.isFinite(snapshot.grossIncome)) ? snapshot.grossIncome : 0;
+  // Prefer Book Value (nominal-$) companion; fall back to real-$ field.
+  const _read = (bvKey, realKey) => {
+    if (!snapshot) return 0;
+    if (Number.isFinite(snapshot[bvKey])) return snapshot[bvKey];
+    if (Number.isFinite(snapshot[realKey])) return snapshot[realKey];
+    return 0;
+  };
+  const fed = _read('federalTaxBookValue', 'federalTax');
+  const fica = _read('ficaTaxBookValue', 'ficaTax');
+  const gross = _read('grossIncomeBookValue', 'grossIncome');
 
   const totalAnnual = fed + fica;
   const monthlyAmount = Math.round(totalAnnual / 12);

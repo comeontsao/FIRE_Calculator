@@ -1273,3 +1273,20 @@ Added 2026-05-01 alongside `calc/taxExpenseRow.js`. Both EN + zh-TW keys live in
 | `expenses.tax.other` | Other tax | 其他稅 |
 | `expenses.tax.otherPlaceholder` | e.g., state income tax, sales tax | 例如：州所得稅、銷售稅 |
 
+### Feature 022 (US1 / Wave 4) — Book Value display frame
+
+Added 2026-05-01 alongside `calc/displayConverter.js`. Both EN + zh-TW keys
+live in `TRANSLATIONS.en` + `TRANSLATIONS.zh` of `FIRE-Dashboard.html` and
+`FIRE-Dashboard-Generic.html` (lockstep). User-canonical terminology pair:
+EN "Book Value" / "purchasing power" · zh-TW "帳面價值" / "約等於今日價值"
+(per spec.md §Clarifications Q4).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `display.frame.bookValue` | Book Value | 帳面價值 |
+| `display.frame.purchasingPower` | purchasing power | 約等於今日價值 |
+| `display.frame.assumedInflation` | assumed annual inflation | 假設年通膨率 |
+| `display.frame.captionTemplate` | Book Value at {0}% assumed annual inflation | 帳面價值 (假設年通膨率 {0}%) |
+| `display.frame.bookValueColumnSuffix` | (Book Value) | (帳面價值) |
+| `display.frame.purchasingPowerColumnSuffix` | (purchasing power) | (約等於今日價值) |
+
