@@ -19,6 +19,16 @@ This feature switches **display** to nominal future dollars without a heavy calc
 
 A fallback safety valve (US7, OPTIONAL) ships a display toggle so users can flip between today's-$ and future-$ if the always-nominal display proves disorienting in practice.
 
+## Clarifications
+
+### Session 2026-05-01
+
+- Q: What's the scope of "nominal-$ display" rollout — Lifecycle chart only, top-level surfaces, or all future-$ displays uniformly? → A: **All future-$ displays uniformly** (Option A). Switch the entire dashboard's future-value rendering to nominal-$ in one rollout. The full chart/display inventory in scope: (1) Lifecycle chart; (2) Withdrawal Strategy chart; (3) Drawdown chart; (4) Roth Ladder chart; (5) Healthcare delta chart; (6) Mortgage payoff bar chart; (7) Payoff vs Invest brokerage trajectory + amortization split + verdict banner; (8) Country budget tier comparison + Country deep-dive insight panel; (9) Strategy ranker score bar chart; (10) Plan-tab Expenses pill (incl. feature-021 Income tax sub-row); (11) all KPI cards (Current Net Worth, FIRE NUMBER, Total at FIRE, Years to FIRE message, Progress card); (12) Verdict pill + verdict banner; (13) Drag-preview overlay during FIRE-marker drag; (14) Audit-tab tables (per-year accumulation, gates, lifecycleProjection, fireAgeCandidates) — these get per-column frame labels since some columns are pure-data, some real-$, some nominal-$. **Snapshots history chart (History tab) stays as-is** since `FIRE-snapshots.csv` already contains nominal historical balances. **Rationale**: most coherent UX; user sees "every $ for a future year is in that year's dollars" — no per-chart inconsistency to remember. Implementation surface ~12-15 charts touched; estimated +1 day vs Lifecycle-only scope.
+- Q: How does drag-preview + post-commit re-render handle nominal-$ conversion? → A: **Both use nominal-$ at the relevant target age** (Option A). During FIRE-marker drag, the drag-preview floating tooltip shows nominal-$ at the previewed age (e.g., "If you retire at 55 in 2039: ~$1.42M nominal (≈ $1.05M today's $)"). The temporary chart re-render during drag also uses nominal-$. After commit, ALL in-scope charts (FR-001 a–n) re-render with data points freshly converted using `nominal = real × (1 + inflationRate)^(dataPointAge − currentAge)` against the new fireAge — the conversion factor recomputes per data point, not just at fireAge. Performance: each chart re-render adds N `Math.pow` operations (N = chart data point count, ~50 max); 12 charts × 50 pow ops = ~600 pow operations per drag-frame; well under the 16ms / 60fps budget per Constitution III performance floor.
+- Q: Does the spec need to define a visual treatment for a "today" boundary marker in any chart mixing historical + projected data? → A: **No special treatment needed** (Option A). The Snapshots history chart stays history-only per FR-001a. Future-projection charts (Lifecycle, Withdrawal Strategy, etc.) start at currentAge — the "today boundary" IS the leftmost data point, already implicit. No vertical "today" marker added in this feature. If a future feature builds a chart that mixes historical + projected data on the same axis, that feature defines its own boundary-marker UX.
+- Q: Which terminology pair becomes canonical for user-facing UI strings? → A: **EN "purchasing power" / "Book Value" · zh-TW "約等於今日價值" / "帳面價值"**. Accounting-flavored framing rather than temporal: "Book Value" is literally what financial statements record (nominal $ as the account states), "purchasing power" is the economist-standard term for real-$ purchasing equivalent. Avoids the looser "today's $ / future $" framing and grounds the labels in concepts users encounter in real accounting contexts. Internal `// FRAME:` code comments keep the technical pair `real` / `nominal` for precision; the UI/code split prevents jargon leak while preserving calc-module rigor.
+- Q: Which integration pattern does the spec adopt for applying the nominal-$ conversion across all in-scope charts (per-chart inline vs centralized snapshot)? → A: **Centralized in `recalcAll()`** (Option B). The snapshot object that `recalcAll()` produces gains a `bookValue` companion field for every `realValue` field consumed by charts (e.g., `lifecycleProjection.rows[i].totalBookValue` alongside the existing `total`). Render functions consume the `bookValue` fields directly; the conversion is computed once per recalc rather than per render. Consequence: a future new chart that forgets to read `bookValue` and reads `realValue` instead visibly shows today's-$ amounts in the chart — the bug is structurally surface-able in browser smoke + a new meta-test (`tests/meta/snapshot-frame-coverage.test.js`) that asserts every chart-consumed snapshot field has a `BookValue` companion. Estimated cost: ~30-min one-time `recalcAll()` extension plus the meta-test. **Rationale**: per the user's preference for "robust + doesn't easily get missed when there are changes" — this pattern makes forgetting to convert a visible bug rather than a silent one.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Nominal-Dollar Display in Lifecycle Chart + KPI Cards (Priority: P1) — MVP
@@ -194,54 +204,75 @@ A small UI toggle — perhaps in the header next to the language switcher, or in
 
 ### Functional Requirements
 
-#### Display layer (US1)
+#### Display layer (US1) — Full chart/display inventory
 
-- **FR-001**: Lifecycle chart Y-axis MUST display values in nominal future $ (real-$ × `(1 + inflationRate)^yearsFromNow` per data point).
-- **FR-002**: KPI cards (Current Net Worth, FIRE NUMBER, Total Portfolio at FIRE, Years to FIRE message) MUST display dollar values in nominal future $ where the value represents a future state (Current Net Worth = today's nominal which equals today's real, so unchanged).
-- **FR-003**: Year-by-year asset breakdown table MUST display nominal future $ per column.
-- **FR-004**: Tooltips on chart hover MUST show nominal future $ AND a one-line "(≈ $X in today's $)" companion.
-- **FR-005**: Lifecycle chart MUST render a one-line caption near the title: "Values shown in nominal future dollars at {inflationRate}% assumed annual inflation."
-- **FR-006**: All translated UI strings ("today's dollars" / "今日美元", "future dollars" / "未來美元", "assumed annual inflation" / "假設年通膨率") in EN + zh-TW per Constitution VII.
-- **FR-007**: The display conversion factor `(1 + inflationRate)^yearsFromNow` MUST be applied at render time only, never written to localStorage or the snapshots CSV.
+- **FR-001**: ALL future-$ displays in the dashboard MUST uniformly switch to nominal-$ rendering. The complete inventory in scope:
+  - **(a)** Lifecycle chart (Plan tab → Lifecycle pill AND Retirement → Lifecycle pill — same chart instance).
+  - **(b)** Withdrawal Strategy chart (Retirement → Withdrawal Strategy pill).
+  - **(c)** Drawdown chart (Retirement → Drawdown pill).
+  - **(d)** Roth Ladder chart (Retirement → Drawdown pill, secondary chart).
+  - **(e)** Healthcare delta chart (Geography → Healthcare pill).
+  - **(f)** Mortgage payoff bar chart (Plan → Mortgage pill).
+  - **(g)** Payoff vs Invest brokerage trajectory chart + amortization split chart + verdict banner (Plan → Payoff vs Invest pill).
+  - **(h)** Country budget tier comparison + Country deep-dive insight panel (Geography → Scenarios pill).
+  - **(i)** Strategy ranker score bar chart (rendered alongside Withdrawal Strategy / Audit tab).
+  - **(j)** Plan-tab Expenses pill (all expense bucket rows + Tax category Income tax + Other tax sub-rows shipped in feature 021).
+  - **(k)** All KPI cards: Current Net Worth, FIRE NUMBER (Primary), Total Portfolio at FIRE, Years to FIRE message, Progress card "% there".
+  - **(l)** Verdict pill ("On Track — FIRE in X Years Y Months · Z% there") + verdict banner messages (Payoff vs Invest, infeasibility deficit, etc.).
+  - **(m)** Drag-preview overlay during FIRE-marker drag (the floating tooltip that previews the projected total at the dragged-to age before user commits).
+  - **(n)** Audit-tab tables (per-year accumulation row table, gates table, lifecycleProjection.rows, fireAgeCandidates table) — these gain a per-column frame label since some columns are pure-data (e.g., `age`, `year`), some real-$ (e.g., `taxableIncome`), some nominal-$ (e.g., displayed `total`).
+- **FR-001a**: The Snapshots history chart (History tab plotting `FIRE-snapshots.csv`) is OUT OF SCOPE — those data points are already nominal historical balances and stay rendered as-is.
+- **FR-002**: Each in-scope display MUST apply the conversion `nominal = real × (1 + inflationRate)^yearsFromNow` per data point at render time. `yearsFromNow` is computed from the data point's `age` field minus current age.
+- **FR-003**: Tooltips on every in-scope chart hover MUST show the Book Value (nominal $) AS the primary value AND a one-line "(≈ $X in purchasing power)" companion line for inflation-context awareness. zh-TW: primary "$X 帳面價值" + companion "約等於今日價值 $Y".
+- **FR-004**: Each in-scope chart MUST render a one-line caption / footnote near its title: EN "Book Value at {inflationRate}% assumed annual inflation"; zh-TW "帳面價值 (假設年通膨率 {inflationRate}%)". A shared rendered helper (e.g., `_renderBookValueCaption(chartContainerEl)`) avoids per-chart copy-paste.
+- **FR-005**: All translated UI strings — `display.frame.bookValue` ("Book Value" / "帳面價值"), `display.frame.purchasingPower` ("purchasing power" / "約等於今日價值"), `display.frame.assumedInflation` ("assumed annual inflation" / "假設年通膨率"), `display.frame.captionTemplate` (full caption string with `{0}` for inflationRate placeholder) — ship in EN + zh-TW per Constitution VII. Translation Catalog updated atomically.
+- **FR-006**: KPI card "Current Net Worth" MUST stay rendered identically to today (today's-$ = today's-nominal $ = same value). Visual treatment: same KPI tile, no caption (the value is unambiguous because it's at year-0).
+- **FR-007**: Audit-tab tables MUST display per-column frame labels in column headers: e.g., "Total (Book Value)", "Federal Tax (Book Value)", "Taxable Income (purchasing power)" / zh-TW "總額 (帳面價值)" / "聯邦稅 (帳面價值)" / "課稅所得 (約等於今日價值)". Frame label uses translated UI string per FR-005.
+- **FR-008**: The display conversion factor `(1 + inflationRate)^yearsFromNow` MUST be applied at render time only, never written to localStorage or the snapshots CSV.
+- **FR-008a**: During FIRE-marker drag, the drag-preview overlay MUST display Book Value at the previewed target age, with a purchasing-power companion line (e.g., EN "If you retire at 55: $1.42M Book Value · ≈ $1.05M purchasing power"; zh-TW "若於 55 歲退休: 帳面價值 $1.42M · 約等於今日價值 $1.05M"). The temporary chart re-render shown during drag MUST also use Book Value rendering.
+- **FR-008b**: After drag commit (or any other input change that triggers `recalcAll()`: mode switch, slider drag, country switch, etc.), every in-scope chart MUST recompute the conversion factor `(1 + inflationRate)^(dataPointAge − currentAge)` per data point and re-render in nominal-$ within one animation frame (≤16ms per Constitution III performance floor).
+- **FR-008c**: Drag-cancel (user releases the drag without committing) MUST revert all in-scope charts to their pre-drag nominal-$ rendering state — no residual visual inconsistency.
+- **FR-008d**: The Book Value conversion MUST be applied centrally inside `recalcAll()`. The recalc snapshot object MUST gain `bookValue` companion fields for every `realValue` field consumed by charts. Render functions MUST read the `bookValue` field directly; they MUST NOT call a per-chart conversion helper. (This is the structural-robustness property: a future new chart that forgets to read `bookValue` displays a visibly wrong number rather than silently using the wrong frame.)
+- **FR-008e**: A new meta-test `tests/meta/snapshot-frame-coverage.test.js` MUST assert that every chart-consumed snapshot field (enumerated against the FR-001 a–n inventory) has a corresponding `bookValue` companion in the snapshot. The test is a structural gate — adding a new chart without a `bookValue` companion fails the test before merge.
 
 #### Frame-clarifying comments (US2)
 
-- **FR-008**: Every `calc/*.js` module file MUST have a `// FRAME:` block header within the existing module-header comment that states the dominant frame and lists frame-conversion sites.
-- **FR-009**: Every variable name containing `Real`, `Nominal`, `Inflation`, or any expression touching `Math.pow(1 + inflationRate, ...)` or `realReturn` MUST have a `// FRAME:` inline comment within 3 lines above documenting which frame the value lives in.
-- **FR-010**: A new meta-test `tests/meta/frame-coverage.test.js` MUST run on every commit, asserting ≥95% of qualifying calc-module lines have `// FRAME:` annotations within 3 lines above.
+- **FR-009**: Every `calc/*.js` module file MUST have a `// FRAME:` block header within the existing module-header comment that states the dominant frame and lists frame-conversion sites.
+- **FR-010**: Every variable name containing `Real`, `Nominal`, `Inflation`, or any expression touching `Math.pow(1 + inflationRate, ...)` or `realReturn` MUST have a `// FRAME:` inline comment within 3 lines above documenting which frame the value lives in.
+- **FR-011**: A new meta-test `tests/meta/frame-coverage.test.js` MUST run on every commit, asserting ≥95% of qualifying calc-module lines have `// FRAME:` annotations within 3 lines above.
 
 #### Calc-layer fix (US3)
 
-- **FR-011**: `calc/accumulateToFire.js` cash-flow residual MUST be computed in a single frame (real-$). All inputs to the residual MUST be in real-$ before subtraction.
-- **FR-012**: `grossIncome` in the cash-flow residual MUST be computed using `(raiseRate − inflationRate)` (real wage growth), not `raiseRate` (nominal wage growth).
-- **FR-013**: `annualSpending` in the cash-flow residual MUST be constant in real terms (no inflation pow inside the residual loop).
-- **FR-014**: Federal tax + FICA MUST be computed on real-$ income. The 2024 IRS brackets / SSA wage base are treated as today's $ values — the implicit assumption is that brackets inflation-index in lockstep with real income (which they roughly do in reality).
-- **FR-015**: Feature 020's `cashFlowConservation` audit invariant MUST stay green post-fix. Feature 021's `tax-bracket-conservation` invariants (TBC-1 through TBC-5) MUST stay green.
-- **FR-016**: Existing test fixtures with pinned `cashFlowToCash`, `federalTax`, `ficaTax` values MAY be updated with `// 022:` comments documenting the frame-fix-induced delta (per the same convention as features 020 and 021).
+- **FR-012**: `calc/accumulateToFire.js` cash-flow residual MUST be computed in a single frame (real-$). All inputs to the residual MUST be in real-$ before subtraction.
+- **FR-013**: `grossIncome` in the cash-flow residual MUST be computed using `(raiseRate − inflationRate)` (real wage growth), not `raiseRate` (nominal wage growth).
+- **FR-014**: `annualSpending` in the cash-flow residual MUST be constant in real terms (no inflation pow inside the residual loop).
+- **FR-015**: Federal tax + FICA MUST be computed on real-$ income. The 2024 IRS brackets / SSA wage base are treated as today's $ values — the implicit assumption is that brackets inflation-index in lockstep with real income (which they roughly do in reality).
+- **FR-016**: Feature 020's `cashFlowConservation` audit invariant MUST stay green post-fix. Feature 021's `tax-bracket-conservation` invariants (TBC-1 through TBC-5) MUST stay green.
+- **FR-017**: Existing test fixtures with pinned `cashFlowToCash`, `federalTax`, `ficaTax` values MAY be updated with `// 022:` comments documenting the frame-fix-induced delta (per the same convention as features 020 and 021).
 
 #### Country budget tier audit (US4)
 
-- **FR-017**: A tooltip on the country budget tier display MUST clarify the frame: "Cost in today's $; the dashboard inflates this to your retirement year for projections."
-- **FR-018**: Each `scenarios[].taxNote` string MUST be reviewed for frame consistency. If any `taxNote` references a dollar value that's ambiguous (e.g., "$33k AMT exemption"), explicitly mark it as today's $ in the string.
-- **FR-019**: No country budget tier numbers change in this feature — tier values stay verbatim from features 010 + 020 + 021 baselines.
+- **FR-018**: A tooltip on the country budget tier display MUST clarify the frame: "Cost in today's $; the dashboard inflates this to your retirement year for projections."
+- **FR-019**: Each `scenarios[].taxNote` string MUST be reviewed for frame consistency. If any `taxNote` references a dollar value that's ambiguous (e.g., "$33k AMT exemption"), explicitly mark it as today's $ in the string.
+- **FR-020**: No country budget tier numbers change in this feature — tier values stay verbatim from features 010 + 020 + 021 baselines.
 
 #### B-021 carry-forward (US5, US6)
 
-- **FR-020**: `_simulateStrategyLifetime` (in both HTMLs) MUST quantize the ranker's age input to monthly precision before iteration. Score deltas under ±0.01yr perturbations drop below the 0.05yr hysteresis threshold from feature 021 FR-018. (US5 / B-021-1)
-- **FR-021**: `simulateRetirementOnlySigned` MUST support fractional `fireAge` inputs by pro-rating the FIRE-year row by `(1 − m/12)`. Spec hook 1 (growth-multiplier convention) MUST be resolved during planning. (US6 / B-021-2)
-- **FR-022**: New audit invariant family `month-precision-feasibility` MUST be added to `tests/unit/validation-audit/`: for every persona with `searchMethod === 'month-precision'`, simulating at `fireAge = Y + M/12` produces zero `hasShortfall:true` rows under the active mode.
+- **FR-021**: `_simulateStrategyLifetime` (in both HTMLs) MUST quantize the ranker's age input to monthly precision before iteration. Score deltas under ±0.01yr perturbations drop below the 0.05yr hysteresis threshold from feature 021 FR-018. (US5 / B-021-1)
+- **FR-022**: `simulateRetirementOnlySigned` MUST support fractional `fireAge` inputs by pro-rating the FIRE-year row by `(1 − m/12)`. Spec hook 1 (growth-multiplier convention) MUST be resolved during planning. (US6 / B-021-2)
+- **FR-023**: New audit invariant family `month-precision-feasibility` MUST be added to `tests/unit/validation-audit/`: for every persona with `searchMethod === 'month-precision'`, simulating at `fireAge = Y + M/12` produces zero `hasShortfall:true` rows under the active mode.
 
 #### Display toggle — OPTIONAL safety valve (US7)
 
-- **FR-023** *(OPTIONAL)*: A header-positioned toggle MAY ship that lets the user switch between "Today's $" and "Future $" display modes. State persists via localStorage key `displayDollarMode` (`'today'` or `'future'`, default `'future'`). All charts + KPI cards re-render on toggle within one animation frame.
-- **FR-024** *(OPTIONAL)*: If FR-023 ships, the OFF state ("Today's $") visually reproduces feature 021's display behavior exactly (no regression for users who prefer the old framing).
+- **FR-024** *(OPTIONAL)*: A header-positioned toggle MAY ship that lets the user switch between "Purchasing Power" and "Book Value" display modes. EN labels: "purchasing power" / "Book Value"; zh-TW: "約等於今日價值" / "帳面價值". State persists via localStorage key `displayDollarMode` (`'purchasingPower'` or `'bookValue'`, default `'bookValue'`). All charts + KPI cards re-render on toggle within one animation frame.
+- **FR-025** *(OPTIONAL)*: If FR-024 ships, the "Purchasing Power" state visually reproduces feature 021's display behavior exactly (no regression for users who prefer the inflation-adjusted framing).
 
 #### Cross-cutting
 
-- **FR-025**: Both HTML files MUST stay in lockstep (Constitution Principle I): every UI / calc / comment change ships to both, every translation key in both, every audit invariant test runs against both via the persona matrix.
-- **FR-026**: Constitution Principle VIII (Spending Funded First) gate at `tests/unit/spendingFloorPass.test.js` MUST stay green throughout.
-- **FR-027**: Browser-smoke gate (manual) MUST be executed before merge to `main`.
-- **FR-028**: All existing 450+ tests MUST stay green. New tests added (estimated +18 to +25) all pass.
+- **FR-026**: Both HTML files MUST stay in lockstep (Constitution Principle I): every UI / calc / comment change ships to both, every translation key in both, every audit invariant test runs against both via the persona matrix.
+- **FR-027**: Constitution Principle VIII (Spending Funded First) gate at `tests/unit/spendingFloorPass.test.js` MUST stay green throughout.
+- **FR-028**: Browser-smoke gate (manual) MUST be executed before merge to `main`.
+- **FR-029**: All existing 450+ tests MUST stay green. New tests added (estimated +18 to +25) all pass.
 
 ### Key Entities
 
