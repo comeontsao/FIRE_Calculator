@@ -9412,6 +9412,30 @@ function findDWZFireAge(inp, annualSpend) {
 //   Dominant frame: real-$ (retirement-only signed sim — every pool, every
 //     withdrawal, ssAnnual, healthcare/mortgage/college carry — all real-$).
 //   Frame-conversion sites: NONE inside this function.
+//
+// FEATURE 022 / US6 (T083) — TRUE FRACTIONAL-YEAR DWZ FEASIBILITY:
+//   Accepts non-integer `fireAge` values (e.g. 54.5833 for "age 54 years 7
+//   months"). The first ("FIRE-year") loop iteration is pro-rated by
+//   `(1 − mFraction)` where `mFraction = fireAge − floor(fireAge)`. All other
+//   iterations remain full years.
+//
+//   Pro-rate convention: LINEAR `1 + r × (1 − m/12)` per spec hook 1
+//   (`specs/022-nominal-dollar-display/contracts/month-precision-feasibility-
+//   invariant.md` MPF-3). Linear matches the rest of the codebase's per-year
+//   integration style (see `accumulateToFire` and other simulators).
+//
+//   Backwards-compat: integer fireAge ⇒ mFraction=0 ⇒ scale=1 ⇒ behavior
+//   byte-identical to feature 021. All eight existing month-precision tests
+//   pass unchanged.
+//
+//   Threshold semantics (audit-report 021 Phase 9 §risk #3): the
+//   is401kUnlocked / ssActive flags compare `age >= unlockAge` / `>= ssClaimAge`
+//   against the ORIGINAL fireAge value of the iteration. If the partial
+//   FIRE-year row straddles 59.5 (e.g., fireAge=59.0833), the first iteration
+//   is treated as fully pre-unlock — matching the intuition that the user
+//   only crosses 59.5 mid-iteration. Sub-iteration splits at threshold
+//   boundaries are deferred to a future feature (see `audit-report.md` Phase 9
+//   spec hook 2).
 function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p401kRoth0, pStocks0, pCash0) {
   // FRAME: real-$ — stocks real return
   const realReturnStocks = inp.returnRate - inp.inflationRate;
@@ -9425,6 +9449,11 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
   const mtgAdj = getMortgageAdjustedRetirement(annualSpend, yrsToFire);
   const retireSpend = mtgAdj.annualSpend;
   const relocationCost = getSelectedRelocationCost();
+
+  // FRAME: pure-data — fractional-year mFraction (age scalar, no $ value)
+  // mFraction in [0, 1) — fraction of the FIRE year already elapsed.
+  // mFraction === 0 when fireAge is integer (backwards-compat path).
+  const mFraction = fireAge - Math.floor(fireAge);
 
   let pTrad = p401kTrad0;
   let pRoth = p401kRoth0;
@@ -9461,11 +9490,23 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
   let minBalancePhase3 = Infinity;
   const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
 
+  // FEATURE 022 / US6 — per-iteration row log (MPF audit consumer).
+  // Each entry: { age, hasShortfall, scale }. Cheap O(years) memory; safe to
+  // ignore by all existing callers (additive return-shape extension).
+  const rows = [];
+
+  let isFirstIteration = true;
+
   for (let age = fireAge; age < endAge; age++) {
     const yearsFromNow = age - inp.ageRoger;
     const is401kUnlocked = age >= unlockAge;
     const ssActive = age >= inp.ssClaimAge;
-    const ssThisYear = ssActive ? ssAnnual : 0;
+    const ssThisYearFull = ssActive ? ssAnnual : 0;
+
+    // FRAME: pure-data — pro-rate scale for the partial FIRE-year row.
+    // scale = (1 − mFraction) on first iteration; 1.0 on all subsequent
+    // iterations. Backwards-compat: integer fireAge ⇒ mFraction=0 ⇒ scale=1.
+    const scale = isFirstIteration ? (1 - mFraction) : 1;
 
     // Snapshot at the start of each phase-transition year and per-phase mins.
     const _ebStart = effBal();
@@ -9485,11 +9526,20 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
       pCash -= (h2.downPayment + h2.closingCosts);
       h2Purchased = true;
     }
-    const h2Carry = h2Purchased ? getSecondHomeAnnualCarryAtYear(h2, yearsFromNow, yrsToFire) : 0;
+    const h2CarryFull = h2Purchased ? getSecondHomeAnnualCarryAtYear(h2, yearsFromNow, yrsToFire) : 0;
 
-    const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
-    const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
-    const grossSpend = Math.max(0, retireSpend + hcDelta + collegeCostThisYear + h2Carry);
+    const collegeCostFull = getTotalCollegeCostForYear(inp, yearsFromNow);
+    const hcDeltaFull = getHealthcareDeltaAnnual(selectedScenario, age);
+    // FRAME: real-$ — pro-rated cash flows for the partial FIRE-year row.
+    // Each component scales linearly with the (1 − mFraction) fraction of
+    // the year remaining post-FIRE. SS income is also pro-rated when SS is
+    // active during the partial year. Scale=1 for all non-FIRE rows leaves
+    // these byte-identical to pre-feature-022 behavior.
+    const ssThisYear = ssThisYearFull * scale;
+    const h2Carry = h2CarryFull * scale;
+    const collegeCostThisYear = collegeCostFull * scale;
+    const hcDelta = hcDeltaFull * scale;
+    const grossSpend = Math.max(0, (retireSpend * scale) + hcDelta + collegeCostThisYear + h2Carry);
 
     // Tax-optimized withdrawal (matches Lifetime Strategy chart)
     const bracketsSim = getTaxBrackets(true); // R&R = MFJ
@@ -9503,17 +9553,39 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     pCash   -= mixSim.wCash;
     // Shortfall: accumulate as signed debt in stocks (preserves feasibility math)
     if (mixSim.shortfall > 0) pStocks -= mixSim.shortfall;
-    pTrad *= (1 + realReturn401k);
-    pRoth *= (1 + realReturn401k);
-    pStocks *= (1 + realReturnStocks);
-    pCash *= 1.005;
+    // FRAME: real-$ — LINEAR pro-rate growth multipliers per spec hook 1.
+    // For partial FIRE-year row: (1 + r × scale). For full years: (1 + r).
+    pTrad *= (1 + realReturn401k * scale);
+    pRoth *= (1 + realReturn401k * scale);
+    pStocks *= (1 + realReturnStocks * scale);
+    pCash *= (1 + 0.005 * scale);
+
+    rows.push({
+      age,
+      hasShortfall: (mixSim.shortfall || 0) > 0,
+      scale,
+    });
+
+    isFirstIteration = false;
   }
 
   const endBalance = effBal();
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
   if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
   if (balanceAtFire === null) balanceAtFire = endBalance;
-  return { endBalance, balanceAtUnlock, balanceAtSS, balanceAtFire, minBalancePhase1, minBalancePhase2, minBalancePhase3 };
+  return {
+    endBalance,
+    balanceAtUnlock,
+    balanceAtSS,
+    balanceAtFire,
+    minBalancePhase1,
+    minBalancePhase2,
+    minBalancePhase3,
+    // FEATURE 022 / US6 — additive return-shape extension consumed by
+    // `month-precision-feasibility` audit family (MPF-1, MPF-2). Existing
+    // callers ignore this field (no destructure changes required).
+    rows,
+  };
 }
 
 // ==================== MIN ACCESSIBLE AT FIRE (NUMERICAL) ====================
@@ -11249,6 +11321,46 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
     // Per-strategy full lifecycle simulation (retirement years only — accumulation
     // doesn't vary by withdrawal strategy).
 
+    // FRAME: pure-data (age in years, not $-valued)
+    // FR-021 / B-021-1 fix (feature 022 US5): quantize ages to monthly precision
+    // before the accumulation loop iterates so a ±0.01yr perturbation in
+    // currentAge stays within the same integer-month bucket rather than
+    // crossing a whole-year boundary. Pre-fix, accumulateToFire's
+    // `for (age = currentAge; age < fireAge; age++)` ran one EXTRA full
+    // accumulation year when currentAge crossed an integer boundary downward
+    // (e.g. 42.0 → 41.99 ⇒ 13 → 14 iterations) — flipping the ranker winner
+    // across ~17 personas in the feature 020/021 audit's E3 LOW invariant.
+    //
+    // Per research R5: post-fix iteration count is `Math.floor(monthsToFire/12)`
+    // where monthsToFire = floor(fireAge*12) − floor(currentAge*12). We then
+    // align the accumulator's input ages so its `for (age=cur; age<fire; age++)`
+    // loop produces exactly that integer iteration count. We do this by
+    // pinning `_qCurrentAge_forAccum = _qFireAge − iterCount` (an integer-year
+    // delta), which absorbs the sub-month perturbation. The retirement-phase
+    // loop continues to use `_qFireAge` (the user-meaningful retirement age),
+    // and other downstream consumers (`_qInp.ssClaimAge`, etc.) see the
+    // monthly-quantized currentAge for accuracy.
+    // We use new locals (_qInp / _qFireAge) rather than shadowing the closure
+    // bindings to keep the fix scope-local and TDZ-safe.
+    const _qFireAge = Math.floor(fireAge * 12) / 12;
+    const _rawCurrentAge = (typeof inp.agePerson1 === 'number') ? inp.agePerson1
+                         : (typeof inp.ageRoger   === 'number') ? inp.ageRoger : 42;
+    const _qCurrentAge = Math.floor(_rawCurrentAge * 12) / 12;
+    const _accumIterCount = Math.max(0,
+      Math.floor((Math.floor(_qFireAge * 12) - Math.floor(_qCurrentAge * 12)) / 12));
+    const _qCurrentAgeForAccum = _qFireAge - _accumIterCount;
+    const _qInp = Object.assign({}, inp, {
+      agePerson1: (typeof inp.agePerson1 === 'number') ? _qCurrentAge : inp.agePerson1,
+      ageRoger:   (typeof inp.ageRoger   === 'number') ? _qCurrentAge : inp.ageRoger,
+    });
+    // Separate inp for accumulateToFire that pins agePerson1/ageRoger so the
+    // accumulation loop runs exactly _accumIterCount integer iterations regardless
+    // of sub-month perturbation in the original currentAge.
+    const _qInpForAccum = Object.assign({}, _qInp, {
+      agePerson1: (typeof inp.agePerson1 === 'number') ? _qCurrentAgeForAccum : inp.agePerson1,
+      ageRoger:   (typeof inp.ageRoger   === 'number') ? _qCurrentAgeForAccum : inp.ageRoger,
+    });
+
     // CANONICAL ACCUMULATION — see calc/accumulateToFire.js
     // T019 (feature 019): replace buggy inline accumulation (no buy-in, no college,
     // no Home #2, no mtgSavingsAdjust) with the canonical shared helper.
@@ -11258,8 +11370,8 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
         const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
           ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
           : ((typeof state !== 'undefined' && state._payoffVsInvest && state._payoffVsInvest.mortgageStrategy) || 'invest-keep-paying');
-        const _accumOpts = resolveAccumulationOptions(inp, fireAge, _activeMortgageStrategy);
-        const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
+        const _accumOpts = resolveAccumulationOptions(_qInpForAccum, _qFireAge, _activeMortgageStrategy);
+        const _accumResult = accumulateToFire(_qInpForAccum, _qFireAge, _accumOpts);
         pTrad = _accumResult.end.pTrad;
         pRoth = _accumResult.end.pRoth;
         pStocks = _accumResult.end.pStocks;
@@ -11283,15 +11395,15 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
     // definition so Safe/Exact modes reject strategies that drain to zero
     // even when late-life spend is covered by SS (no per-year shortfall).
     const _unlockAgeGate = _effectiveUnlockAge(bfOpts);
-    const _bufUnlockFloor = (inp.bufferUnlock || 0) * retireSpend;
-    const _bufSSFloor = (inp.bufferSS || 0) * retireSpend;
+    const _bufUnlockFloor = (_qInp.bufferUnlock || 0) * retireSpend;
+    const _bufSSFloor = (_qInp.bufferSS || 0) * retireSpend;
     let _minTotalPreUnlock = Infinity;
     let _minTotalPostUnlock = Infinity;
 
-    for (let age = fireAge; age <= endAge; age++) {
+    for (let age = _qFireAge; age <= endAge; age++) {
       const unlockAge = _effectiveUnlockAge(bfOpts);
       const canAccess401k = age >= unlockAge;
-      const ssActive = age >= inp.ssClaimAge;
+      const ssActive = age >= _qInp.ssClaimAge;
       const ssThisYear = ssActive ? ssAnnual : 0;
       const taxableSS = ssThisYear * 0.85;
       const rmdThisYear = (age >= 73 && pTrad > 0) ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
@@ -11408,7 +11520,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       cumulativeFederalTaxReal: Math.round(lifetimeTax),
       residualAreaReal: residualArea,
       averageEffectiveTaxRate: avgEffRate,
-      earliestFeasibleFireAge: fireAge, // Architecture B: fixed FIRE age across strategies
+      earliestFeasibleFireAge: _qFireAge, // Architecture B: fixed FIRE age across strategies (quantized to monthly per FR-021)
       feasibleUnderCurrentMode: feasible,
       hasShortfall,
       firstShortfallAge,
