@@ -3028,6 +3028,14 @@
     <div class="input-group">
       <label data-i18n="profile.taxRate">Effective Tax Rate (%)</label>
       <input type="number" id="taxRate" value="28" onchange="recalcAll()">
+      <!-- Feature 021 — Auto progressive-bracket toggle (US3 FR-015) -->
+      <div class="tax-rate-auto-row" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.9em;cursor:pointer">
+          <input type="checkbox" id="taxRateAutoMode" onchange="onTaxRateAutoToggle()">
+          <span data-i18n="invest.taxRateAuto" data-i18n-tip="invest.taxRateAutoTooltip">Auto</span>
+        </label>
+        <span id="taxRateAutoLabel" style="font-size:0.85em;color:var(--accent2,#0d8);display:none"></span>
+      </div>
     </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
@@ -5629,6 +5637,10 @@ const TRANSLATIONS = {
     'profile.income': 'Annual Gross Income (Combined)',
     'profile.raise': 'Annual Raise',
     'profile.taxRate': 'Effective Tax Rate (%)',
+    // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+    'invest.taxRateAuto': 'Auto',
+    'invest.taxRateAutoLabel': 'Auto: {0}%',
+    'invest.taxRateAutoTooltip': 'Use progressive US tax brackets + FICA. Toggle off to enter a flat rate manually.',
     // Assets (Accessible / Locked split)
     'assets.accessible': '🟢 Accessible Now (funds pre-59.5 FIRE)',
     'assets.locked': '🔒 Locked until 59.5 (401K)',
@@ -6683,6 +6695,10 @@ const TRANSLATIONS = {
     'profile.income': '年度總收入（合併）',
     'profile.raise': '年度加薪率',
     'profile.taxRate': '有效稅率 (%)',
+    // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+    'invest.taxRateAuto': '自動',
+    'invest.taxRateAutoLabel': '自動: {0}%',
+    'invest.taxRateAutoTooltip': '使用美國累進稅率 + FICA。關閉切換可手動輸入單一稅率。',
     // Assets
     'assets.accessible': '🟢 可用資金（59.5 歲前 FIRE 用）',
     'assets.locked': '🔒 鎖定至 59.5 歲 (401K)',
@@ -7951,7 +7967,14 @@ function getInputs() {
     ageChild2: childrenList.length > 1 ? parseInt(document.getElementById('ageChild2')?.value || 0) : 0,
     annualIncome: parseFloat(document.getElementById('annualIncome').value),
     raiseRate: parseFloat(document.getElementById('raiseRate').value) / 100,
-    taxRate: parseFloat(document.getElementById('taxRate').value) / 100,
+    // Feature 021 — when Auto toggle is ON, pass taxRate=0 so accumulateToFire
+    // takes the progressive-bracket + FICA path (US3 / FR-015). When Auto is OFF,
+    // the user-entered flat-rate value drives the v2 byte-identical override path.
+    taxRate: (function() {
+      const _autoEl = document.getElementById('taxRateAutoMode');
+      if (_autoEl && _autoEl.checked) return 0;
+      return parseFloat(document.getElementById('taxRate').value) / 100;
+    })(),
     // 401K split into Traditional (pre-tax) + Roth (after-tax).
     person1_401kTrad: parseFloat(document.getElementById('person1_401k').value) || 0,
     person1_401kRoth: parseFloat((document.getElementById('person1_401kRoth')||{}).value) || 0,
@@ -10194,6 +10217,10 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         stockContribution: _ay.stockContribution,
         cashFlowToCash: _ay.cashFlowToCash,
         cashFlowWarning: _ay.cashFlowWarning,
+        // v3 cash-flow fields (feature 021, US3 — progressive brackets + FICA)
+        ficaTax: _ay.ficaTax,
+        federalTaxBreakdown: _ay.federalTaxBreakdown,
+        ficaBreakdown: _ay.ficaBreakdown,
       });
     }
     // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
@@ -14804,6 +14831,55 @@ function _pviUpdateOverrideVisibility() {
   if (cb && wrap) wrap.hidden = !cb.checked;
 }
 
+// ==================== Feature 021 — Tax-rate Auto toggle (US3 / FR-015) ====================
+// When Auto is ON, the flat-rate input is disabled (visually grayed out) and a
+// sibling label shows the auto-computed effective rate "(federalTax + ficaTax) / grossIncome".
+// When Auto is OFF, the slider is fully active and label is hidden.
+function onTaxRateAutoToggle() {
+  const cb = document.getElementById('taxRateAutoMode');
+  const slider = document.getElementById('taxRate');
+  const label = document.getElementById('taxRateAutoLabel');
+  if (!cb || !slider) return;
+  if (cb.checked) {
+    slider.disabled = true;
+    slider.style.opacity = '0.5';
+    if (label) label.style.display = '';
+  } else {
+    slider.disabled = false;
+    slider.style.opacity = '';
+    if (label) label.style.display = 'none';
+  }
+  if (typeof recalcAll === 'function') recalcAll();
+}
+
+// Update the "Auto: X.X%" sibling label with the effective rate from the
+// active accumulation snapshot. Called by recalcAll() after lifecycleProjection
+// is computed. Reads (federalTax + ficaTax) / grossIncome from the first
+// accumulation row.
+function _taxRateAutoUpdateLabel(snap) {
+  const cb = document.getElementById('taxRateAutoMode');
+  const label = document.getElementById('taxRateAutoLabel');
+  if (!cb || !label) return;
+  if (!cb.checked) { label.style.display = 'none'; label.textContent = ''; return; }
+  let pct = 0;
+  try {
+    const rows = snap && snap.lifecycleProjection && snap.lifecycleProjection.accumulationRows;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const r0 = rows[0];
+      const gross = (r0 && typeof r0.grossIncome === 'number') ? r0.grossIncome : 0;
+      const fed = (r0 && typeof r0.federalTax === 'number') ? r0.federalTax : 0;
+      const fica = (r0 && typeof r0.ficaTax === 'number') ? r0.ficaTax : 0;
+      if (gross > 0) pct = ((fed + fica) / gross) * 100;
+    }
+  } catch (_e) { /* defensive: leave pct at 0 */ }
+  const i18n = (typeof translations !== 'undefined' && typeof currentLanguage !== 'undefined'
+                && translations[currentLanguage] && translations[currentLanguage]['invest.taxRateAutoLabel'])
+    ? translations[currentLanguage]['invest.taxRateAutoLabel']
+    : 'Auto: {0}%';
+  label.textContent = i18n.replace('{0}', pct.toFixed(1));
+  label.style.display = '';
+}
+
 // ==================== Feature 020 — Cash-flow override visibility + warning ====================
 // Mirrors `_pviUpdateOverrideVisibility` — toggles the override input panel
 // based on the override checkbox state.
@@ -15909,6 +15985,8 @@ const PERSIST_IDS = [
   'adultCount',
   // Feature 020 — Cash-flow override (US4 / FR-015.5)
   'pviCashflowOverrideEnabled', 'pviCashflowOverride',
+  // Feature 021 — Tax-rate Auto toggle (US3 / FR-015)
+  'taxRateAutoMode',
 ];
 
 // Slider label IDs that need updating when values are restored
@@ -18272,14 +18350,18 @@ function copyDebugInfo() {
       synthConv: Math.round(d.syntheticConversion || 0),
     }));
     // Feature 020 (T029): lifecycleProjection with v2 cash-flow fields + conservation block.
+    // Feature 021 (T034 US3): extended with v3 fields — ficaTax, federalTaxBreakdown,
+    // ficaBreakdown per row, and totalFicaTax aggregate. Conservation residual now
+    // also subtracts ficaSum so v3 invariant holds.
     const _accumRows = lc.filter(d => d.phase === 'accumulation');
     let _totalCashFlow = 0;
-    let _grossSum = 0, _taxSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
+    let _grossSum = 0, _taxSum = 0, _ficaSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
     for (const _r of _accumRows) {
       const _cf = _r.cashFlowToCash || 0;
       _totalCashFlow += _cf;
       _grossSum += (_r.grossIncome || 0);
       _taxSum += (_r.federalTax || 0);
+      _ficaSum += (_r.ficaTax || 0);
       _spendSum += (_r.annualSpending || 0);
       _contribSum += (_r.pretax401kEmployee || 0);
       _stockSum += (_r.stockContribution || 0);
@@ -18290,6 +18372,10 @@ function copyDebugInfo() {
         age: _r.age,
         grossIncome: Math.round(_r.grossIncome || 0),
         federalTax: Math.round(_r.federalTax || 0),
+        // v3 (021): per-row FICA + breakdowns
+        ficaTax: Math.round(_r.ficaTax || 0),
+        federalTaxBreakdown: _r.federalTaxBreakdown || {},
+        ficaBreakdown: _r.ficaBreakdown || {},
         annualSpending: Math.round(_r.annualSpending || 0),
         pretax401kEmployee: Math.round(_r.pretax401kEmployee || 0),
         empMatchToTrad: Math.round(_r.empMatchToTrad || 0),
@@ -18301,16 +18387,20 @@ function copyDebugInfo() {
       })),
       summary: {
         totalCashFlow: Math.round(_totalCashFlow),
+        // v3 (021): aggregate FICA across accumulation horizon
+        totalFicaTax: Math.round(_ficaSum),
         accumYears: _accumRows.length,
       },
       cashFlowConservation: {
         grossSum: Math.round(_grossSum),
         taxSum: Math.round(_taxSum),
+        // v3 (021): ficaSum included so residual reduces to ±$0 under conservation.
+        ficaSum: Math.round(_ficaSum),
         spendSum: Math.round(_spendSum),
         contribSum: Math.round(_contribSum),
         stockSum: Math.round(_stockSum),
         cashSum: Math.round(_cashSum),
-        residual: Math.round(_grossSum - _taxSum - _spendSum - _contribSum - _stockSum - _cashSum),
+        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum),
       },
     };
     // Live-call the feasibility check the way recalcAll does, so we can compare

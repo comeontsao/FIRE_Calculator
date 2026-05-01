@@ -1247,3 +1247,13 @@ Verdict strings use `{0}`, `{1}`, `{2}` placeholders interpolated by `t(key, ...
 | `pvi.strategy.investLumpSum` | Invest then lump-sum payoff | 投資後一次清償 |
 | `sidebar.mortgageStatus.template` | Mortgage: {0} · paid off at age {1} | 房貸：{0} · {1} 歲還清 |
 | `sidebar.mortgageStatus.placeholder` | (empty) | (empty) |
+
+
+## Feature 021 — Tax Expense Category + Audit Cleanup (3)
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `invest.taxRateAuto` | Auto | 自動 |
+| `invest.taxRateAutoLabel` | Auto: {0}% | 自動: {0}% |
+| `invest.taxRateAutoTooltip` | Use progressive US tax brackets + FICA. Toggle off to enter a flat rate manually. | 使用美國累進稅率 + FICA。關閉切換可手動輸入單一稅率。 |
+
