@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
-**Active feature**: _none_ — feature 020 (validation audit + cash-flow rewrite + month-precision header) merged to `main` 2026-05-01 (commit `3d45eab`). Predecessors 018 + 019 + 020 all on main. Tests: **413 passing, 0 failures**. Next planned feature: 021 (tax expense category + carry-forward 4 deferred items B-020-4 / B-020-5 / B-020-6 / B-020-7).
+**Active feature**: 021 (tax-category-and-audit-cleanup) on branch `021-tax-category-and-audit-cleanup`. Spec at [`specs/021-tax-category-and-audit-cleanup/spec.md`](./specs/021-tax-category-and-audit-cleanup/spec.md), Plan at [`specs/021-tax-category-and-audit-cleanup/plan.md`](./specs/021-tax-category-and-audit-cleanup/plan.md). 7 user stories (US1 income tax visibility MVP, US2 other-tax manual, US3 progressive bracket calc refactor, US4–US7 audit-harness carry-forward bundling B-020-4/-5/-6/-7). 5 clarifications resolved 2026-05-01 (Income tax = federal + FICA combined; pre-FIRE-only model; visible-but-disabled Auto toggle; audit dump exposes per-bracket breakdown; MFJ/single only — defer MFS to 022). Predecessor 020 merged to main 2026-05-01 (commit `3d45eab`). Tests baseline: **413 passing, 0 failures**.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
