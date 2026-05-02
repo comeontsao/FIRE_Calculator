@@ -3548,6 +3548,14 @@
         </tr>
       </tfoot>
     </table>
+    <!-- Feature 023 (T043 / US6) — caption clarifying that the line-item total
+         drives accumulation-phase spending; retirement-phase spending is set
+         separately via the Geography tab country tier. -->
+    <p class="exp-caption" style="font-size:12px;opacity:0.75;margin:4px 0 8px 0;line-height:1.4;">
+      <strong data-i18n="expenses.caption.currentSpending">Current spending (US household, today's dollars)</strong>
+      &nbsp;—&nbsp;
+      <span data-i18n="expenses.caption.appliesTo">Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country.</span>
+    </p>
     <!-- +Add expense picker. Translation labels populated by buildExpenseTable. -->
     <div class="exp-add-row" role="group" aria-label="Add expense">
       <select id="expenseLibraryPicker" aria-label="Pick category"></select>
@@ -6060,6 +6068,10 @@ const TRANSLATIONS = {
     'exp.remove.label':       'Remove this expense',
     'exp.custom.prompt':      'Name for the new expense:',
     'exp.locked.title':       'Rent / Housing is locked — used by the mortgage scenario',
+    // ===== Feature 023 — accumulation-vs-retirement spend separation =====
+    'expenses.caption.currentSpending': 'Current spending (US household, today\'s dollars)',
+    'expenses.caption.appliesTo':       'Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country.',
+    'geo.tooltip.postFireOnly':         'Annual budget applies post-FIRE, in {0}',
     // ===== Feature 016 — Payoff vs Invest =====
     'nav.pill.payoffInvest': 'Payoff vs Invest',
     'pvi.section.title': 'Mortgage payoff vs. invest extra cash',
@@ -7115,6 +7127,10 @@ const TRANSLATIONS = {
     'exp.remove.label':       '移除此項目',
     'exp.custom.prompt':      '新項目名稱：',
     'exp.locked.title':       '房租／住房已鎖定 — 房貸試算需要使用',
+    // ===== Feature 023 — 累積期 vs 退休後支出分離 =====
+    'expenses.caption.currentSpending': '目前支出（美國家計，今日購買力）',
+    'expenses.caption.appliesTo':       '計入累積階段現金流。退休後支出由所選國家獨立設定。',
+    'geo.tooltip.postFireOnly':         '年度預算適用於FIRE後，於 {0}',
     // ===== Feature 016 — 還貸 vs 投資 =====
     'nav.pill.payoffInvest': '還貸 vs 投資',
     'pvi.section.title': '提早還清房貸 vs. 投入市場',
@@ -15359,7 +15375,15 @@ function _cashflowUpdateWarning() {
       ? yearsToFIREcache
       : (typeof yearsToFIRE === 'function' ? yearsToFIRE(inp, 0) : 10);
     const fireAge = inp.ageRoger + yrsToFire;
-    const result = accumulateToFire(inp, fireAge, {});
+    // Feature 023 (T029 / FR-007 caller #6) — was `accumulateToFire(inp, fireAge, {})`
+    // which bypassed resolveAccumulationOptions and produced a $0 spend
+    // residual that always cleared the negative-residual flag. Refactored
+    // to thread accumulationSpend (and other options) through the canonical
+    // helper so the warning pill reflects reality.
+    const _accumOpts = (typeof resolveAccumulationOptions === 'function')
+      ? resolveAccumulationOptions(inp, fireAge, 'invest-keep-paying')
+      : {};
+    const result = accumulateToFire(inp, fireAge, _accumOpts);
     const hasWarning = !!(result && result.perYearRows
       && result.perYearRows.some(r => r && r.cashFlowWarning === 'NEGATIVE_RESIDUAL'));
     wrap.hidden = !hasWarning;
@@ -19128,6 +19152,15 @@ function copyDebugInfo() {
       } catch (_e) {}
       return null;
     })();
+    // Feature 023 (T033 / FR-009 / US3) — expose accumulationSpend at the top
+    // level so audit consumers can verify which spending baseline drove the
+    // accumulation phase. Distinct from `annualSpend` (country-tier post-FIRE).
+    const _accumulationSpend = (typeof getAccumulationSpend === 'function')
+      ? (function() { try { return getAccumulationSpend(ds && ds.inp || {}); } catch (_e) { return null; } })()
+      : null;
+    const _accumulationSpend_source = (typeof getAccumulationSpend === 'function')
+      ? 'getAccumulationSpend(inp)'
+      : 'fallback';
     const debugObj = {
       _generatedAt: new Date().toISOString(),
       _file: location.pathname.split('/').pop(),
@@ -19136,6 +19169,9 @@ function copyDebugInfo() {
       currentAge: ds.currentAge,
       ssClaimAge: ds.ssClaimAge,
       annualSpend: spend,
+      // Feature 023 — accumulation-phase spending (real-$, today's-$).
+      accumulationSpend: _accumulationSpend,
+      accumulationSpend_source: _accumulationSpend_source,
       bufferUnlock_yrs: bufUnlock,
       bufferSS_yrs: bufSS,
       summary,
