@@ -446,8 +446,16 @@ function _buildStrategyRanking(lastStrategyResults) {
   const rows = lastStrategyResults.rows.map((r) => ({
     strategyId: r.strategyId,
     chosenTheta: typeof r.chosenTheta !== 'undefined' ? r.chosenTheta : null,
-    endBalance: _round(r.endBalance),
-    lifetimeFederalTax: _round(r.lifetimeFederalTax),
+    // Feature 023 follow-up (B-023-7 investigation) — strategy simulator emits
+    // suffix-Real field names (endOfPlanNetWorthReal, lifetimeFederalTaxReal,
+    // cumulativeFederalTaxReal); audit was reading the unsuffixed names which
+    // are undefined → _round(undefined) = 0 → ALL strategies showed $0
+    // endBalance + $0 lifetime tax in the audit, hiding the per-strategy
+    // differentiation. Fix: read with fallback chain.
+    endBalance: _round(typeof r.endOfPlanNetWorthReal === 'number' ? r.endOfPlanNetWorthReal : r.endBalance),
+    lifetimeFederalTax: _round(typeof r.cumulativeFederalTaxReal === 'number' ? r.cumulativeFederalTaxReal
+                              : (typeof r.lifetimeFederalTaxReal === 'number' ? r.lifetimeFederalTaxReal
+                              : r.lifetimeFederalTax)),
     violations: typeof r.violations === 'number' ? r.violations : 0,
     firstViolationAge: typeof r.firstViolationAge === 'number' ? r.firstViolationAge : null,
     shortfallYears: typeof r.shortfallYears === 'number' ? r.shortfallYears : 0,

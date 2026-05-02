@@ -18491,6 +18491,20 @@ window._rebindStickyHeaderObserver();
     wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
+  // Feature 023 follow-up (B-023-8) — Book Value conversion helper. See RR HTML.
+  function _bvConvert(realValue, age, snapshot) {
+    if (!Number.isFinite(realValue)) return 0;
+    if (typeof globalThis === 'undefined' || !globalThis.displayConverter) return realValue;
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const currentAge = inputs.ageRoger || inputs.agePerson1;
+    const inflationRate = inputs.inflationRate;
+    if (typeof currentAge !== 'number' || typeof inflationRate !== 'number') return realValue;
+    try {
+      return globalThis.displayConverter.toBookValue(realValue, age, currentAge, inflationRate);
+    } catch (_e) {
+      return realValue;
+    }
+  }
   function _renderLifecycleTable(snapshot) {
     const wrap = _$id('audit-table-lifecycle');
     if (!wrap) return;
@@ -18511,9 +18525,14 @@ window._rebindStickyHeaderObserver();
       const shortfallTd = r.hasShortfall === true
         ? '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.true', 'Yes') + '</td>'
         : '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.false', '—') + '</td>';
-      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(r.total) + '</td><td>' + _fmtMoney(r.withdrawals) + '</td><td>' + _fmtMoney(r.ssIncome) + '</td>' + shortfallTd + '</tr>';
+      // Feature 023 follow-up — convert to Book Value to match chart frame.
+      const totalBV = _bvConvert(r.total, r.age, snapshot);
+      const wdBV = _bvConvert(r.withdrawals, r.age, snapshot);
+      const ssBV = _bvConvert(r.ssIncome, r.age, snapshot);
+      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(totalBV) + '</td><td>' + _fmtMoney(wdBV) + '</td><td>' + _fmtMoney(ssBV) + '</td>' + shortfallTd + '</tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + _bvSuffix + '</th><th>Withdrawals' + _bvSuffix + '</th><th>SS' + _bvSuffix + '</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   // Feature 023 follow-up — year-by-year cash flow. See RR HTML for context.
@@ -18566,13 +18585,13 @@ window._rebindStickyHeaderObserver();
       return '<tr' + cls + '>'
         + '<td>' + _fmtNum(r.age) + '</td>'
         + '<td>' + _esc(phaseLabel(r.phase)) + '</td>'
-        + '<td>' + fmtMoney(grossIncome) + '</td>'
-        + '<td>' + fmtMoney(ssIncome) + '</td>'
-        + '<td>' + fmtMoney(withdraw) + '</td>'
-        + '<td>' + fmtMoney(tax) + '</td>'
-        + '<td>' + fmtMoney(saved) + '</td>'
-        + '<td>' + fmtMoney(spent) + '</td>'
-        + '<td>' + fmtMoney(cashDelta) + warnTd + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(grossIncome, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(ssIncome, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(withdraw, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(tax, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(saved, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(spent, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(cashDelta, r.age, snapshot)) + warnTd + '</td>'
         + '</tr>';
     }).join('');
     const headerRow = '<thead><tr>'
