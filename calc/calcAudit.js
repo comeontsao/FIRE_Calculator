@@ -495,6 +495,20 @@ function _buildLifecycleProjection(chart, fireAge) {
     // Feature 015 US1 (FR-004) — per-row shortfall flag. Defensive fallback to
     // false so legacy snapshots that pre-date the field still serialize cleanly.
     hasShortfall: r.hasShortfall === true,
+    // Feature 023 follow-up — preserve accumulation cash-flow accounting fields
+    // (v3 from feature 021) so the Audit-tab "Year-by-Year Cash Flow" section
+    // can render income/tax/savings/spending breakdowns. Fields are present
+    // on accumulation-phase rows only; absent (undefined) on retirement rows
+    // which the audit-table renderer falls back accordingly.
+    grossIncome: Number.isFinite(r.grossIncome) ? _round(r.grossIncome) : undefined,
+    federalTax: Number.isFinite(r.federalTax) ? _round(r.federalTax) : undefined,
+    ficaTax: Number.isFinite(r.ficaTax) ? _round(r.ficaTax) : undefined,
+    annualSpending: Number.isFinite(r.annualSpending) ? _round(r.annualSpending) : undefined,
+    pretax401kEmployee: Number.isFinite(r.pretax401kEmployee) ? _round(r.pretax401kEmployee) : undefined,
+    empMatchToTrad: Number.isFinite(r.empMatchToTrad) ? _round(r.empMatchToTrad) : undefined,
+    stockContribution: Number.isFinite(r.stockContribution) ? _round(r.stockContribution) : undefined,
+    cashFlowToCash: Number.isFinite(r.cashFlowToCash) ? _round(r.cashFlowToCash) : undefined,
+    cashFlowWarning: r.cashFlowWarning || undefined,
   }));
   const thumbnailSeries = rows.map((r) => ({ x: r.age, y: r.total }));
   const fireAgeRowIndex = rows.findIndex((r) => r.age === fireAge);

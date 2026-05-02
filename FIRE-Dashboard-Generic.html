@@ -4305,6 +4305,13 @@
             </div>
           </section>
 
+          <!-- Section 7b (Feature 023 follow-up): Year-by-Year Cash Flow -->
+          <section id="audit-section-cashflow" class="audit-section">
+            <h2 data-i18n="audit.section.cashflow.title">Year-by-Year Cash Flow</h2>
+            <p class="audit-empty" data-i18n="audit.section.cashflow.help" style="margin:0 0 12px 0;">Shows what flows in (income / SS / withdrawals) and out (tax, savings, spending) for every year. Useful for verifying the simulator's cash-flow conservation invariant year-by-year.</p>
+            <div class="audit-table-wrap audit-table-wrap--scroll" id="audit-table-cashflow"></div>
+          </section>
+
           <!-- Section 8: Cross-Validation Warnings -->
           <section id="audit-section-crossval" class="audit-section">
             <h2 data-i18n="audit.section.crossval.title">Cross-Validation</h2>
@@ -6629,6 +6636,18 @@ const TRANSLATIONS = {
     'audit.section.fireage.title':              'FIRE Age Resolution',
     'audit.section.strategy.title':             'Strategy Ranking',
     'audit.section.lifecycle.title':            'Lifecycle Projection',
+    'audit.section.cashflow.title':             'Year-by-Year Cash Flow',
+    'audit.section.cashflow.help':              'Shows what flows in (income / SS / withdrawals) and out (tax, savings, spending) for every year. Useful for verifying the simulator\'s cash-flow conservation invariant year-by-year.',
+    'audit.cashflow.col.phase':                 'Phase',
+    'audit.cashflow.col.moneyIn':               'Money In',
+    'audit.cashflow.col.tax':                   'Tax',
+    'audit.cashflow.col.saved':                 'Saved',
+    'audit.cashflow.col.spent':                 'Spent',
+    'audit.cashflow.col.cashDelta':             'Cash Δ',
+    'audit.cashflow.phase.accum':               'Accumulating',
+    'audit.cashflow.phase.phase1':              'Retired (pre-401K)',
+    'audit.cashflow.phase.phase2':              'Retired (401K open)',
+    'audit.cashflow.phase.phase3':              'Retired (with SS)',
     'audit.section.crossval.title':             'Cross-Validation',
     'audit.flow.stage.inputs':                  'Inputs',
     'audit.flow.stage.spending':                'Spending Adjustments',
@@ -7696,6 +7715,18 @@ const TRANSLATIONS = {
     'audit.section.fireage.title':              'FIRE 年齡解析',
     'audit.section.strategy.title':             '策略排名',
     'audit.section.lifecycle.title':            '生命週期預測',
+    'audit.section.cashflow.title':             '逐年現金流',
+    'audit.section.cashflow.help':              '顯示每年的進出帳：收入／社安福利／提領作為進帳；稅、儲蓄、支出作為出帳。可用來逐年驗證模擬器的現金流守恆不變式。',
+    'audit.cashflow.col.phase':                 '階段',
+    'audit.cashflow.col.moneyIn':               '進帳',
+    'audit.cashflow.col.tax':                   '稅',
+    'audit.cashflow.col.saved':                 '儲蓄',
+    'audit.cashflow.col.spent':                 '支出',
+    'audit.cashflow.col.cashDelta':             '現金變動',
+    'audit.cashflow.phase.accum':               '累積期',
+    'audit.cashflow.phase.phase1':              '退休（401K 未解鎖）',
+    'audit.cashflow.phase.phase2':              '退休（401K 已解鎖）',
+    'audit.cashflow.phase.phase3':              '退休（有社安福利）',
     'audit.section.crossval.title':             '交叉驗證',
     'audit.flow.stage.inputs':                  '輸入',
     'audit.flow.stage.spending':                '支出調整',
@@ -13220,7 +13251,10 @@ function recalcAll() {
     if (_useMonthVerdict) {
       const _vYears = Math.max(0, _vFireRes.years - inp.agePerson1);
       const _vMonths = _vFireRes.months || 0;
-      statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, fireAge, progressPctRounded);
+      // Feature 023 follow-up — use resolver's integer-floor `_vFireRes.years`
+      // for the displayed age so it stays consistent with the displayed
+      // "N years M months" duration. See RR HTML for full context.
+      statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, _vFireRes.years, progressPctRounded);
     } else {
       statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
     }
@@ -18478,6 +18512,75 @@ window._rebindStickyHeaderObserver();
     wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
+  // Feature 023 follow-up — year-by-year cash flow. See RR HTML for context.
+  function _renderCashflowTable(snapshot) {
+    const wrap = _$id('audit-table-cashflow');
+    if (!wrap) return;
+    const lp = snapshot.lifecycleProjection || {};
+    const rs = Array.isArray(lp.rows) ? lp.rows : [];
+    if (rs.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">No rows.</p>';
+      return;
+    }
+    const fireIdx = (typeof lp.fireAgeRowIndex === 'number') ? lp.fireAgeRowIndex : -1;
+    const t0 = (key, fb) => _safeT(key, fb);
+    const fmtMoney = function (v) {
+      if (!Number.isFinite(v) || v === 0) return '—';
+      return _fmtMoney(v);
+    };
+    const phaseLabel = function (phase) {
+      if (phase === 'accumulation') return t0('audit.cashflow.phase.accum', 'Accumulating');
+      if (phase === 'phase1-taxable-only') return t0('audit.cashflow.phase.phase1', 'Retired (pre-401K)');
+      if (phase === 'phase2-401k-unlocked') return t0('audit.cashflow.phase.phase2', 'Retired (401K open)');
+      if (phase === 'phase3-with-ss') return t0('audit.cashflow.phase.phase3', 'Retired (with SS)');
+      return phase || '—';
+    };
+    const rows = rs.map(function (r, i) {
+      const isAccum = r.phase === 'accumulation';
+      const classes = [];
+      if (i === fireIdx) classes.push('audit-row--fireage');
+      if (r.hasShortfall === true) classes.push('has-shortfall');
+      const cls = classes.length > 0 ? ' class="' + classes.join(' ') + '"' : '';
+      const moneyIn = isAccum
+        ? (Number.isFinite(r.grossIncome) ? r.grossIncome : 0)
+        : ((Number.isFinite(r.ssIncome) ? r.ssIncome : 0) + (Number.isFinite(r.withdrawals) ? r.withdrawals : 0));
+      const tax = isAccum
+        ? ((Number.isFinite(r.federalTax) ? r.federalTax : 0) + (Number.isFinite(r.ficaTax) ? r.ficaTax : 0))
+        : 0;
+      const saved = isAccum
+        ? ((Number.isFinite(r.pretax401kEmployee) ? r.pretax401kEmployee : 0)
+           + (Number.isFinite(r.empMatchToTrad) ? r.empMatchToTrad : 0)
+           + (Number.isFinite(r.stockContribution) ? r.stockContribution : 0))
+        : 0;
+      const spent = Number.isFinite(r.annualSpending) ? r.annualSpending : 0;
+      const cashDelta = isAccum
+        ? (Number.isFinite(r.cashFlowToCash) ? r.cashFlowToCash : 0)
+        : (moneyIn - spent);
+      const warnTd = (r.cashFlowWarning === 'NEGATIVE_RESIDUAL')
+        ? ' ⚠️'
+        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️' : '';
+      return '<tr' + cls + '>'
+        + '<td>' + _fmtNum(r.age) + '</td>'
+        + '<td>' + _esc(phaseLabel(r.phase)) + '</td>'
+        + '<td>' + fmtMoney(moneyIn) + '</td>'
+        + '<td>' + fmtMoney(tax) + '</td>'
+        + '<td>' + fmtMoney(saved) + '</td>'
+        + '<td>' + fmtMoney(spent) + '</td>'
+        + '<td>' + fmtMoney(cashDelta) + warnTd + '</td>'
+        + '</tr>';
+    }).join('');
+    const headerRow = '<thead><tr>'
+      + '<th>' + t0('audit.col.age', 'Age') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.phase', 'Phase') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.moneyIn', 'Money In') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.tax', 'Tax') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.saved', 'Saved') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.spent', 'Spent') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.cashDelta', 'Cash Δ') + '</th>'
+      + '</tr></thead>';
+    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table">' + headerRow + '<tbody>' + rows + '</tbody></table>';
+  }
+
   function _renderCrossValRows(snapshot) {
     const list = _$id('audit-crossval-list');
     if (!list) return;
@@ -18506,6 +18609,7 @@ window._rebindStickyHeaderObserver();
     _renderFireAgeTable(snapshot);
     _renderStrategyTable(snapshot);
     _renderLifecycleTable(snapshot);
+    _renderCashflowTable(snapshot);
     _renderCrossValRows(snapshot);
   }
 
