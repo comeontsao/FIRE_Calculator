@@ -239,6 +239,42 @@ To prevent merge conflicts, each Engineer should work in designated areas:
 
 Adjust these paths as the project structure evolves.
 
+## Money Terminology (NON-NEGOTIABLE in conversation with user)
+
+The user explicitly rejected economics jargon. In **all conversation, chat
+output, error messages, audit-report prose, CLOSEOUT.md narrative, and any
+user-facing tooltip / caption**, use this terminology pair:
+
+| Say this | For values that are | Never call it |
+|---|---|---|
+| **"money" / "dollars" / "broker dollars" / "Book Value"** | Nominal dollars as they appear on bank or brokerage statements | "real $" / "real money" / "real dollars" |
+| **"purchasing power"** | The today's-equivalent of a future dollar amount; an abstract comparison metric | "real value" without qualification |
+
+**The rule**: Money is what the user sees on their account statement. Purchasing
+power is a *comparison* to today's spending capacity. Calling purchasing-power
+numbers "real money" conflicts with how an actual bank balance reads.
+
+**Where the technical `real` / `nominal` pair IS still allowed**:
+- Inside `calc/*.js` source code, in `// FRAME:` annotations (Constitution VI;
+  feature 022 conventions). The technical pair has audit-test enforcement.
+- Inside spec.md / plan.md / tasks.md / contracts/ files for *internal*
+  cross-reference. User-facing text *inside* those documents (acceptance
+  scenarios, success criteria, captions) uses the conversational pair.
+- Inside `tests/meta/frame-coverage.test.js` regex patterns (technical).
+
+**Right vs wrong:**
+
+> ❌ "At age 70, your real portfolio is $328k. The chart shows $750k Book Value."
+>
+> ✅ "At age 70, your portfolio is **$750k** — that's what your broker statement
+> will show in 2054. The purchasing-power equivalent is about $328k of today's
+> spending capacity."
+
+**Why:** the dashboard ships nominal-$ Book Value as the primary chart frame
+per feature 022 (US1 / FR-001 a-n). The user's mental model — and every dollar
+they actually own — is in nominal frame. Talking to them in their frame is
+table stakes.
+
 ## Process Lessons
 
 Codified from past features. Apply these to every future refactor that touches
