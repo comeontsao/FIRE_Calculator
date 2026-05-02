@@ -3515,6 +3515,14 @@
         </tr>
       </tfoot>
     </table>
+    <!-- Feature 023 (T044 / US6) — caption clarifying that the line-item total
+         drives accumulation-phase spending; retirement-phase spending is set
+         separately via the Geography tab country tier. -->
+    <p class="exp-caption" style="font-size:12px;opacity:0.75;margin:4px 0 8px 0;line-height:1.4;">
+      <strong data-i18n="expenses.caption.currentSpending">Current spending (US household, today's dollars)</strong>
+      &nbsp;—&nbsp;
+      <span data-i18n="expenses.caption.appliesTo">Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country.</span>
+    </p>
     <!-- +Add expense picker. Translation labels populated by buildExpenseTable. -->
     <div class="exp-add-row" role="group" aria-label="Add expense">
       <select id="expenseLibraryPicker" aria-label="Pick category"></select>
@@ -4295,6 +4303,13 @@
               <div class="audit-chart"><canvas id="audit-chart-lifecycle-thumb"></canvas></div>
               <div class="audit-table-wrap audit-table-wrap--scroll" id="audit-table-lifecycle"></div>
             </div>
+          </section>
+
+          <!-- Section 7b (Feature 023 follow-up): Year-by-Year Cash Flow -->
+          <section id="audit-section-cashflow" class="audit-section">
+            <h2 data-i18n="audit.section.cashflow.title">Year-by-Year Cash Flow</h2>
+            <p class="audit-empty" data-i18n="audit.section.cashflow.help" style="margin:0 0 12px 0;">Shows what flows in (income / SS / withdrawals) and out (tax, savings, spending) for every year. Useful for verifying the simulator's cash-flow conservation invariant year-by-year.</p>
+            <div class="audit-table-wrap audit-table-wrap--scroll" id="audit-table-cashflow"></div>
           </section>
 
           <!-- Section 8: Cross-Validation Warnings -->
@@ -5930,7 +5945,7 @@ const TRANSLATIONS = {
     'dyn.progressComplete': '{0}% complete',
     'dyn.accessibleNeededAtFire': 'Total assets needed at FIRE (age {0}) — {1} mode{2}',
     'dyn.cushionSuffix': ' (incl. {0}yr end-of-life cushion)',
-    'dyn.accessibleNeededSub': '{0} total at FIRE{1}',
+    'dyn.accessibleNeededSub': '{0} projected portfolio at FIRE{1}',
     'dyn.phase1Info': 'FIRE ({0}) → 59.5: {1} yrs, taxable only, {2}{3}',
     'dyn.phase1MtgAdjusted': ' (mtg-adjusted)',
     'dyn.phase2Info': '59.5 → {0}: {1} yrs, 401K unlocks',
@@ -5953,8 +5968,8 @@ const TRANSLATIONS = {
     'kpi.yearsSubIncrease': 'Need to increase savings',
     'kpi.yearsSuffix': 'yrs',
     'kpi.yearsOver': '40+',
-    'dyn.statusNeedsOpt': '⚡ Needs Optimization — {0} years at current pace · {1}% there',
-    'dyn.statusBehindSched': '⚠️ Behind Schedule — {0}+ years · {1}% there. Increase savings or reduce target.',
+    'dyn.statusNeedsOpt': '⚡ Long timeline — FIRE in ~{0} years at current pace · {1}% to target',
+    'dyn.statusBehindSched': '⚠️ Distant target — FIRE in {0}+ years · {1}% to target. Consider increasing savings or lowering retirement spending to retire sooner.',
     'dyn.progressNeeded': '${0} total needed',
     'dyn.progressCurrent': '${0} total now',
     'college.label.child1': "Child 1's College",
@@ -6427,6 +6442,10 @@ const TRANSLATIONS = {
     'exp.remove.label':       'Remove this expense',
     'exp.custom.prompt':      'Name for the new expense:',
     'exp.locked.title':       'Rent / Housing is locked — used by the mortgage scenario',
+    // ===== Feature 023 — accumulation-vs-retirement spend separation =====
+    'expenses.caption.currentSpending': 'Current spending (US household, today\'s dollars)',
+    'expenses.caption.appliesTo':       'Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country.',
+    'geo.tooltip.postFireOnly':         'Annual budget applies post-FIRE, in {0}',
     // ===== Feature 016 — Payoff vs Invest =====
     'nav.pill.payoffInvest': 'Payoff vs Invest',
     'pvi.section.title': 'Mortgage payoff vs. invest extra cash',
@@ -6558,6 +6577,7 @@ const TRANSLATIONS = {
     'lifecycle.assetTable.col.total': 'Total',
     'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE (age {0})',
+    'chart.lifecycle.fireNumberTarget': '🎯 FIRE Number target (~${0}K)',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 Original FIRE (age {0})',
     'chart.lifecycle.originalFireShort': 'Original FIRE',
@@ -6616,6 +6636,20 @@ const TRANSLATIONS = {
     'audit.section.fireage.title':              'FIRE Age Resolution',
     'audit.section.strategy.title':             'Strategy Ranking',
     'audit.section.lifecycle.title':            'Lifecycle Projection',
+    'audit.section.cashflow.title':             'Year-by-Year Cash Flow',
+    'audit.section.cashflow.help':              'Shows what flows in (income / SS / withdrawals) and out (tax, savings, spending) for every year. Useful for verifying the simulator\'s cash-flow conservation invariant year-by-year.',
+    'audit.cashflow.col.phase':                 'Phase',
+    'audit.cashflow.col.income':                'Income',
+    'audit.cashflow.col.ss':                    'SS',
+    'audit.cashflow.col.withdraw':              'Withdraw',
+    'audit.cashflow.col.tax':                   'Tax',
+    'audit.cashflow.col.saved':                 'Saved',
+    'audit.cashflow.col.spent':                 'Spent',
+    'audit.cashflow.col.cashDelta':             'Cash Δ',
+    'audit.cashflow.phase.accum':               'Accumulating',
+    'audit.cashflow.phase.phase1':              'Retired (pre-401K)',
+    'audit.cashflow.phase.phase2':              'Retired (401K open)',
+    'audit.cashflow.phase.phase3':              'Retired (with SS)',
     'audit.section.crossval.title':             'Cross-Validation',
     'audit.flow.stage.inputs':                  'Inputs',
     'audit.flow.stage.spending':                'Spending Adjustments',
@@ -7002,7 +7036,7 @@ const TRANSLATIONS = {
     'dyn.progressComplete': '已完成 {0}%',
     'dyn.accessibleNeededAtFire': 'FIRE 時（{0} 歲）所需總資產 — {1} 模式{2}',
     'dyn.cushionSuffix': '（含 {0} 年臨終緩衝）',
-    'dyn.accessibleNeededSub': '{0} FIRE 時總資產{1}',
+    'dyn.accessibleNeededSub': '{0} FIRE 時預估資產{1}',
     'dyn.phase1Info': 'FIRE（{0}）→ 59.5：{1} 年，僅應稅帳戶，{2}{3}',
     'dyn.phase1MtgAdjusted': '（含房貸調整）',
     'dyn.phase2Info': '59.5 → {0}：{1} 年，401K 解鎖',
@@ -7025,8 +7059,8 @@ const TRANSLATIONS = {
     'kpi.yearsSubIncrease': '需要增加儲蓄',
     'kpi.yearsSuffix': '年',
     'kpi.yearsOver': '40+',
-    'dyn.statusNeedsOpt': '⚡ 需要優化 — 以目前速度還要 {0} 年 · {1}% 已達標',
-    'dyn.statusBehindSched': '⚠️ 進度落後 — 還要 {0}+ 年 · {1}% 已達標。請增加儲蓄或降低目標。',
+    'dyn.statusNeedsOpt': '⚡ 時程較長 — 以目前速度還要約 {0} 年達 FIRE · 已達標 {1}%',
+    'dyn.statusBehindSched': '⚠️ 目標距離遠 — 還要 {0}+ 年達 FIRE · 已達標 {1}%。可考慮提高儲蓄或降低退休後支出以提前退休。',
     'dyn.progressNeeded': '所需總資產 ${0}',
     'dyn.progressCurrent': '目前總資產 ${0}',
     'college.label.child1': '小孩 1 的大學',
@@ -7488,6 +7522,10 @@ const TRANSLATIONS = {
     'exp.remove.label':       '移除此項目',
     'exp.custom.prompt':      '新項目名稱：',
     'exp.locked.title':       '房租／住房已鎖定 — 房貸試算需要使用',
+    // ===== Feature 023 — 累積期 vs 退休後支出分離 =====
+    'expenses.caption.currentSpending': '目前支出（美國家計，今日購買力）',
+    'expenses.caption.appliesTo':       '計入累積階段現金流。退休後支出由所選國家獨立設定。',
+    'geo.tooltip.postFireOnly':         '年度預算適用於FIRE後，於 {0}',
     // ===== Feature 016 — 還貸 vs 投資 =====
     'nav.pill.payoffInvest': '還貸 vs 投資',
     'pvi.section.title': '提早還清房貸 vs. 投入市場',
@@ -7620,6 +7658,7 @@ const TRANSLATIONS = {
     'lifecycle.assetTable.col.total': '總計',
     'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE（{0} 歲）',
+    'chart.lifecycle.fireNumberTarget': '🎯 FIRE 目標金額（約 ${0}K）',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 原 FIRE（{0} 歲）',
     'chart.lifecycle.originalFireShort': '原 FIRE',
@@ -7678,6 +7717,20 @@ const TRANSLATIONS = {
     'audit.section.fireage.title':              'FIRE 年齡解析',
     'audit.section.strategy.title':             '策略排名',
     'audit.section.lifecycle.title':            '生命週期預測',
+    'audit.section.cashflow.title':             '逐年現金流',
+    'audit.section.cashflow.help':              '顯示每年的進出帳：收入／社安福利／提領作為進帳；稅、儲蓄、支出作為出帳。可用來逐年驗證模擬器的現金流守恆不變式。',
+    'audit.cashflow.col.phase':                 '階段',
+    'audit.cashflow.col.income':                '收入',
+    'audit.cashflow.col.ss':                    '社安福利',
+    'audit.cashflow.col.withdraw':              '提領',
+    'audit.cashflow.col.tax':                   '稅',
+    'audit.cashflow.col.saved':                 '儲蓄',
+    'audit.cashflow.col.spent':                 '支出',
+    'audit.cashflow.col.cashDelta':             '現金變動',
+    'audit.cashflow.phase.accum':               '累積期',
+    'audit.cashflow.phase.phase1':              '退休（401K 未解鎖）',
+    'audit.cashflow.phase.phase2':              '退休（401K 已解鎖）',
+    'audit.cashflow.phase.phase3':              '退休（有社安福利）',
     'audit.section.crossval.title':             '交叉驗證',
     'audit.flow.stage.inputs':                  '輸入',
     'audit.flow.stage.spending':                '支出調整',
@@ -7958,6 +8011,24 @@ function getTotalMonthlyExpenses() {
   const _otherTaxEl = document.getElementById('exp_tax_other');
   const _otherTax = _otherTaxEl ? (parseFloat(_otherTaxEl.value) || 0) : 0;
   return _baseSum + _otherTax;
+}
+
+// Feature 023 (US1 / FR-002) — accumulation-phase spending resolver.
+// Returns annual household spending in real-$ (today's purchasing power) for
+// the pre-FIRE accumulation phase. Drives every accumulateToFire caller's
+// options.accumulationSpend field. Sums Plan-tab Expense rows × 12, with a
+// $1,000/yr sanity floor (FR-002a) that falls back to Stay-in-US comfortable
+// spend ($120k) — prevents the original feature-023 latent bug where empty
+// line items + missing inp.annualSpend made the simulator spend $0/year.
+// FRAME: real-$ — output is in today's purchasing power. Constant across
+//        accumulation years per feature 022 FR-014.
+function getAccumulationSpend(inp) {
+  const monthlySum = (typeof getTotalMonthlyExpenses === 'function')
+    ? getTotalMonthlyExpenses()
+    : 0;
+  const annualSum = monthlySum * 12;
+  if (annualSum >= 1000) return annualSum;
+  return 120000;
 }
 
 // ----- Add / remove handlers -----
@@ -10237,6 +10308,12 @@ function resolveAccumulationOptions(inp, fireAge, mortgageStrategyOverride) {
     framing:             'liquidNetWorth',
     // Generic dashboard derives mfjStatus from adultCount per FR-016.
     mfjStatus:           (inp && inp.adultCount === 2) ? 'mfj' : 'single',
+    // Feature 023 (US1 / FR-006) — accumulation-phase spending plumbed through
+    // the options bag so accumulateToFire reads from a single source rather
+    // than an undefined inp.annualSpend that fell through to $0.
+    // FRAME: real-$ — today's-$ value, matches accumulateToFire's frame.
+    accumulationSpend:   (typeof getAccumulationSpend === 'function')
+                           ? getAccumulationSpend(inp) : 120000,
   };
 }
 
@@ -12872,7 +12949,12 @@ function recalcAll() {
       const preciseAgeMonths = Math.round((preciseAge - preciseAgeYears) * 12);
       if (r.feasible) {
         dwzPreciseEl.style.display = '';
-        dwzPreciseEl.innerHTML = t('dwz.preciseFeasible', r.years, r.months, preciseAgeYears, preciseAgeMonths, inp.endAge, Math.round(r.endBalance).toLocaleString(), fireAge);
+        // Feature 023 follow-up — convert end balance to Book Value at endAge.
+        const _endAge = inp.endAge || 100;
+        const _endBalanceBV = (typeof globalThis !== 'undefined' && globalThis.displayConverter && typeof inp.inflationRate === 'number')
+          ? globalThis.displayConverter.toBookValue(r.endBalance || 0, _endAge, inp.agePerson1, inp.inflationRate)
+          : (r.endBalance || 0);
+        dwzPreciseEl.innerHTML = t('dwz.preciseFeasible', r.years, r.months, preciseAgeYears, preciseAgeMonths, inp.endAge, Math.round(_endBalanceBV).toLocaleString(), fireAge);
       } else {
         dwzPreciseEl.style.display = '';
         dwzPreciseEl.innerHTML = t('dwz.preciseInfeasible', Math.min(45, (inp.endAge || 95) - inp.agePerson1 - 1), inp.endAge);
@@ -12942,14 +13024,34 @@ function recalcAll() {
 
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
-  // Part A/C (feature 019): totalFireNum = total assets needed at FIRE (401k + accessible).
-  // Replaces the old accessible-only metric so the FIRE NUMBER card and progress bar
-  // are chart-consistent and never contradict the lifecycle chart.
-  const totalFireNum = getTwoPhaseFireNum(inp, effectiveSpend, fireAge);
-  // Keep accessibleFireNum as an alias for callsites that only need the display value.
+  // Feature 023 follow-up — FIRE NUMBER displays the PROJECTED portfolio total
+  // AT the FIRE age (chart-consistent), not the minimum-feasibility threshold.
+  // Per user requirement: "I want the FIRE number to be the amount I need to
+  // have when I retire" → match the chart's value at FIRE age by construction.
+  let _projectedTotalAtFire = null;
+  try {
+    const _kpiChartStrategyId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId)
+      || null;
+    const _kpiChartOpts = Object.assign({},
+      (_kpiChartStrategyId && _kpiChartStrategyId !== 'bracket-fill-smoothed')
+        ? { strategyOverride: _kpiChartStrategyId } : null,
+      (typeof getActiveMortgageStrategyOptions === 'function') ? getActiveMortgageStrategyOptions() : {});
+    const _kpiLifecycle = projectFullLifecycle(inp, effectiveSpend, fireAge, true, _kpiChartOpts);
+    if (Array.isArray(_kpiLifecycle)) {
+      const _fireRow = _kpiLifecycle.find(r => r && r.age === fireAge);
+      if (_fireRow && Number.isFinite(_fireRow.total)) {
+        _projectedTotalAtFire = _fireRow.total;
+      }
+    }
+  } catch (_e) { /* defensive — fall through to legacy threshold */ }
+  const totalFireNum = Number.isFinite(_projectedTotalAtFire)
+    ? _projectedTotalAtFire
+    : getTwoPhaseFireNum(inp, effectiveSpend, fireAge);
   const accessibleFireNum = totalFireNum;
   const simpleNum = calcSimpleFIRENumber(mtgAdjDisplay.annualSpend, inp.swr);
-  // Part C: progress = current_total / totalFireNum.
+  // Progress = currentTotal / projected-at-fire. Reaches 100% when current
+  // assets equal what your projection says you'll have at retirement.
   const currentTotal = accessible + locked;
   const progress = (currentTotal / totalFireNum) * 100;
   const totalMonthlyExp = getTotalMonthlyExpenses();
@@ -13119,14 +13221,18 @@ function recalcAll() {
   renderKpiCards(_kpiCs ? _kpiCs.state : null);
 
   // Progress bar — based on total assets vs total needed (chart-consistent).
+  // Feature 023 follow-up — display in Book Value (real money) frame to match
+  // the FIRE NUMBER KPI card.
+  const _fireNumDisplayBV = (typeof _totalFireNumBookValue === 'number' && Number.isFinite(_totalFireNumBookValue))
+    ? _totalFireNumBookValue : totalFireNum;
   document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
-  document.getElementById('progressTarget').textContent = t('dyn.progressNeeded', Math.round(totalFireNum).toLocaleString());
+  document.getElementById('progressTarget').textContent = t('dyn.progressNeeded', Math.round(_fireNumDisplayBV).toLocaleString());
   document.getElementById('progressCurrent').textContent = t('dyn.progressCurrent', Math.round(currentTotal).toLocaleString());
   document.getElementById('progressPct').textContent = t('dyn.progressComplete', progress.toFixed(1));
   // Feature 006 fix — midpoint tick scales to target so the rail is honest at any scale.
   const midTickEl = document.getElementById('progressMidTick');
   if (midTickEl) {
-    const mid = totalFireNum / 2;
+    const mid = _fireNumDisplayBV / 2;
     midTickEl.textContent = (mid >= 1000000)
       ? '$' + (mid / 1000000).toFixed(mid >= 10000000 ? 0 : 1) + 'M'
       : '$' + Math.round(mid / 1000) + 'K';
@@ -13158,7 +13264,10 @@ function recalcAll() {
     if (_useMonthVerdict) {
       const _vYears = Math.max(0, _vFireRes.years - inp.agePerson1);
       const _vMonths = _vFireRes.months || 0;
-      statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, fireAge, progressPctRounded);
+      // Feature 023 follow-up — use resolver's integer-floor `_vFireRes.years`
+      // for the displayed age so it stays consistent with the displayed
+      // "N years M months" duration. See RR HTML for full context.
+      statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, _vFireRes.years, progressPctRounded);
     } else {
       statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
     }
@@ -13184,12 +13293,24 @@ function recalcAll() {
   document.getElementById('savingsBar').style.width = Math.min(savingsRate, 80) / 80 * 100 + '%';
 
   // Coast FIRE
+  // Feature 023 follow-up — Coast FIRE numbers projected at age 60; display
+  // in Book Value frame to match the rest of the dashboard.
   const coast = coastFIRECheck(inp);
+  const _coastConvertBV = (v) => {
+    if (typeof globalThis !== 'undefined' && globalThis.displayConverter && typeof inp.inflationRate === 'number') {
+      try {
+        return globalThis.displayConverter.toBookValue(v || 0, 60, inp.agePerson1, inp.inflationRate);
+      } catch (_e) {}
+    }
+    return v || 0;
+  };
+  const _coastFutureBV = _coastConvertBV(coast.futureValue);
+  const _coastTargetBV = _coastConvertBV(coast.target);
   if (coast.coastReady) {
-    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireReady', Math.round(coast.futureValue).toLocaleString(), scenario.flag, Math.round(coast.target).toLocaleString());
+    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireReady', Math.round(_coastFutureBV).toLocaleString(), scenario.flag, Math.round(_coastTargetBV).toLocaleString());
   } else {
-    const gap = coast.target - coast.futureValue;
-    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireGap', Math.round(coast.futureValue).toLocaleString(), Math.round(coast.target).toLocaleString(), Math.round(gap).toLocaleString());
+    const _coastGapBV = _coastTargetBV - _coastFutureBV;
+    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireGap', Math.round(_coastFutureBV).toLocaleString(), Math.round(_coastTargetBV).toLocaleString(), Math.round(_coastGapBV).toLocaleString());
   }
 
   // ===== Mortgage Impact Panel =====
@@ -15752,7 +15873,15 @@ function _cashflowUpdateWarning() {
       : (typeof yearsToFIRE === 'function' ? yearsToFIRE(inp, 0) : 10);
     const currentAge = (inp.agePerson1 != null) ? inp.agePerson1 : inp.ageRoger;
     const fireAge = currentAge + yrsToFire;
-    const result = accumulateToFire(inp, fireAge, {});
+    // Feature 023 (T030 / FR-007 caller #6) — was `accumulateToFire(inp, fireAge, {})`
+    // which bypassed resolveAccumulationOptions and produced a $0 spend
+    // residual that always cleared the negative-residual flag. Refactored
+    // to thread accumulationSpend (and other options) through the canonical
+    // helper so the warning pill reflects reality.
+    const _accumOpts = (typeof resolveAccumulationOptions === 'function')
+      ? resolveAccumulationOptions(inp, fireAge, 'invest-keep-paying')
+      : {};
+    const result = accumulateToFire(inp, fireAge, _accumOpts);
     const hasWarning = !!(result && result.perYearRows
       && result.perYearRows.some(r => r && r.cashFlowWarning === 'NEGATIVE_RESIDUAL'));
     wrap.hidden = !hasWarning;
@@ -15978,6 +16107,21 @@ function renderGrowthChart(inp) {
         ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth']);
     }
   } catch (_e) { /* defensive — render real-$ if helper unavailable */ }
+  // Feature 023 follow-up — FIRE NUMBER target line uses projected total at
+  // FIRE age (matches KPI card semantics, matches chart marker). Reads the
+  // lifecycle row at fireAge — totalBookValue companion is now populated by
+  // _extendRowsWithBookValues above. FRAME: nominal-$ (Book Value).
+  let _fireNumberThresholdBookValue = null;
+  try {
+    const _fireRow = lifecycle.find(r => r && r.age === fireAge);
+    if (_fireRow) {
+      if (Number.isFinite(_fireRow.totalBookValue)) {
+        _fireNumberThresholdBookValue = _fireRow.totalBookValue;
+      } else if (Number.isFinite(_fireRow.total)) {
+        _fireNumberThresholdBookValue = _fireRow.total; // fallback to real-$
+      }
+    }
+  } catch (_e) { /* defensive — threshold line is decorative */ }
   // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
   _lastLifecycleDataset = {
     lifecycle,
@@ -16106,6 +16250,23 @@ function renderGrowthChart(inp) {
       pointHoverRadius: 15,
     },
   ];
+  // Feature 023 (B-023-3) — FIRE NUMBER target as a horizontal threshold line.
+  // Renders ONLY when threshold computed successfully. Spans the full chart so
+  // users can see exactly where their portfolio trajectory crosses the target.
+  if (Number.isFinite(_fireNumberThresholdBookValue) && _fireNumberThresholdBookValue > 0) {
+    datasets.push({
+      label: t('chart.lifecycle.fireNumberTarget', Math.round(_fireNumberThresholdBookValue / 1000)),
+      data: lifecycle.map(() => Math.round(_fireNumberThresholdBookValue)),
+      borderColor: 'rgba(0, 230, 130, 0.85)',
+      borderDash: [12, 6],
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      fill: false,
+      tension: 0,
+      order: -1, // render behind other lines (Chart.js v4: lower order draws first)
+    });
+  }
   // Track where the FIRE marker landed in the dataset array so the drag
   // helpers can find it even as we add/remove other lines (replaces the old
   // hard-coded index 3). Stamped onto the chart instance after construction.
@@ -18245,17 +18406,21 @@ window._rebindStickyHeaderObserver();
     const wrap = _$id('audit-table-spending');
     if (!wrap) return;
     const sa = snapshot.spendingAdjustments || {};
-    const colleges = Array.isArray(sa.collegeYears) ? sa.collegeYears : [];
-    const collegeRows = colleges.map(function (c) {
-      return '<tr><td>' + _esc(c.kid || '') + '</td><td>' + _fmtNum(c.ageStart) + '–' + _fmtNum(c.ageEnd) + '</td><td>' + _fmtMoney(c.annualCost) + '</td></tr>';
+    // Feature 023 follow-up — convert to Book Value (real money / chart frame).
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const _curAge = inputs.ageRoger || inputs.agePerson1 || 42;
+    const collegeRows = (Array.isArray(sa.collegeYears) ? sa.collegeYears : []).map(function (c) {
+      const ageForBV = typeof c.ageStart === 'number' ? c.ageStart : _curAge;
+      return '<tr><td>' + _esc(c.kid || '') + '</td><td>' + _fmtNum(c.ageStart) + '–' + _fmtNum(c.ageEnd) + '</td><td>' + _fmtMoney(_bvConvert(c.annualCost, ageForBV, snapshot)) + '</td></tr>';
     }).join('');
     const home2 = sa.home2 || {};
+    const home2AgeForBV = typeof home2.buyAge === 'number' ? home2.buyAge : _curAge;
     const home2Row = (home2.buyAge || home2.annualCarry)
-      ? '<tr><td>Home 2 carry</td><td>buy ' + _fmtNum(home2.buyAge) + (home2.sellAge ? ', sell ' + _fmtNum(home2.sellAge) : '') + '</td><td>' + _fmtMoney(home2.annualCarry) + '/yr</td></tr>'
+      ? '<tr><td>Home 2 carry</td><td>buy ' + _fmtNum(home2.buyAge) + (home2.sellAge ? ', sell ' + _fmtNum(home2.sellAge) : '') + '</td><td>' + _fmtMoney(_bvConvert(home2.annualCarry, home2AgeForBV, snapshot)) + '/yr</td></tr>'
       : '';
     const summary =
-      '<tr><td>Raw annual spend</td><td>—</td><td>' + _fmtMoney(sa.rawAnnualSpend) + '</td></tr>' +
-      '<tr><td>Mortgage-adjusted</td><td>delta ' + _fmtMoney(sa.mortgageDelta) + '</td><td>' + _fmtMoney(sa.mortgageAdjustedAnnualSpend) + '</td></tr>';
+      '<tr><td>Raw annual spend</td><td>—</td><td>' + _fmtMoney(_bvConvert(sa.rawAnnualSpend, _curAge, snapshot)) + '</td></tr>' +
+      '<tr><td>Mortgage-adjusted</td><td>delta ' + _fmtMoney(_bvConvert(sa.mortgageDelta, _curAge, snapshot)) + '</td><td>' + _fmtMoney(_bvConvert(sa.mortgageAdjustedAnnualSpend, _curAge, snapshot)) + '</td></tr>';
     wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Item</th><th>Window</th><th>Amount</th></tr></thead><tbody>'
       + summary + home2Row + collegeRows + '</tbody></table>';
   }
@@ -18268,10 +18433,12 @@ window._rebindStickyHeaderObserver();
       wrap.innerHTML = '<p class="audit-empty">No floor violations.</p>';
       return;
     }
+    const _gateSnap = (typeof window !== 'undefined' && window._lastAuditSnapshot) || null;
     const rows = vs.map(function (v) {
-      return '<tr><td>' + _fmtNum(v.age) + '</td><td>' + _fmtMoney(v.total) + '</td><td>' + _fmtMoney(v.floor) + '</td></tr>';
+      return '<tr><td>' + _fmtNum(v.age) + '</td><td>' + _fmtMoney(_bvConvert(v.total, v.age, _gateSnap)) + '</td><td>' + _fmtMoney(_bvConvert(v.floor, v.age, _gateSnap)) + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Floor</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.total', 'Total') + _bvSuffix + '</th><th>Floor' + _bvSuffix + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function _renderFireAgeTable(snapshot) {
@@ -18283,11 +18450,14 @@ window._rebindStickyHeaderObserver();
       wrap.innerHTML = '<p class="audit-empty">FIRE age = ' + _fmtNum(fr.displayedFireAge) + ' (search method: ' + _esc(fr.searchMethod || '') + ')</p>';
       return;
     }
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const endAge = inputs.endAge || 100;
     const rows = cands.map(function (c) {
       const cls = (c.age === fr.displayedFireAge) ? ' class="audit-row--highlight"' : '';
-      return '<tr' + cls + '><td>' + _fmtNum(c.age) + '</td><td>' + _fmtMoney(c.signedEndBalance) + '</td><td>' + (c.feasibleUnderActiveMode ? '✓' : '✗') + '</td></tr>';
+      return '<tr' + cls + '><td>' + _fmtNum(c.age) + '</td><td>' + _fmtMoney(_bvConvert(c.signedEndBalance, endAge, snapshot)) + '</td><td>' + (c.feasibleUnderActiveMode ? '✓' : '✗') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance' + _bvSuffix + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   // Feature 015 US4 — Compute the active (Mode, Objective) sort-key chain
@@ -18343,14 +18513,32 @@ window._rebindStickyHeaderObserver();
       + '<div>' + _safeT('audit.strategyRanking.primarySortKey.label', 'Primary sort: {0}').replace('{0}', _esc(_safeT(sk.primary, ''))) + '</div>'
       + '<div>' + _safeT('audit.strategyRanking.tieBreakerChain.label', 'Tie-breakers: {0} → {1}').replace('{0}', _esc(_safeT(sk.tieA, ''))).replace('{1}', _esc(_safeT(sk.tieB, ''))) + '</div>'
       + '</div>';
+    // Feature 023 follow-up — Book Value at endAge for end-of-plan balance + lifetime tax sum.
+    const _stratInputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const _stratEndAge = _stratInputs.endAge || 100;
     const rows = rs.map(function (r) {
       const cls = r.isWinner ? ' class="audit-row--winner"' : '';
       const winnerBadge = r.isWinner ? ' <span class="audit-winner-badge">' + _esc(winnerLabel) + '</span>' : '';
-      return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(r.endBalance) + '</td><td>' + _fmtMoney(r.lifetimeFederalTax) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
+      return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(_bvConvert(r.endBalance, _stratEndAge, snapshot)) + '</td><td>' + _fmtMoney(_bvConvert(r.lifetimeFederalTax, _stratEndAge, snapshot)) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + _bvSuffix + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + _bvSuffix + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
+  // Feature 023 follow-up (B-023-8) — Book Value conversion helper. See RR HTML.
+  function _bvConvert(realValue, age, snapshot) {
+    if (!Number.isFinite(realValue)) return 0;
+    if (typeof globalThis === 'undefined' || !globalThis.displayConverter) return realValue;
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const currentAge = inputs.ageRoger || inputs.agePerson1;
+    const inflationRate = inputs.inflationRate;
+    if (typeof currentAge !== 'number' || typeof inflationRate !== 'number') return realValue;
+    try {
+      return globalThis.displayConverter.toBookValue(realValue, age, currentAge, inflationRate);
+    } catch (_e) {
+      return realValue;
+    }
+  }
   function _renderLifecycleTable(snapshot) {
     const wrap = _$id('audit-table-lifecycle');
     if (!wrap) return;
@@ -18371,9 +18559,87 @@ window._rebindStickyHeaderObserver();
       const shortfallTd = r.hasShortfall === true
         ? '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.true', 'Yes') + '</td>'
         : '<td>' + _safeT('audit.lifecycle.shortfallColumn.value.false', '—') + '</td>';
-      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(r.total) + '</td><td>' + _fmtMoney(r.withdrawals) + '</td><td>' + _fmtMoney(r.ssIncome) + '</td>' + shortfallTd + '</tr>';
+      // Feature 023 follow-up — convert to Book Value to match chart frame.
+      const totalBV = _bvConvert(r.total, r.age, snapshot);
+      const wdBV = _bvConvert(r.withdrawals, r.age, snapshot);
+      const ssBV = _bvConvert(r.ssIncome, r.age, snapshot);
+      return '<tr' + cls + '><td>' + _fmtNum(r.age) + '</td><td>' + _esc(r.phase || '') + '</td><td>' + _fmtMoney(totalBV) + '</td><td>' + _fmtMoney(wdBV) + '</td><td>' + _fmtMoney(ssBV) + '</td>' + shortfallTd + '</tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Withdrawals</th><th>SS</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.phase', 'Phase') + '</th><th>' + _safeT('audit.col.total', 'Total') + _bvSuffix + '</th><th>Withdrawals' + _bvSuffix + '</th><th>SS' + _bvSuffix + '</th><th>' + _safeT('audit.lifecycle.shortfallColumn.title', 'Shortfall') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  // Feature 023 follow-up — year-by-year cash flow. See RR HTML for context.
+  function _renderCashflowTable(snapshot) {
+    const wrap = _$id('audit-table-cashflow');
+    if (!wrap) return;
+    const lp = snapshot.lifecycleProjection || {};
+    const rs = Array.isArray(lp.rows) ? lp.rows : [];
+    if (rs.length === 0) {
+      wrap.innerHTML = '<p class="audit-empty">No rows.</p>';
+      return;
+    }
+    const fireIdx = (typeof lp.fireAgeRowIndex === 'number') ? lp.fireAgeRowIndex : -1;
+    const t0 = (key, fb) => _safeT(key, fb);
+    const fmtMoney = function (v) {
+      if (!Number.isFinite(v) || v === 0) return '—';
+      return _fmtMoney(v);
+    };
+    const phaseLabel = function (phase) {
+      if (phase === 'accumulation') return t0('audit.cashflow.phase.accum', 'Accumulating');
+      if (phase === 'phase1-taxable-only') return t0('audit.cashflow.phase.phase1', 'Retired (pre-401K)');
+      if (phase === 'phase2-401k-unlocked') return t0('audit.cashflow.phase.phase2', 'Retired (401K open)');
+      if (phase === 'phase3-with-ss') return t0('audit.cashflow.phase.phase3', 'Retired (with SS)');
+      return phase || '—';
+    };
+    const rows = rs.map(function (r, i) {
+      const isAccum = r.phase === 'accumulation';
+      const classes = [];
+      if (i === fireIdx) classes.push('audit-row--fireage');
+      if (r.hasShortfall === true) classes.push('has-shortfall');
+      const cls = classes.length > 0 ? ' class="' + classes.join(' ') + '"' : '';
+      const grossIncome = isAccum && Number.isFinite(r.grossIncome) ? r.grossIncome : 0;
+      const ssIncome = !isAccum && Number.isFinite(r.ssIncome) ? r.ssIncome : 0;
+      const withdraw = !isAccum && Number.isFinite(r.withdrawals) ? r.withdrawals : 0;
+      const tax = isAccum
+        ? ((Number.isFinite(r.federalTax) ? r.federalTax : 0) + (Number.isFinite(r.ficaTax) ? r.ficaTax : 0))
+        : 0;
+      const saved = isAccum
+        ? ((Number.isFinite(r.pretax401kEmployee) ? r.pretax401kEmployee : 0)
+           + (Number.isFinite(r.empMatchToTrad) ? r.empMatchToTrad : 0)
+           + (Number.isFinite(r.stockContribution) ? r.stockContribution : 0))
+        : 0;
+      const spent = Number.isFinite(r.annualSpending) ? r.annualSpending : 0;
+      const cashDelta = isAccum
+        ? (Number.isFinite(r.cashFlowToCash) ? r.cashFlowToCash : 0)
+        : ((ssIncome + withdraw) - spent);
+      const warnTd = (r.cashFlowWarning === 'NEGATIVE_RESIDUAL')
+        ? ' ⚠️'
+        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️' : '';
+      return '<tr' + cls + '>'
+        + '<td>' + _fmtNum(r.age) + '</td>'
+        + '<td>' + _esc(phaseLabel(r.phase)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(grossIncome, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(ssIncome, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(withdraw, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(tax, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(saved, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(spent, r.age, snapshot)) + '</td>'
+        + '<td>' + fmtMoney(_bvConvert(cashDelta, r.age, snapshot)) + warnTd + '</td>'
+        + '</tr>';
+    }).join('');
+    const headerRow = '<thead><tr>'
+      + '<th>' + t0('audit.col.age', 'Age') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.phase', 'Phase') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.income', 'Income') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.ss', 'SS') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.withdraw', 'Withdraw') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.tax', 'Tax') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.saved', 'Saved') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.spent', 'Spent') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.cashDelta', 'Cash Δ') + '</th>'
+      + '</tr></thead>';
+    wrap.innerHTML = '<table class="audit-table audit-lifecycle-table">' + headerRow + '<tbody>' + rows + '</tbody></table>';
   }
 
   function _renderCrossValRows(snapshot) {
@@ -18404,6 +18670,7 @@ window._rebindStickyHeaderObserver();
     _renderFireAgeTable(snapshot);
     _renderStrategyTable(snapshot);
     _renderLifecycleTable(snapshot);
+    _renderCashflowTable(snapshot);
     _renderCrossValRows(snapshot);
   }
 
@@ -19554,6 +19821,15 @@ function copyDebugInfo() {
       } catch (_e) {}
       return null;
     })();
+    // Feature 023 (T034 / FR-009 / US3) — expose accumulationSpend at the top
+    // level so audit consumers can verify which spending baseline drove the
+    // accumulation phase. Distinct from `annualSpend` (country-tier post-FIRE).
+    const _accumulationSpend = (typeof getAccumulationSpend === 'function')
+      ? (function() { try { return getAccumulationSpend(ds && ds.inp || {}); } catch (_e) { return null; } })()
+      : null;
+    const _accumulationSpend_source = (typeof getAccumulationSpend === 'function')
+      ? 'getAccumulationSpend(inp)'
+      : 'fallback';
     const debugObj = {
       _generatedAt: new Date().toISOString(),
       _file: location.pathname.split('/').pop(),
@@ -19562,6 +19838,9 @@ function copyDebugInfo() {
       currentAge: ds.currentAge,
       ssClaimAge: ds.ssClaimAge,
       annualSpend: spend,
+      // Feature 023 — accumulation-phase spending (real-$, today's-$).
+      accumulationSpend: _accumulationSpend,
+      accumulationSpend_source: _accumulationSpend_source,
       bufferUnlock_yrs: bufUnlock,
       bufferSS_yrs: bufSS,
       summary,

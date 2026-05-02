@@ -446,8 +446,16 @@ function _buildStrategyRanking(lastStrategyResults) {
   const rows = lastStrategyResults.rows.map((r) => ({
     strategyId: r.strategyId,
     chosenTheta: typeof r.chosenTheta !== 'undefined' ? r.chosenTheta : null,
-    endBalance: _round(r.endBalance),
-    lifetimeFederalTax: _round(r.lifetimeFederalTax),
+    // Feature 023 follow-up (B-023-7 investigation) — strategy simulator emits
+    // suffix-Real field names (endOfPlanNetWorthReal, lifetimeFederalTaxReal,
+    // cumulativeFederalTaxReal); audit was reading the unsuffixed names which
+    // are undefined → _round(undefined) = 0 → ALL strategies showed $0
+    // endBalance + $0 lifetime tax in the audit, hiding the per-strategy
+    // differentiation. Fix: read with fallback chain.
+    endBalance: _round(typeof r.endOfPlanNetWorthReal === 'number' ? r.endOfPlanNetWorthReal : r.endBalance),
+    lifetimeFederalTax: _round(typeof r.cumulativeFederalTaxReal === 'number' ? r.cumulativeFederalTaxReal
+                              : (typeof r.lifetimeFederalTaxReal === 'number' ? r.lifetimeFederalTaxReal
+                              : r.lifetimeFederalTax)),
     violations: typeof r.violations === 'number' ? r.violations : 0,
     firstViolationAge: typeof r.firstViolationAge === 'number' ? r.firstViolationAge : null,
     shortfallYears: typeof r.shortfallYears === 'number' ? r.shortfallYears : 0,
@@ -495,6 +503,20 @@ function _buildLifecycleProjection(chart, fireAge) {
     // Feature 015 US1 (FR-004) — per-row shortfall flag. Defensive fallback to
     // false so legacy snapshots that pre-date the field still serialize cleanly.
     hasShortfall: r.hasShortfall === true,
+    // Feature 023 follow-up — preserve accumulation cash-flow accounting fields
+    // (v3 from feature 021) so the Audit-tab "Year-by-Year Cash Flow" section
+    // can render income/tax/savings/spending breakdowns. Fields are present
+    // on accumulation-phase rows only; absent (undefined) on retirement rows
+    // which the audit-table renderer falls back accordingly.
+    grossIncome: Number.isFinite(r.grossIncome) ? _round(r.grossIncome) : undefined,
+    federalTax: Number.isFinite(r.federalTax) ? _round(r.federalTax) : undefined,
+    ficaTax: Number.isFinite(r.ficaTax) ? _round(r.ficaTax) : undefined,
+    annualSpending: Number.isFinite(r.annualSpending) ? _round(r.annualSpending) : undefined,
+    pretax401kEmployee: Number.isFinite(r.pretax401kEmployee) ? _round(r.pretax401kEmployee) : undefined,
+    empMatchToTrad: Number.isFinite(r.empMatchToTrad) ? _round(r.empMatchToTrad) : undefined,
+    stockContribution: Number.isFinite(r.stockContribution) ? _round(r.stockContribution) : undefined,
+    cashFlowToCash: Number.isFinite(r.cashFlowToCash) ? _round(r.cashFlowToCash) : undefined,
+    cashFlowWarning: r.cashFlowWarning || undefined,
   }));
   const thumbnailSeries = rows.map((r) => ({ x: r.age, y: r.total }));
   const fireAgeRowIndex = rows.findIndex((r) => r.age === fireAge);
