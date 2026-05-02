@@ -12,11 +12,23 @@
  *   searchMethod} so the dashboard header can render "X Years Y Months"
  *   instead of just "X yrs".
  *
- * Edge Case 4 mitigation (per contract): default to UI-display refinement
- * (option c — feasibility check stays at year level; month-precision is a
- * UI-display refinement using the existing simulator without modification).
- * The simulator is called with non-integer fireAge values and we accept
- * whatever integer-rounded behavior it produces.
+ * Edge Case 4 mitigation (per contract): TRUE FRACTIONAL-YEAR FEASIBILITY
+ * (option b — promoted from option (c) by feature 022 US6 / FR-022).
+ * The simulator (`simulateRetirementOnlySigned` in both HTMLs) now pro-rates
+ * its FIRE-year row by `(1 − mFraction)` using the LINEAR convention
+ * `1 + r × (1 − m/12)` (spec hook 1; see audit-report Phase 9 §Suggested
+ * feature 022 spec hooks #1). The resolver passes fractional `fireAge =
+ * (Y - 1) + m/12` values into the simulator across `m = 0..11`; each probe
+ * receives a genuinely partial-year cash-flow simulation. The monotonic-flip
+ * fallback (option c) is preserved as a safety net when simulator output
+ * fails the F* T* monotonicity assumption.
+ *
+ * Spec hook 6 (audit-report.md Phase 9 §Suggested feature 022 spec hooks #6):
+ * the contract reference at `specs/020-validation-audit/contracts/
+ * month-precision-resolver.contract.md` §Edge case 4 SHOULD be updated to
+ * read "default option (b), with option (c) preserved as a fallback when
+ * monotonic-flip stability fails." Per contract co-evolution rules this
+ * resolver header doc is the authoritative source until that update lands.
  *
  * Inputs:
  *   inp     — canonical input record (same fields consumed by isFireAgeFeasible
@@ -62,6 +74,11 @@
  *   II  — pure module, contract-documented.
  *   V   — UMD-classic-script (CommonJS + globalThis assign).
  *   VI  — Consumers list above is canonical.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (operates on age scalars + integer year/month
+ *     counters; no $-valued state lives in this module).
+ *   Frame-conversion sites: NONE.
  * =============================================================================
  */
 

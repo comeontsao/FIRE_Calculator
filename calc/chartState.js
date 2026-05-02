@@ -50,6 +50,11 @@
  *     mutate it to corrupt internal state.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (only stores integer ages + boolean feasible
+ *     flags; no $-valued state lives in this module).
+ *   Frame-conversion sites: NONE.
  */
 
 /**

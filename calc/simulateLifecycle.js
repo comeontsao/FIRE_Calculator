@@ -28,6 +28,13 @@
  *   tracked as follow-up work in tasks.md (T082-T089).
  * - The `noiseModel` reservation IS shipped now so future Monte Carlo work
  *   can drop in without re-touching this signature.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (delegating wrapper — produces SimulateLifecycleOutput
+ *     with the same real-$ frame as the legacy simulators).
+ *   Frame-conversion sites: NONE inside this module. The injected
+ *     `_legacySimulators` (signedLifecycleEndBalance, projectFullLifecycle,
+ *     _simulateStrategyLifetime) carry their own FRAME annotations in the HTMLs.
  */
 
 'use strict';

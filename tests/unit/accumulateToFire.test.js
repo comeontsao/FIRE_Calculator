@@ -1684,3 +1684,353 @@ test('v3-TX-12: conservation invariant — Σ(gross) − Σ(fed) − Σ(fica) �
     `cashFlow=${sumCashFlow.toFixed(2)}, tol=${tolerance}`
   );
 });
+
+// ===========================================================================
+// FEATURE 022 — v4 FRAME-fix tests (T026–T033, US3)
+// Spec: specs/022-nominal-dollar-display/spec.md FR-012..FR-016
+// Contract: specs/022-nominal-dollar-display/contracts/accumulateToFire-v3-frame-fix.contract.md
+// Research: specs/022-nominal-dollar-display/research.md § R4
+//
+// Post-fix invariants (single-frame real-$ residual):
+//   grossIncomeReal  = annualIncomeBase × (1 + raiseRate − inflationRate)^t
+//   annualSpendingReal = baseAnnualSpend (constant in today's $)
+//   federalTax / ficaTax computed on grossIncomeReal (brackets treated as today's $)
+//   residual = grossIncomeReal − federalTax − ficaTax − pretax401k − annualSpendingReal − stockContribution
+// ===========================================================================
+
+/**
+ * Helper for v4-FRAME tests. Builds a clean accumulation persona with no growth
+ * by default — caller supplies real-frame parameters via overrides.
+ */
+function v4FrameBaseInp(overrides) {
+  return Object.assign({
+    ageRoger: 42,
+    roger401kTrad: 0,
+    roger401kRoth: 0,
+    rogerStocks: 0,
+    rebeccaStocks: 0,
+    cashSavings: 0,
+    otherAssets: 0,
+    returnRate: 0.0,
+    return401k: 0.0,
+    inflationRate: 0.0,
+    monthlySavings: 0,
+    contrib401kTrad: 0,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    endAge: 95,
+    raiseRate: 0.0,
+    annualIncome: 0,
+    taxRate: 0,
+    annualSpend: 0,
+    monthlySpend: 0,
+    ssClaimAge: 67,
+  }, overrides || {});
+}
+
+// T026: v4-FRAME-01 — RR-baseline 11-year conservation
+test('v4-FRAME-01: real-frame residual conservation — RR-baseline 11-yr horizon', () => {
+  // RR-baseline-ish persona per research R4 example.
+  const inp = v4FrameBaseInp({
+    ageRoger: 42,
+    annualIncome: 150000,
+    raiseRate: 0.03,
+    inflationRate: 0.03,
+    returnRate: 0.07,
+    return401k: 0.07,
+    contrib401kTrad: 20000,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    monthlySavings: 1000,             // $12k/yr stock contribution (real)
+    annualSpend: 80000,
+    monthlySpend: 80000 / 12,
+    rogerStocks: 100000,
+    rebeccaStocks: 50000,
+    cashSavings: 20000,
+  });
+  const fireAge = 53;  // 11-year horizon
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  assert.strictEqual(result.perYearRows.length, 11, 'should have 11 rows');
+
+  let sumGross = 0, sumFed = 0, sumFica = 0, sumSpend = 0, sumPretax = 0, sumStock = 0, sumCashFlow = 0;
+  let nonClampedCount = 0;
+  for (const row of result.perYearRows) {
+    if (row.cashFlowWarning) continue;
+    sumGross += row.grossIncome;
+    sumFed += row.federalTax;
+    sumFica += row.ficaTax;
+    sumSpend += row.annualSpending;
+    sumPretax += row.pretax401kEmployee;
+    sumStock += row.stockContribution;
+    sumCashFlow += row.cashFlowToCash;
+    nonClampedCount++;
+
+    // Per-row conservation (single-frame).
+    const conserved = row.grossIncome - row.federalTax - row.ficaTax
+      - row.pretax401kEmployee - row.annualSpending - row.stockContribution;
+    assert.ok(
+      Math.abs(conserved - row.cashFlowToCash) < 1,
+      `v4-FRAME-01: per-row conservation violated at age ${row.age}: ` +
+      `computed=${conserved.toFixed(2)}, cashFlowToCash=${row.cashFlowToCash.toFixed(2)}`
+    );
+  }
+  const globalConserved = sumGross - sumFed - sumFica - sumPretax - sumSpend - sumStock;
+  assert.ok(
+    Math.abs(globalConserved - sumCashFlow) < nonClampedCount * 1,
+    `v4-FRAME-01: global conservation violated: ` +
+    `Σ(gross-fed-fica-401k-spend-stock)=${globalConserved.toFixed(2)}, ` +
+    `Σ(cashFlow)=${sumCashFlow.toFixed(2)}`
+  );
+});
+
+// T027: v4-FRAME-02 — raiseRate === inflationRate → real income constant
+test('v4-FRAME-02: raiseRate === inflationRate → grossIncomeReal stays constant', () => {
+  const inp = v4FrameBaseInp({
+    annualIncome: 150000,
+    raiseRate: 0.03,
+    inflationRate: 0.03,
+    contrib401kTrad: 20000,
+    annualSpend: 80000,
+    monthlySpend: 80000 / 12,
+  });
+  const fireAge = 53;  // 11 years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  // Real wage growth = raiseRate − inflationRate = 0; grossIncome stays at $150k every year.
+  for (const row of result.perYearRows) {
+    assert.ok(
+      Math.abs(row.grossIncome - 150000) < 1,
+      `v4-FRAME-02: grossIncome at age ${row.age} expected $150,000 (real), got $${row.grossIncome.toFixed(2)}`
+    );
+    // annualSpending also stays constant in real-$.
+    assert.ok(
+      Math.abs(row.annualSpending - 80000) < 1,
+      `v4-FRAME-02: annualSpending at age ${row.age} expected $80,000 (real), got $${row.annualSpending.toFixed(2)}`
+    );
+  }
+});
+
+// T028: v4-FRAME-03 — raiseRate > inflationRate → real income grows
+test('v4-FRAME-03: raiseRate > inflationRate → grossIncomeReal grows at delta', () => {
+  const inp = v4FrameBaseInp({
+    annualIncome: 100000,
+    raiseRate: 0.05,
+    inflationRate: 0.03,
+    contrib401kTrad: 0,
+    annualSpend: 0,
+    monthlySpend: 0,
+  });
+  const fireAge = 47;  // 5 years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  // Real wage growth = 0.05 − 0.03 = 0.02 (2%/yr).
+  // Year t real income = $100,000 × 1.02^t.
+  for (let t = 0; t < result.perYearRows.length; t++) {
+    const expected = 100000 * Math.pow(1.02, t);
+    const actual = result.perYearRows[t].grossIncome;
+    assert.ok(
+      Math.abs(actual - expected) < 1,
+      `v4-FRAME-03: year ${t} grossIncomeReal expected ${expected.toFixed(2)}, got ${actual.toFixed(2)}`
+    );
+  }
+});
+
+// T029: v4-FRAME-04 — raiseRate < inflationRate (real wage cut)
+test('v4-FRAME-04: raiseRate < inflationRate (real wage cut) → grossIncomeReal shrinks', () => {
+  const inp = v4FrameBaseInp({
+    annualIncome: 100000,
+    raiseRate: 0.02,
+    inflationRate: 0.03,
+    contrib401kTrad: 0,
+    annualSpend: 0,
+    monthlySpend: 0,
+  });
+  const fireAge = 47;  // 5 years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  // Real wage growth = 0.02 − 0.03 = −0.01 (1%/yr decline).
+  // Year t real income = $100,000 × 0.99^t.
+  for (let t = 0; t < result.perYearRows.length; t++) {
+    const expected = 100000 * Math.pow(0.99, t);
+    const actual = result.perYearRows[t].grossIncome;
+    assert.ok(
+      Math.abs(actual - expected) < 1,
+      `v4-FRAME-04: year ${t} grossIncomeReal expected ${expected.toFixed(2)}, got ${actual.toFixed(2)} (real wage cut)`
+    );
+  }
+});
+
+// T030: v4-FRAME-05 — backwards-compat flat-rate override path
+//
+// 022: This DIFFERS from feature 021 v3 behavior. In v3 the flat-rate path
+// applied taxRate to the NOMINAL income (grossIncome × (1+raiseRate)^t).
+// In v4 the flat-rate path applies taxRate to the REAL income
+// ((1 + raiseRate − inflationRate)^t). With raiseRate=0.03 and
+// inflationRate=0.03 the delta is 0 and v3 ↔ v4 produce the same number;
+// with non-trivial raiseRate ≠ inflationRate, the flat-rate federalTax also
+// shifts to the real frame.
+test('v4-FRAME-05: backwards-compat with flat-rate override (taxRate > 0)', () => {
+  const inp = v4FrameBaseInp({
+    annualIncome: 150000,
+    raiseRate: 0.05,
+    inflationRate: 0.03,
+    taxRate: 0.22,         // flat-rate override active
+    contrib401kTrad: 20000,
+    annualSpend: 0,
+    monthlySpend: 0,
+  });
+  const fireAge = 47;  // 5 years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  // Per-year: federalTax = (grossIncomeReal − pretax401k) × 0.22.
+  // grossIncomeReal = $150,000 × (1 + 0.05 − 0.03)^t = $150,000 × 1.02^t.
+  for (let t = 0; t < result.perYearRows.length; t++) {
+    const realGross = 150000 * Math.pow(1.02, t);
+    const expectedFedTax = (realGross - 20000) * 0.22;
+    const actual = result.perYearRows[t].federalTax;
+    assert.ok(
+      Math.abs(actual - expectedFedTax) < 1,
+      `v4-FRAME-05: year ${t} flat-rate federalTax expected ${expectedFedTax.toFixed(2)}, got ${actual.toFixed(2)}`
+    );
+    // FICA stays 0 in flat-rate mode.
+    assert.strictEqual(result.perYearRows[t].ficaTax, 0,
+      `v4-FRAME-05: ficaTax must be 0 in flat-rate mode at year ${t}`);
+  }
+});
+
+// T031: v4-FRAME-06 — feature 020 cashFlowConservation invariant
+test('v4-FRAME-06: feature 020 cashFlowConservation invariant green post-fix', () => {
+  const inp = v4FrameBaseInp({
+    ageRoger: 30,
+    annualIncome: 200000,
+    raiseRate: 0.04,
+    inflationRate: 0.03,
+    returnRate: 0.07,
+    return401k: 0.07,
+    contrib401kTrad: 20000,
+    contrib401kRoth: 5000,
+    empMatch: 8000,
+    monthlySavings: 2000,
+    annualSpend: 80000,
+    monthlySpend: 80000 / 12,
+  });
+  const fireAge = 80;  // 50 accumulation years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  // Per-row + global conservation in single (real-$) frame, ±$1 per row.
+  let nonClampedCount = 0;
+  let sumLhs = 0, sumCashFlow = 0;
+  for (const row of result.perYearRows) {
+    if (row.cashFlowWarning) continue;
+    nonClampedCount++;
+    const lhs = row.grossIncome - row.federalTax - row.ficaTax
+      - row.pretax401kEmployee - row.annualSpending - row.stockContribution;
+    assert.ok(
+      Math.abs(lhs - row.cashFlowToCash) < 1,
+      `v4-FRAME-06: per-row conservation violated at age ${row.age}: lhs=${lhs.toFixed(2)}, cashFlow=${row.cashFlowToCash.toFixed(2)}`
+    );
+    sumLhs += lhs;
+    sumCashFlow += row.cashFlowToCash;
+  }
+  assert.ok(
+    Math.abs(sumLhs - sumCashFlow) < nonClampedCount * 1,
+    `v4-FRAME-06: global conservation violated: lhs=${sumLhs.toFixed(2)}, cashFlow=${sumCashFlow.toFixed(2)}`
+  );
+});
+
+// T032: v4-FRAME-07 — feature 021 TBC-1..5 invariants stay green
+//
+// Locally re-applies the 5 tax-bracket-conservation invariants defined in
+// tests/unit/validation-audit/tax-bracket-conservation.test.js. All breakdown
+// math is independent of frame (it's just bracket arithmetic on the input
+// passed to _computeYearTax) so US3's frame fix should not perturb these.
+test('v4-FRAME-07: feature 021 TBC-1..5 invariants green post-fix', () => {
+  const inp = v4FrameBaseInp({
+    annualIncome: 200000,
+    raiseRate: 0.04,
+    inflationRate: 0.03,
+    contrib401kTrad: 20000,
+    annualSpend: 0,
+    monthlySpend: 0,
+  });
+  const fireAge = 53;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  for (const row of result.perYearRows) {
+    // TBC-1 — federalTaxBreakdown bracket sum equals federalTax.
+    const bd = row.federalTaxBreakdown || {};
+    const bracketSum = (bd.bracket10 || 0) + (bd.bracket12 || 0) + (bd.bracket22 || 0)
+      + (bd.bracket24 || 0) + (bd.bracket32 || 0) + (bd.bracket35 || 0) + (bd.bracket37 || 0);
+    assert.ok(Math.abs(bracketSum - row.federalTax) <= 5,
+      `v4-FRAME-07/TBC-1: bracket sum ${bracketSum} vs federalTax ${row.federalTax} at age ${row.age}`);
+
+    // TBC-2 — ficaBreakdown component sum equals ficaTax.
+    const fb = row.ficaBreakdown || {};
+    const ficaSum = (fb.socialSecurity || 0) + (fb.medicare || 0) + (fb.additionalMedicare || 0);
+    assert.ok(Math.abs(ficaSum - row.ficaTax) <= 1,
+      `v4-FRAME-07/TBC-2: FICA sum ${ficaSum} vs ficaTax ${row.ficaTax} at age ${row.age}`);
+
+    // TBC-3 — taxableIncome = max(0, gross - pretax401k - stdDed).
+    // gross input to _computeYearTax is grossIncomeReal === row.grossIncome post-fix.
+    const expectedTaxable = Math.max(0, row.grossIncome - row.pretax401kEmployee - bd.standardDeduction);
+    assert.ok(Math.abs(bd.taxableIncome - expectedTaxable) < 1,
+      `v4-FRAME-07/TBC-3: taxableIncome ${bd.taxableIncome} vs expected ${expectedTaxable} at age ${row.age}`);
+
+    // TBC-4 — filing-status correctness (MFJ default since adultCount unset).
+    assert.strictEqual(bd.standardDeduction, 29200,
+      `v4-FRAME-07/TBC-4: MFJ stdDed must be 29200 when adultCount unset`);
+  }
+
+  // TBC-5 — backwards-compat: flat-rate override produces empty breakdowns + ficaTax=0.
+  const flatInp = v4FrameBaseInp({
+    annualIncome: 150000,
+    raiseRate: 0.04,
+    inflationRate: 0.03,
+    taxRate: 0.22,
+    contrib401kTrad: 20000,
+  });
+  const flatResult = accumulateToFire(flatInp, 47, baseOptions());
+  for (const row of flatResult.perYearRows) {
+    assert.deepStrictEqual(row.federalTaxBreakdown, {},
+      'v4-FRAME-07/TBC-5: flat-rate federalTaxBreakdown must be empty');
+    assert.deepStrictEqual(row.ficaBreakdown, {},
+      'v4-FRAME-07/TBC-5: flat-rate ficaBreakdown must be empty');
+    assert.strictEqual(row.ficaTax, 0,
+      'v4-FRAME-07/TBC-5: flat-rate ficaTax must be 0');
+  }
+});
+
+// T033: v4-FRAME-08 — ssWageBaseHit triggers correctly with real income.
+test('v4-FRAME-08: ficaBreakdown.ssWageBaseHit triggers correctly with real income', () => {
+  // Single high earner above SS wage base ($168,600 in 2024 USD).
+  // raiseRate === inflationRate so real income stays constant — every year above the cap.
+  const inp = v4FrameBaseInp({
+    annualIncome: 200000,
+    adultCount: 1,
+    raiseRate: 0.03,
+    inflationRate: 0.03,
+  });
+  const fireAge = 47;  // 5 years
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.ficaBreakdown.ssWageBaseHit, true,
+      `v4-FRAME-08: ssWageBaseHit must be true at age ${row.age} with $200k single real income`);
+    // Capped SS tax = $168,600 × 6.2% = $10,453.
+    assert.ok(Math.abs(row.ficaBreakdown.socialSecurity - 10453) <= 1,
+      `v4-FRAME-08: capped SS tax expected ~$10,453 at age ${row.age}, got $${row.ficaBreakdown.socialSecurity}`);
+  }
+
+  // Sub-cap persona: real income $100k single → never hits cap.
+  const subCapInp = v4FrameBaseInp({
+    annualIncome: 100000,
+    adultCount: 1,
+    raiseRate: 0.03,
+    inflationRate: 0.03,
+  });
+  const subCapResult = accumulateToFire(subCapInp, 47, baseOptions());
+  for (const row of subCapResult.perYearRows) {
+    assert.strictEqual(row.ficaBreakdown.ssWageBaseHit, false,
+      `v4-FRAME-08: ssWageBaseHit must be false at age ${row.age} with $100k single real income`);
+  }
+});

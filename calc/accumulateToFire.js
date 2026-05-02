@@ -76,25 +76,56 @@
  *   V   — CommonJS (UMD-style globalThis assign for browser compat).
  *   VI  — Consumers list above is canonical.
  *   VIII — Spending Funded First is a RETIREMENT-phase contract; not modified here.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (POST-US3 / Wave 3 fix — single-frame residual).
+ *   All accumulation arithmetic — pool growth, contributions, income, spending,
+ *   tax, and cash-flow residual — is performed in today's-$ frame. Display-time
+ *   conversion to nominal/Book Value happens centrally in recalcAll() via
+ *   calc/displayConverter.js (feature 022 US1).
+ *   Frame-conversion sites:
+ *     - Line ~301 (PvI passthrough): inflation rate forwarded to payoffVsInvest;
+ *       not a $-conversion site itself.
+ *     - Lines ~351–355: inflationRate / realReturnStocks / realReturn401k —
+ *       real-return constants in real-$ frame.
+ *     - Line ~370: raiseRate read — used at the income-real conversion site below.
+ *     - Income (real-$ at conversion site below): grossIncomeReal computed via
+ *       (1 + raiseRate − inflationRate)^t — real wage growth.
+ *     - Spending (real-$): annualSpendingReal === baseAnnualSpend (constant in today's $).
+ *     - Tax (real-$): _computeYearTax invoked with grossIncomeReal; 2024 brackets
+ *       and SSA wage base treated as today's-$ values per FR-015.
+ *     - Cash-flow residual (real-$, single-frame): residual = grossIncomeReal
+ *       − federalTax − ficaTax − pretax401kEmployee − annualSpendingReal − stockContribution.
+ *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at 0.5%/yr.
  * =============================================================================
  */
 
 // ---------------------------------------------------------------------------
 // Tax brackets + FICA constants — imported from calc/taxBrackets.js (feature 021).
 // Pattern: Node require() in tests, globalThis.taxBrackets in browser via UMD wrapper.
+//
+// HOTFIX (feature 022 post-021): Browser classic-script load shares a SINGLE
+// global script scope across all <script src=> tags. calc/taxBrackets.js
+// declares its constants as top-level `const BRACKETS_MFJ_2024 = ...` etc.
+// If we ALSO declare top-level `const BRACKETS_MFJ_2024 = _taxBrackets.X`
+// here, the browser throws SyntaxError "Identifier already declared" before
+// any function runs — which cascades into "[_simulateStrategyLifetime]
+// accumulateToFire is required" because this module never loads. Underscored
+// local names sidestep the collision; behavior unchanged in Node tests
+// (each module gets its own scope).
 // ---------------------------------------------------------------------------
 const _taxBrackets = (typeof require !== 'undefined')
   ? require('./taxBrackets.js')
   : (typeof globalThis !== 'undefined' ? globalThis.taxBrackets : null);
-const BRACKETS_MFJ_2024 = _taxBrackets && _taxBrackets.BRACKETS_MFJ_2024;
-const BRACKETS_SINGLE_2024 = _taxBrackets && _taxBrackets.BRACKETS_SINGLE_2024;
-const FICA_SS_RATE = _taxBrackets ? _taxBrackets.FICA_SS_RATE : 0.062;
-const FICA_SS_WAGE_BASE_2024 = _taxBrackets ? _taxBrackets.FICA_SS_WAGE_BASE_2024 : 168600;
-const FICA_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_MEDICARE_RATE : 0.0145;
-const FICA_ADDITIONAL_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_RATE : 0.009;
-const FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
+const _BRACKETS_MFJ_2024 = _taxBrackets && _taxBrackets.BRACKETS_MFJ_2024;
+const _BRACKETS_SINGLE_2024 = _taxBrackets && _taxBrackets.BRACKETS_SINGLE_2024;
+const _FICA_SS_RATE = _taxBrackets ? _taxBrackets.FICA_SS_RATE : 0.062;
+const _FICA_SS_WAGE_BASE_2024 = _taxBrackets ? _taxBrackets.FICA_SS_WAGE_BASE_2024 : 168600;
+const _FICA_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_MEDICARE_RATE : 0.0145;
+const _FICA_ADDITIONAL_MEDICARE_RATE = _taxBrackets ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_RATE : 0.009;
+const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE : 200000;
-const FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
+const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
 
 /**
@@ -137,7 +168,7 @@ function _computeYearTax(grossIncome, pretax401kEmployee, inp) {
 
   // Auto path — progressive brackets + FICA.
   const filingStatus = (inp.adultCount === 1) ? 'single' : 'mfj';
-  const brackets = (filingStatus === 'mfj') ? BRACKETS_MFJ_2024 : BRACKETS_SINGLE_2024;
+  const brackets = (filingStatus === 'mfj') ? _BRACKETS_MFJ_2024 : _BRACKETS_SINGLE_2024;
   const stdDed = brackets.standardDeduction;
   const taxableIncome = Math.max(0, grossIncome - pretax401kEmployee - stdDed);
 
@@ -165,17 +196,17 @@ function _computeYearTax(grossIncome, pretax401kEmployee, inp) {
   // FICA: split income equally between earners for MFJ; SS cap applies per individual.
   const earnerCount = (filingStatus === 'mfj') ? 2 : 1;
   const incomePerEarner = grossIncome / earnerCount;
-  const ssTaxablePerEarner = Math.min(incomePerEarner, FICA_SS_WAGE_BASE_2024);
-  const ssTax = ssTaxablePerEarner * FICA_SS_RATE * earnerCount;
-  const ssWageBaseHit = (incomePerEarner > FICA_SS_WAGE_BASE_2024);
+  const ssTaxablePerEarner = Math.min(incomePerEarner, _FICA_SS_WAGE_BASE_2024);
+  const ssTax = ssTaxablePerEarner * _FICA_SS_RATE * earnerCount;
+  const ssWageBaseHit = (incomePerEarner > _FICA_SS_WAGE_BASE_2024);
 
-  const medicareTax = grossIncome * FICA_MEDICARE_RATE;
+  const medicareTax = grossIncome * _FICA_MEDICARE_RATE;
 
   const additionalMedicareThreshold = (filingStatus === 'mfj')
-    ? FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ
-    : FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE;
+    ? _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ
+    : _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE;
   const additionalMedicare = Math.max(0, grossIncome - additionalMedicareThreshold)
-                             * FICA_ADDITIONAL_MEDICARE_RATE;
+                             * _FICA_ADDITIONAL_MEDICARE_RATE;
 
   const ficaTax = ssTax + medicareTax + additionalMedicare;
   const ficaBreakdown = {
@@ -282,6 +313,7 @@ function _fetchPviData(inp, currentAge, fireAge, mtg, mortgageStrategy, sellAtFi
       sellAtFire,
       mfjStatus,
       stocksReturn: inp.returnRate,
+      // FRAME: pure-data — inflationRate forwarded to payoffVsInvest config
       inflation: inp.inflationRate,
       ltcgRate,
       stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
@@ -330,8 +362,12 @@ function accumulateToFire(inp, fireAge, options) {
   const currentAge = inp.agePerson1 != null ? inp.agePerson1 : inp.ageRoger;
 
   // --- Real returns (line 9318–9319 in HTML) ---
+  // FRAME: real-$ — real-frame return constants; pool growth at these
+  //        rates keeps balances in today's purchasing power.
   const inflationRate = inp.inflationRate || 0;
+  // FRAME: real-$ — stocks real return (nominal − inflation)
   const realReturnStocks = inp.returnRate - inflationRate;
+  // FRAME: real-$ — 401k real return (nominal − inflation)
   const realReturn401k = inp.return401k - inflationRate;
 
   // --- Contribution constants (line 9320–9322) ---
@@ -345,6 +381,9 @@ function accumulateToFire(inp, fireAge, options) {
   // --- v2 Cash-flow inputs ---
   const annualIncomeBase = inp.annualIncome || 0;   // gross annual income at currentAge
   const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
+  // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); combined
+  //        with inflationRate at the income conversion site below to compute
+  //        real wage growth = (1 + raiseRate − inflationRate)^t.
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
   // Base annual spend: prefer inp.annualSpend (explicit), fall back to monthlySpend*12,
   // then fall back to 0 (backwards-compatible — v1 callers may not supply these fields).
@@ -525,28 +564,41 @@ function accumulateToFire(inp, fireAge, options) {
     // Keep v1 alias for backwards-compatible row field.
     const effectiveAnnualSavings = stockContribution;
 
-    // --- v2 Cash-flow accounting (FR-015 steps 1–7) ---
-    // Step 1: Gross income (real-terms, raised by raiseRate each year).
-    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate, yearsFromNow);
+    // --- v4 Cash-flow accounting (feature 022 US3 — single-frame real-$) ---
+    // Step 1: Gross income in real-$ frame. (1 + raiseRate − inflationRate)^t
+    //        is the real wage growth multiplier. raiseRate == inflationRate →
+    //        constant; > → real growth; < → real wage cut. Per FR-012 / FR-013.
+    // FRAME: real-$ — income converted from nominal to real before residual.
+    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate - inflationRate, yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
+    // FRAME: real-$ — 401k contribution caps are constant in today's $ (the
+    //        slider sets contribution amount in today's purchasing power).
     const pretax401kEmployee = emp401kTrad + emp401kRoth;
 
-    // Step 3: Tax computation (v3 — feature 021).
-    // Flat-rate path (taxRate > 0) is byte-identical to v2.
-    // Auto path (taxRate = 0 / blank) computes progressive brackets + FICA.
+    // Step 3: Tax computation in real-$ frame.
+    // FRAME: real-$ — _computeYearTax invoked with REAL income. 2024 IRS brackets
+    //        and SSA wage base ($168,600) treated as today's-$ values per
+    //        FR-015. Mirrors real-world bracket inflation indexing, which
+    //        roughly tracks wage inflation. ficaTax = 0 in flat-rate mode.
     const taxResult = _computeYearTax(grossIncome, pretax401kEmployee, inp);
     const federalTax = taxResult.federalTax;
     const ficaTax = taxResult.ficaTax;
     const federalTaxBreakdown = taxResult.federalTaxBreakdown;
     const ficaBreakdown = taxResult.ficaBreakdown;
 
-    // Step 4: Annual spending (inflation-adjusted).
-    const annualSpending = baseAnnualSpend * Math.pow(1 + inflationRate, yearsFromNow);
+    // Step 4: Annual spending in real-$ frame.
+    // FRAME: real-$ — spend stays constant in today's-$ (slider input is in
+    //        today's purchasing power). Per-spec FR-014.
+    const annualSpending = baseAnnualSpend;
 
     // Step 5: Stock contribution (already computed above as effectiveAnnualSavings).
+    // FRAME: real-$ — savings amount is constant in today's $.
 
-    // Step 6: Cash flow residual (signed).
+    // Step 6: Cash flow residual — single-frame (real-$).
+    // FRAME: real-$ — every term on the RHS is in today's-$; residual feeds
+    //        pCash which already grows at real-return frame. No cross-frame
+    //        contamination. Per-spec FR-016 + research R4.
     let cashFlowToCash;
     let cashFlowWarning;
 
@@ -554,8 +606,8 @@ function accumulateToFire(inp, fireAge, options) {
       // Override active: bypass computed residual.
       cashFlowToCash = cashflowOverrideValue;
     } else if (annualIncomeBase > 0 || taxRate > 0) {
-      // v3 cash-flow model: residual = gross - federalTax - ficaTax - 401k - spend - stock.
-      // ficaTax = 0 in flat-rate mode → reduces to v2 formula automatically.
+      // v4 single-frame residual: gross - federalTax - ficaTax - 401k - spend - stock.
+      // ficaTax = 0 in flat-rate mode → reduces to flat-rate formula automatically.
       const residual = grossIncome - federalTax - ficaTax - pretax401kEmployee
                        - annualSpending - stockContribution;
       if (residual < 0) {
@@ -602,8 +654,11 @@ function accumulateToFire(inp, fireAge, options) {
 
     // --- Accumulation arithmetic (steps 8–9 per v2 contract) ---
     // Step 8: Pool updates (order: pTrad/pRoth/pStocks absorb contributions, pCash absorbs cashFlow).
+    // FRAME: real-$ — pTrad grows at realReturn401k; contributions in real-$
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
+    // FRAME: real-$ — pRoth grows at realReturn401k; contributions in real-$
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
+    // FRAME: real-$ — pStocks grows at realReturnStocks; contributions in real-$
     pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
     pCash = pCash + cashFlowToCash;
 

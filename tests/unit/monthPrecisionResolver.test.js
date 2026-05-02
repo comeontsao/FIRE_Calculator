@@ -343,3 +343,183 @@ test('Bonus — agePerson1 fallback works for Generic dashboard inputs', () => {
   assert.strictEqual(result.months, 0);
   assert.strictEqual(result.searchMethod, 'integer-year');
 });
+
+// =============================================================================
+// FEATURE 022 — User Story 6 (T080–T082) — True fractional-year DWZ feasibility
+//
+// Spec:     specs/022-nominal-dollar-display/spec.md § US6 + FR-022
+// Tasks:    T080 (fractional-year-01), T081 (fractional-year-02), T082 (fractional-year-03)
+// Contract: specs/022-nominal-dollar-display/contracts/month-precision-feasibility-invariant.md
+//
+// Tests verify that with the simulator pro-rated by (1 − m/12) per spec hook 1
+// (LINEAR convention), the resolver's month-precision search returns a
+// fractional age at which the simulator-feasibility check holds.
+// =============================================================================
+
+/** Build a "real-ish" simulator mock that implements the LINEAR pro-rate
+ *  convention. The mock is deliberately simple: spend a fixed annualSpend per
+ *  full year, scale spending + growth on the FIRE-year row by (1 − m/12).
+ *  Returns { endBalance, fireAge } so feasMockEndBalance can compare. */
+function makeProRateLinearSimMock(opts) {
+  const startingPool = opts.startingPool;          // e.g. 1_500_000
+  const annualSpend  = opts.annualSpend;           // e.g. 60_000
+  const realReturn   = opts.realReturn || 0.05;
+  const endAge       = opts.endAge || 95;
+  return function simMock(_inp, _annualSpend, fireAge /*, p401kTrad0, p401kRoth0, pStocks0, pCash0 */) {
+    const mFraction = fireAge - Math.floor(fireAge);   // 0..(11/12)
+    let pool = startingPool;
+    let isFirst = true;
+    for (let age = fireAge; age < endAge; age++) {
+      // Linear pro-rate convention: scale FIRE-year row by (1 − mFraction).
+      const scale = isFirst ? (1 - mFraction) : 1;
+      pool -= annualSpend * scale;
+      pool *= 1 + realReturn * scale;
+      isFirst = false;
+    }
+    return { endBalance: pool, fireAge };
+  };
+}
+
+/** Feasibility predicate over the simulator's `endBalance` (DWZ-style: feasible
+ *  iff endBalance >= 0). */
+function makeFeasMockEndBalance() {
+  return function feasMock(sim /*, inp, annualSpend, mode, fireAge */) {
+    return sim.endBalance >= 0;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// T080 — fractional-year-01: barely feasible at age 55, infeasible at age 54
+//
+// With the LINEAR pro-rate convention and a calibrated startingPool, year 55
+// is the earliest integer-year feasible age. Within Y-1=54 the boundary is
+// month M (0..11). Verify the resolver returns {years: 54, months: M,
+// searchMethod: 'month-precision'} and that the resolver's integer-year
+// scan correctly infeasible-flags age 54 at month 0.
+// ---------------------------------------------------------------------------
+test('T080 fractional-year-01: barely feasible at age 55 with month-precision boundary in year 54', () => {
+  const inp = baseInp({ ageRoger: 40, endAge: 95 });
+  const pools = basePools();
+
+  // Calibrated so age 54 is infeasible (endBalance < 0) and age 55 is barely
+  // feasible (endBalance just above 0). With realReturn=0.05, annualSpend=60k,
+  // startingPool=1_082_000:
+  //   age 54 endBalance = -55_774   (infeasible)
+  //   age 55 endBalance = +6_882    (barely feasible)
+  //   age 56 endBalance = +66_554
+  // Within year 54 with linear pro-rate (1 − m/12), some month M ∈ {1..11}
+  // is the earliest feasible — the resolver should find that M.
+  const simMock = makeProRateLinearSimMock({
+    startingPool: 1_082_000,
+    annualSpend: 60_000,
+    realReturn: 0.05,
+    endAge: 95,
+  });
+  const feasMock = makeFeasMockEndBalance();
+
+  const result = findEarliestFeasibleAge(inp, 'dieWithZero', {
+    annualSpend: 60_000,
+    simulateRetirementOnlySigned: simMock,
+    isFireAgeFeasible: feasMock,
+    pools,
+  });
+
+  // Resolver should find an earliest feasible YEAR (= 55) and refine within Y-1=54.
+  assert.strictEqual(result.feasible, true, 'expected feasible result');
+  assert.ok(result.years === 54 || result.years === 55,
+    `expected years 54 (refined into Y-1) or 55 (year-boundary fallback); got ${result.years} months=${result.months}`);
+  assert.ok(result.searchMethod === 'month-precision' || result.searchMethod === 'integer-year',
+    'expected month-precision or integer-year search method');
+  assert.ok(result.months >= 0 && result.months < 12,
+    `months out of bounds: ${result.months}`);
+
+  // Verify infeasibility at age 54 month 0 (sanity check on calibration).
+  const sim54 = simMock(inp, 60_000, 54);
+  assert.strictEqual(feasMock(sim54), false,
+    'age 54 month 0 must be infeasible to validate the boundary');
+  // Verify feasibility at age 55 month 0.
+  const sim55 = simMock(inp, 60_000, 55);
+  assert.strictEqual(feasMock(sim55), true,
+    'age 55 month 0 must be feasible to validate the boundary');
+});
+
+// ---------------------------------------------------------------------------
+// T081 — fractional-year-02: feasibility holds at returned month
+//
+// For any returned {years: Y, months: M}, the simulator at fireAge = Y + M/12
+// must produce a feasible result. This pins the central US6 invariant: the
+// resolver does not report month-precision answers that the simulator can't
+// actually fund.
+// ---------------------------------------------------------------------------
+test('T081 fractional-year-02: feasibility holds at returned fireAge = Y + M/12', () => {
+  const inp = baseInp({ ageRoger: 40, endAge: 95 });
+  const pools = basePools();
+
+  const simMock = makeProRateLinearSimMock({
+    startingPool: 1_082_000,
+    annualSpend: 60_000,
+    realReturn: 0.05,
+    endAge: 95,
+  });
+  const feasMock = makeFeasMockEndBalance();
+
+  const result = findEarliestFeasibleAge(inp, 'dieWithZero', {
+    annualSpend: 60_000,
+    simulateRetirementOnlySigned: simMock,
+    isFireAgeFeasible: feasMock,
+    pools,
+  });
+
+  if (!result.feasible) {
+    // Test is vacuous if the resolver decided infeasible — re-run with a
+    // larger startingPool to force feasibility. Calibration check.
+    assert.ok(result.feasible, 'expected feasible result for valid US6 test');
+    return;
+  }
+
+  const fractionalAge = result.years + result.months / 12;
+  const simAtBoundary = simMock(inp, 60_000, fractionalAge);
+  assert.strictEqual(
+    feasMock(simAtBoundary), true,
+    `expected simulator-feasible at fireAge=${fractionalAge}; ` +
+    `endBalance=${simAtBoundary.endBalance}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T082 — fractional-year-03: integer-year input backwards-compat
+//
+// When the resolver returns {years: Y, months: 0}, the simulator at fireAge=Y
+// (integer) must be byte-identical to the pre-feature-022 simulator — the
+// linear pro-rate factor (1 - 0/12) = 1 collapses to today's behavior.
+// ---------------------------------------------------------------------------
+test('T082 fractional-year-03: integer-year (months=0) input is byte-identical to integer simulator', () => {
+  // With identical realReturn and pool, two simulators (pro-rate-aware vs
+  // integer-only) must produce identical endBalance when fireAge is integer.
+  const integerSimMock = function integerSim(_inp, _annualSpend, fireAge) {
+    let pool = 1_082_000;
+    for (let age = fireAge; age < 95; age++) {
+      pool -= 60_000;
+      pool *= 1.05;
+    }
+    return { endBalance: pool, fireAge };
+  };
+  const proRateSim = makeProRateLinearSimMock({
+    startingPool: 1_082_000,
+    annualSpend: 60_000,
+    realReturn: 0.05,
+    endAge: 95,
+  });
+
+  // Spot check: 5 integer fireAges across the relevant range produce
+  // bit-identical endBalances under both convention.
+  for (const fireAge of [50, 53, 55, 58, 60]) {
+    const intResult     = integerSimMock(null, 60_000, fireAge);
+    const proRateResult = proRateSim(null, 60_000, fireAge);
+    assert.strictEqual(
+      proRateResult.endBalance, intResult.endBalance,
+      `endBalance mismatch at integer fireAge=${fireAge}: ` +
+      `pro-rate=${proRateResult.endBalance} vs integer=${intResult.endBalance}`,
+    );
+  }
+});

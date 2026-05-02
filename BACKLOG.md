@@ -419,6 +419,36 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 ---
 
+## Done in feature 022 — Nominal-Dollar Display + Frame-Clarifying Comments + B-021 Carry-Forward (2026-05-01)
+
+- **US1 (P1 / MVP) — Nominal-$ Book Value display across all 14 in-scope charts**: Switched the dashboard's display layer from real-$ (today's purchasing power) to nominal-$ (Book Value — what brokerage statements literally show on a future date). 14 in-scope charts/displays converted: Lifecycle, Withdrawal Strategy, Drawdown, Roth Ladder, Country comparison + deep-dive, Mortgage payoff, PvI brokerage trajectory + amortization split + verdict banner, Strategy ranker bar, Plan-tab Expenses pill (Income tax sub-row), KPI cards (FIRE NUMBER + Total at FIRE; Current Net Worth unchanged at year-0), verdict pill + verdict banner, drag-preview overlay, Audit-tab tables (per-column frame labels). Snapshots history chart deliberately untouched (already nominal historical balances). Tooltip companion line on every chart: "$X Book Value · ≈ $Y purchasing power". Caption per chart: "Book Value at {inflationRate}% assumed annual inflation". 6 new EN + zh-TW translation keys.
+- **US2 (P1) — Frame-clarifying `// FRAME:` comments**: Every `calc/*.js` module + every inline simulator in both HTMLs annotated with the 4-category taxonomy (`real-$`, `nominal-$`, `conversion`, `pure-data`). Module-level `FRAME (feature 022 / FR-009)` headers document dominant frame + conversion sites. New meta-test `tests/meta/frame-coverage.test.js` enforces ≥95% qualifying-line annotation coverage on every commit. User's stated complexity hedge: future calc changes can't silently re-introduce a frame mismatch.
+- **US3 (P1) — Hybrid-frame bug fix in `accumulateToFire.js` cash-flow residual**: Pre-fix residual mixed nominal income/spending with real-$ contributions, producing ~$8-15k pCash distortion over 11+ year horizons on RR-baseline. Post-fix: single-frame real-$ residual with `grossIncomeReal = annualIncomeBase × (1 + raiseRate − inflationRate)^t` and constant-real spending. Conservation invariant becomes well-defined. 8 new v4-FRAME unit tests; 0 fixture annotations needed thanks to defensive test design from features 020/021.
+- **US4 (P2) — Country budget tier frame disambiguation**: Tooltip on country-budget tier display clarifies "Cost in today's $; the dashboard inflates this to your retirement year for projections". Taiwan `taxNote` string updated to mark "$33K AMT exemption" as today's $. No tier number changes.
+- **US5 (P3) — Strategy ranker simulator-discreteness fix (B-021-1 RESOLVED)**: Quantize ranker age input to monthly precision in `_simulateStrategyLifetime` before iteration. E3 LOW finding count drops 17 → 1 (94% reduction). Single residual finding (`RR-pessimistic-frugal`) traces to `_chartFeasibility` discreteness, not the simulator — out of US5 strict scope. Tracked as B-022-1.
+- **US6 (P3) — True fractional-year DWZ feasibility (B-021-2 / B-020-5 RESOLVED)**: Extended `simulateRetirementOnlySigned` to pro-rate the FIRE-year row by `(1 − m/12)` using linear convention `1 + r × (1 − m/12)`. `calc/fireAgeResolver.js` Edge Case 4 doc flipped from option (c) "UI display refinement" to option (b) "true fractional-year feasibility". New audit invariant family `month-precision-feasibility` (3 invariants × 92 personas × 3 modes = 276 cells; 0 findings on first run).
+- **Central `recalcAll()` snapshot transformation**: Per Q5 clarification (Option B for robustness), the `bookValue` companion fields are populated centrally in `recalcAll()` via `_extendSnapshotWithBookValues`. Render functions consume `*BookValue` directly. New meta-test `tests/meta/snapshot-frame-coverage.test.js` enforces structural coverage — forgetting to read `*BookValue` becomes a visible bug, not a silent frame mismatch.
+- **New module `calc/displayConverter.js`**: Pure UMD-classic-script helper exposing `toBookValue` / `toBookValueAtYearsFromNow` / `invertToReal`. 8 unit tests against IRS-style inflation tables.
+- **Lockstep delivery**: both HTMLs shipped together. Test count: 449 → 478 (+29 net new tests, 1 intentional skip). Constitution VIII gate green throughout all 9 implementation phases.
+- **US7 (P3 OPTIONAL) — Display toggle**: NOT implemented. Spec marked OPTIONAL with feedback-driven trigger; only ship if always-Book-Value display causes UX confusion in user feedback.
+- Spec / Plan / Tasks / audit-report / CLOSEOUT: see [`specs/022-nominal-dollar-display/`](./specs/022-nominal-dollar-display/) — awaiting user browser-smoke (T099) before merge to `main`.
+
+## New backlog items from feature 022 audit
+
+### B-022-1. `_chartFeasibility` simulator-discreteness fix
+
+**1 LOW finding (E3 — `RR-pessimistic-frugal`)**. US5 quantized `_simulateStrategyLifetime` but didn't extend the same monthly-precision quantization to `_chartFeasibility` (which calls `projectFullLifecycle(inp, ...)` with raw inputs). Fix: apply `Math.floor(age * 12) / 12` quantization to `_chartFeasibility`'s inputs before invoking `projectFullLifecycle`. Trivial fix (~30 min); deferred only because it's outside US5's strict scope.
+
+### B-022-2. Pre-existing `scenario.tax.china` duplicate-key cleanup
+
+`scenario.tax.china` is defined twice in the EN block of `FIRE-Dashboard.html` (line 5940 has zh string; line 5941 has EN string). Pre-existing bug, not introduced by feature 022. Fix: deduplicate the key. ~5 min.
+
+### B-022-3. Healthcare delta chart frame review
+
+`renderHealthcareCard` outputs HTML cards (not Chart.js) showing today's-$ healthcare costs as a user reference. Currently displays real-$. Decide whether to add a frame note tooltip (US4-style), convert to Book Value display per FR-001(e), or leave as today's-$ user-reference display. User-decision needed; defer to feature 023 spec discussion.
+
+---
+
 ## Done in feature 021 — Tax Expense Category + Audit-Harness Carry-Forward (2026-05-01)
 
 - **US3 (P1 / MVP-prerequisite) — Progressive bracket calc refactor**: `calc/accumulateToFire.js` v2 → v3. New `_computeYearTax` helper computes federal tax via IRS 2024 progressive brackets (10/12/22/24/32/35/37%) and FICA via SSA 2024 constants (SS 6.2% to wage base $168,600, Medicare 1.45%, additional Medicare 0.9% over $200k single / $250k MFJ). New per-row outputs: `ficaTax`, `federalTaxBreakdown`, `ficaBreakdown`. Flat-rate `taxRate` override path preserved for backwards-compat. New pure-data module `calc/taxBrackets.js` ships the 2024 bracket constants.
@@ -435,13 +465,13 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 ## New backlog items from feature 021 audit
 
-### B-021-1. Strategy ranker simulator-discreteness fix (carries 17 E3 LOW)
+### ~~B-021-1. Strategy ranker simulator-discreteness fix~~ — RESOLVED in feature 022 (2026-05-01)
 
-US4 hysteresis shipped per FR-018, but E3 LOW count remained 17. Root cause: `_simulateStrategyLifetime`'s accumulation loop iterates integer years; `yrsToFire = fireAge − inp.agePerson1` truncates to integer; a 0.01yr perturbation shifts `yrsToFire` by a full year, producing score deltas of 0.08–11.44 years (above the 0.05yr hysteresis threshold). Fix: extend `_simulateStrategyLifetime` to accept fractional accumulation horizons OR quantize ranker age input to monthly precision before simulator iteration. Bundle with B-021-2 in feature 022 since both touch simulator integer-year handling.
+Quantize-to-monthly-precision fix shipped in `_simulateStrategyLifetime` at commit `395f8e2` (and `71b3c25` for HTML changes). E3 LOW finding count dropped 17 → 1 (94% reduction). Single residual finding (`RR-pessimistic-frugal`) traces to `_chartFeasibility` discreteness, not the simulator — out of US5 strict scope. Carried forward to B-022-1 as a trivial follow-up fix.
 
-### B-021-2. US7 fractional-year DWZ feasibility (carries B-020-5)
+### ~~B-021-2. US7 fractional-year DWZ feasibility (carries B-020-5)~~ — RESOLVED in feature 022 (2026-05-01)
 
-Investigated in feature 021 US7; deferred to feature 022 with 6 spec hooks: pick growth-multiplier convention (linear vs exponential), sub-iteration split at age 59.5 / `ssClaimAge` thresholds, tighten / replace monotonic-flip tolerance, add real-persona fractional-year tests, add `month-precision-feasibility` audit invariant, flip `month-precision-resolver.contract.md` Edge Case 4 default from (c) to (b). See `specs/021-tax-category-and-audit-cleanup/audit-report.md` Phase 9 deferral section for full rationale.
+Shipped in feature 022 US6 at commit `71b3c25`. `simulateRetirementOnlySigned` extended to pro-rate FIRE-year row by `(1 − m/12)` using linear convention. `calc/fireAgeResolver.js` Edge Case 4 doc flipped from option (c) to option (b). New audit invariant family `month-precision-feasibility` (3 invariants × 92 personas × 3 modes = 276 cells; 0 findings on first run). All 6 spec hooks resolved.
 
 ---
 

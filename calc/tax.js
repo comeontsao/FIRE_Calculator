@@ -42,6 +42,11 @@
  *     simplification taxes LTCG by its own schedule on its own dollars.
  *     Accurate enough for FIRE projections; documented here so the audit trail
  *     is clear when a future feature tightens this.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (income, brackets, owed amounts — all in today's $
+ *     per existing invariant; FR-017 boundary is upstream in calc/inflation.js).
+ *   Frame-conversion sites: NONE.
  */
 
 /**

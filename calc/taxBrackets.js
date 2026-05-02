@@ -16,6 +16,12 @@
  * Policy: NO logic; just frozen constants. Constitution Principle II (pure data).
  *         When 2025+ brackets need to ship, create taxBrackets.js with versioned
  *         exports (e.g., BRACKETS_MFJ_2025) and update consumers.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: pure-data (frozen 2024 IRS bracket tables; treated as
+ *     today's $ per feature 021 spec § A6 — no per-year inflation indexing
+ *     applied here; bracket-fill smoothing happens in accumulateToFire.js).
+ *   Frame-conversion sites: NONE.
  */
 
 const BRACKETS_MFJ_2024 = Object.freeze({

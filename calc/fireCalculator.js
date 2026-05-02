@@ -61,6 +61,11 @@
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O. Lifecycle is invoked
  * purely; every solver call recomputes.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (endBalanceReal, balanceAtUnlockReal, etc. — all
+ *     read from runLifecycle's real-$ records).
+ *   Frame-conversion sites: NONE — module operates entirely in real-$.
  */
 
 import { runLifecycle } from './lifecycle.js';

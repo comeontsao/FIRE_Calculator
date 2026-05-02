@@ -84,6 +84,15 @@
  *     income per current IRS upper bound.
  *   - Claim age is assumed integer. Month-level claim granularity (e.g.,
  *     FRA + 3 months) is not supported.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ output (annualBenefitReal in today's purchasing power).
+ *   Frame-conversion sites:
+ *     - Lines 166–177 (indexEarnings): nominal annual earnings × (1+inflationRate)^N
+ *       converts each year's nominal-$ earnings to real-$ at latestEarningsYear
+ *       (i.e., lifts old nominal $ to today's $ frame, NOT compounding forward).
+ *       FR-017-clean: this is THE only nominal→real conversion in the SS module.
+ *     - Line 210, 242: inflationRate is forwarded as wage-index proxy (pure-data).
  */
 
 /** SSA claiming-age adjustment factors (FRA = 67). */
@@ -163,6 +172,8 @@ function piaFromAime(aimeMonthly) {
  * @param {number} inflationRate
  * @returns {number[]}  indexed earnings in real (latestEarningsYear) dollars
  */
+// FRAME: conversion (signature site — body lifts nominal-$ earnings → real-$
+//        at latestEarningsYear via wage-index proxy = inflationRate).
 function indexEarnings(annualEarningsNominal, latestEarningsYear, inflationRate) {
   const n = annualEarningsNominal.length;
   if (n === 0) return [];
@@ -171,6 +182,7 @@ function indexEarnings(annualEarningsNominal, latestEarningsYear, inflationRate)
   const indexed = new Array(n);
   for (let i = 0; i < n; i += 1) {
     const ageYearsBack = (n - 1) - i;
+    // FRAME: conversion (nominal → real at latestEarningsYear) — wage indexation
     const factor = Math.pow(1 + inflationRate, ageYearsBack);
     indexed[i] = annualEarningsNominal[i] * factor;
   }
@@ -207,6 +219,7 @@ function computeAime(indexedAnnualEarnings) {
  * @returns {{ssAgeStart: number, annualBenefitReal: number, indexedEarnings?: number}}
  */
 export function projectSS(params) {
+  // FRAME: pure-data — inflationRate destructured as wage-index proxy
   const { ssStartAge, earnings, inflationRate } = params;
 
   if (!Number.isFinite(ssStartAge)) {
@@ -236,6 +249,7 @@ export function projectSS(params) {
     );
   }
 
+  // FRAME: conversion (boundary call — nominal-$ earnings → real-$ via indexEarnings)
   const indexed = indexEarnings(
     earnings.annualEarningsNominal,
     earnings.latestEarningsYear,

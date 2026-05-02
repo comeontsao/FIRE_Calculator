@@ -49,6 +49,11 @@
  *   - All values real dollars — inflation happens only via calc/inflation.js.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O, no module-scope mutation.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (carryReal, oneTimeOutflowReal, saleProceedsReal,
+ *     legacyValueAtEndReal — all real dollars per existing invariant).
+ *   Frame-conversion sites: NONE — caller pre-converts via calc/inflation.js.
  */
 
 const MONTHS_PER_YEAR = 12;

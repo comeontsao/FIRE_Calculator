@@ -52,6 +52,43 @@ test('ui-TX-02: Income tax row handles flat-rate override path (FICA = 0)', () =
   assert.strictEqual(row.isLocked, true);
 });
 
+// 022: Wave 4 T053 — companion-field read tests. Post-Wave-4, the formatter
+// prefers `*BookValue` (nominal-$) companions over the real-$ fields per
+// FR-001(j). The two tests above (ui-TX-01, ui-TX-02) still pass via the
+// real-$ fallback path; these new tests cover the Book Value preference.
+
+// 022: When BOTH real-$ and Book Value companions are present, formatter MUST
+// prefer the Book Value companions (since recalcAll's _extendSnapshotWithBookValues
+// is the single source of truth for displayed values).
+test('ui-TX-04 (022): formatter prefers Book Value companion over real-$', () => {
+  // Real-$ values: federalTax=12000, ficaTax=11475, grossIncome=150000  (real-$, today's $)
+  // Book Value values (year 0, age=currentAge → identical to real-$ here):
+  //   normally companions = real × (1 + i)^yfn; if yfn=0, companions == real-$.
+  //   But to verify formatter actually READS companions (not real-$), we pin
+  //   companions to a different value than real-$ and check the output.
+  const snap = {
+    federalTax: 9999, ficaTax: 9999, grossIncome: 99999,                  // real-$ (should be ignored)
+    federalTaxBookValue: 12000, ficaTaxBookValue: 11475, grossIncomeBookValue: 150000, // nominal-$
+  };
+  const row = formatTaxIncomeRow(snap);
+  assert.strictEqual(row.type, 'income');
+  assert.strictEqual(row.monthlyAmount, 1956); // (12000+11475)/12 ≈ 1956.25 → 1956
+  assert.strictEqual(row.effectiveRate, 15.7); // (23475/150000)×100 = 15.65% → 15.7
+});
+
+// 022: When ONLY companions are present (post-Wave-4 typical case),
+// formatter reads them transparently.
+test('ui-TX-05 (022): formatter reads companion-only snapshot', () => {
+  const snap = {
+    federalTaxBookValue: 12000,
+    ficaTaxBookValue: 11475,
+    grossIncomeBookValue: 150000,
+  };
+  const row = formatTaxIncomeRow(snap);
+  assert.strictEqual(row.monthlyAmount, 1956);
+  assert.strictEqual(row.effectiveRate, 15.7);
+});
+
 test('ui-TX-03: Income tax row gracefully degrades when snapshot missing', () => {
   // Per Edge Cases ("Renderer crash if calc returns unexpected shape"):
   // missing snapshot → {monthlyAmount: 0, effectiveRate: 0, isLocked: true}, no NaN cascade.

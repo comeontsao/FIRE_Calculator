@@ -26,6 +26,16 @@
  *   - Behavior is well-defined for negative inflationRate (deflation).
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: conversion (real ↔ nominal $ helper module).
+ *   Frame-conversion sites: every helper here IS a conversion.
+ *     - Line 46: factor(year) = (1 + inflationRate)^(year − baseYear).
+ *     - toReal:    nominal-$ at year → real-$ in baseYear (divide by factor).
+ *     - toNominal: real-$ in baseYear → nominal-$ at year (multiply by factor).
+ *   Note: predates feature 022's calc/displayConverter.js; this module is
+ *   used by lifecycle.js for nominal→real boundary conversion (FR-017).
+ *   displayConverter.js handles the real→nominal display path.
  */
 
 /**
@@ -42,7 +52,9 @@
  *   toNominal: (amountReal: number, year: number) => number
  * }}
  */
+// FRAME: conversion (signature site — body bridges real-$ ↔ nominal-$)
 function makeInflation(inflationRate, baseYear) {
+  // FRAME: conversion (real → nominal at year N) — factor scales between frames
   const factor = (year) => Math.pow(1 + inflationRate, year - baseYear);
   return Object.freeze({
     toReal: (amountNominal, year) => amountNominal / factor(year),

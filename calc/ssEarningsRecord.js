@@ -30,6 +30,13 @@
  *
  * Contract reference:
  *   specs/012-ssa-earnings-pre-2020/contracts/ss-earnings-record.contract.md
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: nominal-$ (annualEarningsNominal stored as historical
+ *     reported wages — year-of-occurrence dollars, NOT today's $).
+ *     Indexed→real conversion happens later in calc/socialSecurity.js.
+ *   Frame-conversion sites: NONE — this module only validates / mutates the
+ *     SSEarningsHistory schema; no $ math is performed.
  */
 
 /** Soft UI floor for the earliest allowed earnings year. */

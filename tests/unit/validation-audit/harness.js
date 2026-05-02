@@ -209,6 +209,12 @@ function _getSandboxFactory(dashboard) {
     // Signed sim (depends on getMortgageInputs stub, getSSAnnual, etc.)
     'signedLifecycleEndBalance',
 
+    // Retirement-only signed sim (used by feature 022 month-precision-feasibility
+    // audit invariant; pro-rates first iteration by (1 - mFraction) for fractional
+    // fireAge). Returns { endBalance, balanceAtUnlock, balanceAtSS, balanceAtFire,
+    // minBalancePhase1..3, rows[] }.
+    'simulateRetirementOnlySigned',
+
     // Full lifecycle (depends on resolveAccumulationOptions stub, accumulateToFire)
     'projectFullLifecycle',
   ];
@@ -473,11 +479,12 @@ function getFullEarningsHistory(fireAge) {
     OVERRIDES,
     // Return the harness API
     'return {',
-    '  signedLifecycleEndBalance: (typeof signedLifecycleEndBalance !== "undefined") ? signedLifecycleEndBalance : null,',
-    '  isFireAgeFeasible:         (typeof isFireAgeFeasible !== "undefined")         ? isFireAgeFeasible         : null,',
-    '  findFireAgeNumerical:      (typeof findFireAgeNumerical !== "undefined")      ? findFireAgeNumerical      : null,',
-    '  projectFullLifecycle:      (typeof projectFullLifecycle !== "undefined")      ? projectFullLifecycle      : null,',
-    '  scoreAndRank:              (typeof scoreAndRank !== "undefined")              ? scoreAndRank              : null,',
+    '  signedLifecycleEndBalance:    (typeof signedLifecycleEndBalance !== "undefined")    ? signedLifecycleEndBalance    : null,',
+    '  simulateRetirementOnlySigned: (typeof simulateRetirementOnlySigned !== "undefined") ? simulateRetirementOnlySigned : null,',
+    '  isFireAgeFeasible:            (typeof isFireAgeFeasible !== "undefined")            ? isFireAgeFeasible            : null,',
+    '  findFireAgeNumerical:         (typeof findFireAgeNumerical !== "undefined")         ? findFireAgeNumerical         : null,',
+    '  projectFullLifecycle:         (typeof projectFullLifecycle !== "undefined")         ? projectFullLifecycle         : null,',
+    '  scoreAndRank:                 (typeof scoreAndRank !== "undefined")                 ? scoreAndRank                 : null,',
     '};',
   ].join('\n');
 

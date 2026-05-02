@@ -62,6 +62,15 @@
  *     'assembler-degraded' CrossValidationWarning.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O, no module-scope mutation.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (every numeric figure in the audit snapshot mirrors
+ *     real-$ values from the lifecycle simulator + accumulateToFire — same
+ *     frame as the chart). Wave 4 (US1) will add an `*BookValue` companion
+ *     section reflecting feature-022 nominal-$ display fields.
+ *   Frame-conversion sites: NONE inside this module. The audit assembler
+ *     reads pre-computed values from injected calc functions; conversions (if
+ *     any) happen upstream in those modules.
  */
 
 // ---------------------------------------------------------------------------

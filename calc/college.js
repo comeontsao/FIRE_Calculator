@@ -67,6 +67,12 @@
  *     pre-inflate `fourYearCostReal` before calling.
  *   - Federal Direct Subsidized model: loan principal = pctFinanced × total
  *     tuition; no interest accrues during the 4-year in-school window.
+ *
+ * FRAME (feature 022 / FR-009):
+ *   Dominant frame: real-$ (every $ field — fourYearCostReal, costReal,
+ *     loanShareReal, inSchoolShareReal — lives in today's purchasing power).
+ *   Frame-conversion sites: NONE — callers pre-inflate before calling, per
+ *     existing invariant.
  */
 
 const DEFAULT_START_AGE = 18;
