@@ -308,10 +308,23 @@ function getActiveMortgageStrategyOptions() {
   return { mortgageStrategyOverride: strat };
 }
 
-// Stub: resolveAccumulationOptions — synthesized from persona.inp
+// Stub: resolveAccumulationOptions — synthesized from persona.inp.
+// Feature 023 (T032): extended with accumulationSpend per data-model.md
+// Entity 4. Resolution chain: persona.inp.accumulationSpend (preferred) →
+// persona.inp.monthlySpend × 12 → 120000 (Stay-in-US fallback). Mirrors the
+// FR-002a floor logic from getAccumulationSpend(inp).
 function resolveAccumulationOptions(inp, fireAge, mortgageStrategyOverride) {
   var _mtg = (inp.mortgageEnabled) ? getMortgageInputs() : null;
   var strat = mortgageStrategyOverride || getActiveMortgageStrategyOptions().mortgageStrategyOverride;
+  // FRAME: real-$ — accumulationSpend resolution stays in today's-$ frame.
+  var _accumSpend;
+  if (typeof inp.accumulationSpend === 'number' && inp.accumulationSpend >= 0) {
+    _accumSpend = inp.accumulationSpend;
+  } else if (typeof inp.monthlySpend === 'number' && inp.monthlySpend > 0) {
+    _accumSpend = inp.monthlySpend * 12;
+  } else {
+    _accumSpend = 120000;
+  }
   return {
     mortgageStrategyOverride: strat,
     mortgageEnabled:          !!(inp.mortgageEnabled && _mtg),
@@ -325,6 +338,8 @@ function resolveAccumulationOptions(inp, fireAge, mortgageStrategyOverride) {
     payoffVsInvestFn:         null,
     framing:                  'liquidNetWorth',
     mfjStatus:                (inp.adultCount === 2) ? 'mfj' : 'single',
+    // Feature 023 (T032) — accumulation-phase spending (real-$).
+    accumulationSpend:        _accumSpend,
   };
 }
 
