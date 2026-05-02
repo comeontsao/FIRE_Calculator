@@ -12564,7 +12564,12 @@ function recalcAll() {
       const preciseAgeMonths = Math.round((preciseAge - preciseAgeYears) * 12);
       if (r.feasible) {
         dwzPreciseEl.style.display = '';
-        dwzPreciseEl.innerHTML = t('dwz.preciseFeasible', r.years, r.months, preciseAgeYears, preciseAgeMonths, inp.endAge, Math.round(r.endBalance).toLocaleString(), fireAge);
+        // Feature 023 follow-up — convert end balance to Book Value at endAge.
+        const _endAge = inp.endAge || 100;
+        const _endBalanceBV = (typeof globalThis !== 'undefined' && globalThis.displayConverter && typeof inp.inflationRate === 'number')
+          ? globalThis.displayConverter.toBookValue(r.endBalance || 0, _endAge, inp.ageRoger, inp.inflationRate)
+          : (r.endBalance || 0);
+        dwzPreciseEl.innerHTML = t('dwz.preciseFeasible', r.years, r.months, preciseAgeYears, preciseAgeMonths, inp.endAge, Math.round(_endBalanceBV).toLocaleString(), fireAge);
       } else {
         dwzPreciseEl.style.display = '';
         dwzPreciseEl.innerHTML = t('dwz.preciseInfeasible', Math.min(45, (inp.endAge || 95) - inp.ageRoger - 1), inp.endAge);
@@ -12839,14 +12844,20 @@ function recalcAll() {
   renderKpiCards(_kpiCs ? _kpiCs.state : null);
 
   // Progress bar — based on total assets vs total needed (chart-consistent).
+  // Feature 023 follow-up — convert totalFireNum to Book Value at FIRE age
+  // so the bar matches the KPI card (which displays Book Value). The
+  // currentTotal is at year 0 where real-$ === nominal-$, so no conversion.
+  // FRAME: nominal-$ Book Value display.
+  const _fireNumDisplayBV = (typeof _totalFireNumBookValue === 'number' && Number.isFinite(_totalFireNumBookValue))
+    ? _totalFireNumBookValue : totalFireNum;
   document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
-  document.getElementById('progressTarget').textContent = t('dyn.progressNeeded', Math.round(totalFireNum).toLocaleString());
+  document.getElementById('progressTarget').textContent = t('dyn.progressNeeded', Math.round(_fireNumDisplayBV).toLocaleString());
   document.getElementById('progressCurrent').textContent = t('dyn.progressCurrent', Math.round(currentTotal).toLocaleString());
   document.getElementById('progressPct').textContent = t('dyn.progressComplete', progress.toFixed(1));
   // Feature 006 fix — midpoint tick scales to target so the rail is honest at any scale.
   const midTickEl = document.getElementById('progressMidTick');
   if (midTickEl) {
-    const mid = totalFireNum / 2;
+    const mid = _fireNumDisplayBV / 2;
     midTickEl.textContent = (mid >= 1000000)
       ? '$' + (mid / 1000000).toFixed(mid >= 10000000 ? 0 : 1) + 'M'
       : '$' + Math.round(mid / 1000) + 'K';
@@ -12908,12 +12919,24 @@ function recalcAll() {
   document.getElementById('savingsBar').style.width = Math.min(savingsRate, 80) / 80 * 100 + '%';
 
   // Coast FIRE
+  // Feature 023 follow-up — Coast FIRE numbers projected at age 60; display
+  // in Book Value frame to match the rest of the dashboard.
   const coast = coastFIRECheck(inp);
+  const _coastConvertBV = (v) => {
+    if (typeof globalThis !== 'undefined' && globalThis.displayConverter && typeof inp.inflationRate === 'number') {
+      try {
+        return globalThis.displayConverter.toBookValue(v || 0, 60, inp.ageRoger, inp.inflationRate);
+      } catch (_e) {}
+    }
+    return v || 0;
+  };
+  const _coastFutureBV = _coastConvertBV(coast.futureValue);
+  const _coastTargetBV = _coastConvertBV(coast.target);
   if (coast.coastReady) {
-    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireReady', Math.round(coast.futureValue).toLocaleString(), scenario.flag, Math.round(coast.target).toLocaleString());
+    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireReady', Math.round(_coastFutureBV).toLocaleString(), scenario.flag, Math.round(_coastTargetBV).toLocaleString());
   } else {
-    const gap = coast.target - coast.futureValue;
-    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireGap', Math.round(coast.futureValue).toLocaleString(), Math.round(coast.target).toLocaleString(), Math.round(gap).toLocaleString());
+    const _coastGapBV = _coastTargetBV - _coastFutureBV;
+    document.getElementById('coastFireNote').innerHTML = t('dyn.coastFireGap', Math.round(_coastFutureBV).toLocaleString(), Math.round(_coastTargetBV).toLocaleString(), Math.round(_coastGapBV).toLocaleString());
   }
 
   // ===== Mortgage Impact Panel =====
@@ -17949,17 +17972,25 @@ window._rebindStickyHeaderObserver();
     const wrap = _$id('audit-table-spending');
     if (!wrap) return;
     const sa = snapshot.spendingAdjustments || {};
-    const colleges = Array.isArray(sa.collegeYears) ? sa.collegeYears : [];
-    const collegeRows = colleges.map(function (c) {
-      return '<tr><td>' + _esc(c.kid || '') + '</td><td>' + _fmtNum(c.ageStart) + '–' + _fmtNum(c.ageEnd) + '</td><td>' + _fmtMoney(c.annualCost) + '</td></tr>';
+    // Feature 023 follow-up — convert spending amounts to Book Value (the
+    // dashboard's user-facing "real money" frame per feature 022 + Money
+    // Terminology rule). College + Home2 + raw spend are real-$ today's
+    // values from the calc; convert at the relevant age (ageStart for college,
+    // buyAge for home2, currentAge for raw spend baseline).
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const _curAge = inputs.ageRoger || inputs.agePerson1 || 42;
+    const collegeRows = (Array.isArray(sa.collegeYears) ? sa.collegeYears : []).map(function (c) {
+      const ageForBV = typeof c.ageStart === 'number' ? c.ageStart : _curAge;
+      return '<tr><td>' + _esc(c.kid || '') + '</td><td>' + _fmtNum(c.ageStart) + '–' + _fmtNum(c.ageEnd) + '</td><td>' + _fmtMoney(_bvConvert(c.annualCost, ageForBV, snapshot)) + '</td></tr>';
     }).join('');
     const home2 = sa.home2 || {};
+    const home2AgeForBV = typeof home2.buyAge === 'number' ? home2.buyAge : _curAge;
     const home2Row = (home2.buyAge || home2.annualCarry)
-      ? '<tr><td>Home 2 carry</td><td>buy ' + _fmtNum(home2.buyAge) + (home2.sellAge ? ', sell ' + _fmtNum(home2.sellAge) : '') + '</td><td>' + _fmtMoney(home2.annualCarry) + '/yr</td></tr>'
+      ? '<tr><td>Home 2 carry</td><td>buy ' + _fmtNum(home2.buyAge) + (home2.sellAge ? ', sell ' + _fmtNum(home2.sellAge) : '') + '</td><td>' + _fmtMoney(_bvConvert(home2.annualCarry, home2AgeForBV, snapshot)) + '/yr</td></tr>'
       : '';
     const summary =
-      '<tr><td>Raw annual spend</td><td>—</td><td>' + _fmtMoney(sa.rawAnnualSpend) + '</td></tr>' +
-      '<tr><td>Mortgage-adjusted</td><td>delta ' + _fmtMoney(sa.mortgageDelta) + '</td><td>' + _fmtMoney(sa.mortgageAdjustedAnnualSpend) + '</td></tr>';
+      '<tr><td>Raw annual spend</td><td>—</td><td>' + _fmtMoney(_bvConvert(sa.rawAnnualSpend, _curAge, snapshot)) + '</td></tr>' +
+      '<tr><td>Mortgage-adjusted</td><td>delta ' + _fmtMoney(_bvConvert(sa.mortgageDelta, _curAge, snapshot)) + '</td><td>' + _fmtMoney(_bvConvert(sa.mortgageAdjustedAnnualSpend, _curAge, snapshot)) + '</td></tr>';
     wrap.innerHTML = '<table class="audit-table"><thead><tr><th>Item</th><th>Window</th><th>Amount</th></tr></thead><tbody>'
       + summary + home2Row + collegeRows + '</tbody></table>';
   }
@@ -17972,10 +18003,15 @@ window._rebindStickyHeaderObserver();
       wrap.innerHTML = '<p class="audit-empty">No floor violations.</p>';
       return;
     }
+    // Feature 023 follow-up — gate violation rows in Book Value at row age.
+    // Snapshot is the LAST cached snapshot (gate render is per-gate, not
+    // per-snapshot, so we read window._lastAuditSnapshot indirectly).
+    const _gateSnap = (typeof window !== 'undefined' && window._lastAuditSnapshot) || null;
     const rows = vs.map(function (v) {
-      return '<tr><td>' + _fmtNum(v.age) + '</td><td>' + _fmtMoney(v.total) + '</td><td>' + _fmtMoney(v.floor) + '</td></tr>';
+      return '<tr><td>' + _fmtNum(v.age) + '</td><td>' + _fmtMoney(_bvConvert(v.total, v.age, _gateSnap)) + '</td><td>' + _fmtMoney(_bvConvert(v.floor, v.age, _gateSnap)) + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.total', 'Total') + '</th><th>Floor</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>' + _safeT('audit.col.total', 'Total') + _bvSuffix + '</th><th>Floor' + _bvSuffix + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function _renderFireAgeTable(snapshot) {
@@ -17987,11 +18023,15 @@ window._rebindStickyHeaderObserver();
       wrap.innerHTML = '<p class="audit-empty">FIRE age = ' + _fmtNum(fr.displayedFireAge) + ' (search method: ' + _esc(fr.searchMethod || '') + ')</p>';
       return;
     }
+    // Feature 023 follow-up — endBalance is at end-of-plan; convert at endAge.
+    const inputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const endAge = inputs.endAge || 100;
     const rows = cands.map(function (c) {
       const cls = (c.age === fr.displayedFireAge) ? ' class="audit-row--highlight"' : '';
-      return '<tr' + cls + '><td>' + _fmtNum(c.age) + '</td><td>' + _fmtMoney(c.signedEndBalance) + '</td><td>' + (c.feasibleUnderActiveMode ? '✓' : '✗') + '</td></tr>';
+      return '<tr' + cls + '><td>' + _fmtNum(c.age) + '</td><td>' + _fmtMoney(_bvConvert(c.signedEndBalance, endAge, snapshot)) + '</td><td>' + (c.feasibleUnderActiveMode ? '✓' : '✗') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = '<table class="audit-table"><thead><tr><th>' + _safeT('audit.col.age', 'Age') + '</th><th>End Balance' + _bvSuffix + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   // Feature 015 US4 — Compute the active (Mode, Objective) sort-key chain
@@ -18047,12 +18087,19 @@ window._rebindStickyHeaderObserver();
       + '<div>' + _safeT('audit.strategyRanking.primarySortKey.label', 'Primary sort: {0}').replace('{0}', _esc(_safeT(sk.primary, ''))) + '</div>'
       + '<div>' + _safeT('audit.strategyRanking.tieBreakerChain.label', 'Tie-breakers: {0} → {1}').replace('{0}', _esc(_safeT(sk.tieA, ''))).replace('{1}', _esc(_safeT(sk.tieB, ''))) + '</div>'
       + '</div>';
+    // Feature 023 follow-up — endBalance is at end-of-plan; convert at endAge.
+    // Lifetime tax is summed across retirement years, so converting it at endAge
+    // is an approximation but keeps the column in chart-consistent Book Value
+    // frame rather than mixing real-$ with the rest of the audit's BV display.
+    const _stratInputs = (snapshot && snapshot.resolvedInputs && snapshot.resolvedInputs.raw) || {};
+    const _stratEndAge = _stratInputs.endAge || 100;
     const rows = rs.map(function (r) {
       const cls = r.isWinner ? ' class="audit-row--winner"' : '';
       const winnerBadge = r.isWinner ? ' <span class="audit-winner-badge">' + _esc(winnerLabel) + '</span>' : '';
-      return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(r.endBalance) + '</td><td>' + _fmtMoney(r.lifetimeFederalTax) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
+      return '<tr' + cls + '><td>' + _esc(r.strategyId) + winnerBadge + '</td><td>' + _fmtMoney(_bvConvert(r.endBalance, _stratEndAge, snapshot)) + '</td><td>' + _fmtMoney(_bvConvert(r.lifetimeFederalTax, _stratEndAge, snapshot)) + '</td><td>' + _fmtNum(r.violations) + '</td><td>' + (r.feasibleUnderCurrentMode ? '✓' : '✗') + '</td></tr>';
     }).join('');
-    wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const _bvSuffix = ' ' + _safeT('display.frame.bookValueColumnSuffix', '(Book Value)');
+    wrap.innerHTML = headerHtml + '<table class="audit-table"><thead><tr><th>Strategy</th><th>' + _safeT('audit.col.endBalance', 'End Balance') + _bvSuffix + '</th><th>' + _safeT('audit.col.lifetimeTax', 'Lifetime Tax') + _bvSuffix + '</th><th>' + _safeT('audit.col.violations', 'Floor Violations') + '</th><th>' + _safeT('audit.col.feasible', 'Feasible') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   // Feature 023 follow-up (B-023-8) — convert real-$ to Book Value at audit
