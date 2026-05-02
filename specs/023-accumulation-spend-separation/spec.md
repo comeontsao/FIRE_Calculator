@@ -132,12 +132,14 @@ The user sees clear labels distinguishing the two spending concepts, in both EN 
 - **FR-004**: Post-FIRE retirement phase (every iteration in `projectFullLifecycle`'s retirement loop, ages fireAge through endAge) MUST use `annualSpend` (country-tier) for the per-year withdrawal sizing. NO contamination from `accumulationSpend`.
 - **FR-005**: Country-tier selection (TW, Japan, Thailand, etc.) MUST affect ONLY `annualSpend`. Switching the selected scenario MUST leave `accumulationSpend` unchanged.
 - **FR-006**: The pure module `calc/accumulateToFire.js` MUST accept `accumulationSpend` via its options bag (or as an explicit parameter) — NOT by reading `inp.annualSpend`. The `inp.annualSpend = undefined → fall through to 0` failure mode is closed permanently.
-- **FR-007**: All four callers of `accumulateToFire` MUST pass the same `accumulationSpend` value:
-  1. `projectFullLifecycle` (the chart's accumulation handoff)
-  2. `_simulateStrategyLifetime` (strategy ranker simulator)
-  3. `computeWithdrawalStrategy` (withdrawal-strategy panel)
-  4. `findFireAgeNumerical` / `findEarliestFeasibleAge` (FIRE-age resolver)
-- **FR-008**: All four callers MUST resolve `accumulationSpend` through a single shared helper (e.g., `getAccumulationSpend(inp)`) so future calc changes cannot accidentally drift one consumer.
+- **FR-007**: All **six** callers of `accumulateToFire` MUST pass the same `accumulationSpend` value (corrected from "four" via Phase 0 R2 caller audit, 2026-05-01):
+  1. `signedLifecycleEndBalance` (Exact/DWZ end-balance gate; RR line 8904)
+  2. `projectFullLifecycle` (the chart's accumulation handoff; RR line 10079)
+  3. `_simulateStrategyLifetime` (strategy ranker simulator with `_qInpForAccum` quantization; RR line 11375)
+  4. `computeWithdrawalStrategy` (withdrawal-strategy panel; RR line 11865)
+  5. `findEarliestFeasibleAge` (FIRE-age resolver via `recalcAll()`; RR line 12615)
+  6. Cash-flow warning pill check (currently uses `{}` empty options bag — MUST be refactored to use `resolveAccumulationOptions`; RR line 15338)
+- **FR-008**: All six callers MUST resolve `accumulationSpend` through a single shared helper `getAccumulationSpend(inp)` (inline JS in both HTMLs per Phase 0 R3) so future calc changes cannot accidentally drift one consumer.
 - **FR-009**: Audit dump (Copy Debug) MUST expose `accumulationSpend` and `annualSpend` as top-level fields, plus per-row `annualSpending` (already exists) which equals `accumulationSpend` during accumulation rows.
 - **FR-010**: The conservation invariant for accumulation rows MUST hold post-fix:
   ```
@@ -150,8 +152,8 @@ The user sees clear labels distinguishing the two spending concepts, in both EN 
   - Plan-tab Expenses pill caption: "Current spending (US household, today's dollars)" / "目前支出（美國家計，今日購買力）"
   - Geography-tab country tier display: keep existing "Annual budget" labels; add tooltip clarifying "applies post-FIRE, in {country}".
 - **FR-014**: Audit harness invariant `accumulationSpendConsistency` MUST be added to `tests/unit/validation-audit/`:
-  - For each persona × mode × strategy, verify that all four `accumulateToFire` callers see the same `accumulationSpend` value.
-  - Cell count: 92 personas × 3 modes × 4 callers = 1,104 cells.
+  - For each persona × mode, verify that all six `accumulateToFire` callers see the same `annualSpending` value (within ±$0.01) on year-0 accumulation rows.
+  - Cell count: 92 personas × 3 modes × 6 callers × 2 assertions (AS-1 equality + AS-2 spendSource) = **3,312 cells** (corrected from the spec's earlier 1,104 estimate via R2 caller audit).
   - Severity: HIGH (drift indicates Constitution VI violation).
 - **FR-015**: Pre-feature-023 CSV snapshots and saved localStorage states MUST continue to load without errors. `accumulationSpend` is computed at load time, not stored.
 - **FR-016**: Frame-coverage meta-test (`tests/meta/frame-coverage.test.js`) MUST be updated to recognize the new options-bag field as a valid `// FRAME: real-$` site.
@@ -168,7 +170,7 @@ The user sees clear labels distinguishing the two spending concepts, in both EN 
 
 ### Measurable Outcomes
 
-- **SC-001 (Bug eliminated)**: For RR-baseline persona with line-item US spending = $120k and TW retirement, the year-1 (age-43) total portfolio Book Value differs from the year-0 baseline by less than 30% of (gross income × 1.0), down from the current ~31% gain. Specifically: Δ portfolio < $50,000 (vs current $191,722).
+- **SC-001 (Bug eliminated)**: For RR-baseline persona with line-item US spending = $120k and TW retirement, the year-1 (age-43) total portfolio Book Value Δ from age-42 baseline drops to **< $100,000** (Phase 0 R1 traced the post-fix arithmetic to ~+$96,851), down from the current +$191,722 — a 49% reduction. The remaining +$96,851 is dominated by intentional 401K contributions ($33k) + stock contributions ($24k) + investment growth ($39k); the bug-driven cash-residual contribution drops from +$97.7k to ~+$2.8k.
 - **SC-002 (Cash-bucket sanity)**: For RR-baseline persona, the cash bucket year-over-year delta during accumulation never exceeds (gross income − federal tax − FICA − 401K − getTotalMonthlyExpenses × 12 − monthlySavings × 12) × 1.05 in real-$. The conservation invariant is exact within ±$1.
 - **SC-003 (Country-tier purity)**: Switching the selected country tier from TW ($60k) to Stay-in-US ($120k) changes the retirement-phase withdrawals by exactly $60k/yr × (endAge − fireAge), and changes accumulation-phase cash flow by $0. Verified per persona in audit invariant `countryTierIsolation`.
 - **SC-004 (Audit harness regression)**: After the fix lands, total audit findings (across all invariant families on 92 personas) is ≤ feature 022 baseline (1 LOW). The new `accumulationSpendConsistency` invariant family reports 0 findings on first run.
