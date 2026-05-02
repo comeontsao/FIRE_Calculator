@@ -6273,7 +6273,9 @@ const TRANSLATIONS = {
     'audit.section.cashflow.title':             'Year-by-Year Cash Flow',
     'audit.section.cashflow.help':              'Shows what flows in (income / SS / withdrawals) and out (tax, savings, spending) for every year. Useful for verifying the simulator\'s cash-flow conservation invariant year-by-year.',
     'audit.cashflow.col.phase':                 'Phase',
-    'audit.cashflow.col.moneyIn':               'Money In',
+    'audit.cashflow.col.income':                'Income',
+    'audit.cashflow.col.ss':                    'SS',
+    'audit.cashflow.col.withdraw':              'Withdraw',
     'audit.cashflow.col.tax':                   'Tax',
     'audit.cashflow.col.saved':                 'Saved',
     'audit.cashflow.col.spent':                 'Spent',
@@ -7344,7 +7346,9 @@ const TRANSLATIONS = {
     'audit.section.cashflow.title':             '逐年現金流',
     'audit.section.cashflow.help':              '顯示每年的進出帳：收入／社安福利／提領作為進帳；稅、儲蓄、支出作為出帳。可用來逐年驗證模擬器的現金流守恆不變式。',
     'audit.cashflow.col.phase':                 '階段',
-    'audit.cashflow.col.moneyIn':               '進帳',
+    'audit.cashflow.col.income':                '收入',
+    'audit.cashflow.col.ss':                    '社安福利',
+    'audit.cashflow.col.withdraw':              '提領',
     'audit.cashflow.col.tax':                   '稅',
     'audit.cashflow.col.saved':                 '儲蓄',
     'audit.cashflow.col.spent':                 '支出',
@@ -18115,13 +18119,14 @@ window._rebindStickyHeaderObserver();
       if (i === fireIdx) classes.push('audit-row--fireage');
       if (r.hasShortfall === true) classes.push('has-shortfall');
       const cls = classes.length > 0 ? ' class="' + classes.join(' ') + '"' : '';
-      // Money-in: accumulation = gross income; retirement = SS + withdrawals.
-      const moneyIn = isAccum
-        ? (Number.isFinite(r.grossIncome) ? r.grossIncome : 0)
-        : ((Number.isFinite(r.ssIncome) ? r.ssIncome : 0) + (Number.isFinite(r.withdrawals) ? r.withdrawals : 0));
+      // Feature 023 follow-up — split Income / SS / Withdraw into separate
+      // columns so the per-year withdrawal amount is directly visible.
+      const grossIncome = isAccum && Number.isFinite(r.grossIncome) ? r.grossIncome : 0;
+      const ssIncome = !isAccum && Number.isFinite(r.ssIncome) ? r.ssIncome : 0;
+      const withdraw = !isAccum && Number.isFinite(r.withdrawals) ? r.withdrawals : 0;
       const tax = isAccum
         ? ((Number.isFinite(r.federalTax) ? r.federalTax : 0) + (Number.isFinite(r.ficaTax) ? r.ficaTax : 0))
-        : 0; // retirement tax is embedded inside withdrawals (gross-up)
+        : 0; // retirement tax is embedded inside the withdrawal (gross-up)
       const saved = isAccum
         ? ((Number.isFinite(r.pretax401kEmployee) ? r.pretax401kEmployee : 0)
            + (Number.isFinite(r.empMatchToTrad) ? r.empMatchToTrad : 0)
@@ -18130,14 +18135,16 @@ window._rebindStickyHeaderObserver();
       const spent = Number.isFinite(r.annualSpending) ? r.annualSpending : 0;
       const cashDelta = isAccum
         ? (Number.isFinite(r.cashFlowToCash) ? r.cashFlowToCash : 0)
-        : (moneyIn - spent); // approximate for retirement (informational)
+        : ((ssIncome + withdraw) - spent); // approximate for retirement (informational)
       const warnTd = (r.cashFlowWarning === 'NEGATIVE_RESIDUAL')
         ? ' ⚠️'
         : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️' : '';
       return '<tr' + cls + '>'
         + '<td>' + _fmtNum(r.age) + '</td>'
         + '<td>' + _esc(phaseLabel(r.phase)) + '</td>'
-        + '<td>' + fmtMoney(moneyIn) + '</td>'
+        + '<td>' + fmtMoney(grossIncome) + '</td>'
+        + '<td>' + fmtMoney(ssIncome) + '</td>'
+        + '<td>' + fmtMoney(withdraw) + '</td>'
         + '<td>' + fmtMoney(tax) + '</td>'
         + '<td>' + fmtMoney(saved) + '</td>'
         + '<td>' + fmtMoney(spent) + '</td>'
@@ -18147,7 +18154,9 @@ window._rebindStickyHeaderObserver();
     const headerRow = '<thead><tr>'
       + '<th>' + t0('audit.col.age', 'Age') + '</th>'
       + '<th>' + t0('audit.cashflow.col.phase', 'Phase') + '</th>'
-      + '<th>' + t0('audit.cashflow.col.moneyIn', 'Money In') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.income', 'Income') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.ss', 'SS') + '</th>'
+      + '<th>' + t0('audit.cashflow.col.withdraw', 'Withdraw') + '</th>'
       + '<th>' + t0('audit.cashflow.col.tax', 'Tax') + '</th>'
       + '<th>' + t0('audit.cashflow.col.saved', 'Saved') + '</th>'
       + '<th>' + t0('audit.cashflow.col.spent', 'Spent') + '</th>'
