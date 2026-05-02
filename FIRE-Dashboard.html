@@ -7601,6 +7601,24 @@ function getTotalMonthlyExpenses() {
   return _baseSum + _otherTax;
 }
 
+// Feature 023 (US1 / FR-002) — accumulation-phase spending resolver.
+// Returns annual household spending in real-$ (today's purchasing power) for
+// the pre-FIRE accumulation phase. Drives every accumulateToFire caller's
+// options.accumulationSpend field. Sums Plan-tab Expense rows × 12, with a
+// $1,000/yr sanity floor (FR-002a) that falls back to Stay-in-US comfortable
+// spend ($120k) — prevents the original feature-023 latent bug where empty
+// line items + missing inp.annualSpend made the simulator spend $0/year.
+// FRAME: real-$ — output is in today's purchasing power. Constant across
+//        accumulation years per feature 022 FR-014.
+function getAccumulationSpend(inp) {
+  const monthlySum = (typeof getTotalMonthlyExpenses === 'function')
+    ? getTotalMonthlyExpenses()
+    : 0;
+  const annualSum = monthlySum * 12;
+  if (annualSum >= 1000) return annualSum;
+  return 120000;
+}
+
 // ----- Add / remove handlers -----
 // Append a row chosen from EXPENSE_LIBRARY. The 'custom' key prompts the
 // user for a free-text name; everything else uses the library's i18nKey.
@@ -9891,6 +9909,12 @@ function resolveAccumulationOptions(inp, fireAge, mortgageStrategyOverride) {
                            ? window.computePayoffVsInvest : null,
     framing:             'liquidNetWorth',
     mfjStatus:           'mfj', // RR dashboard: always MFJ per FR-016
+    // Feature 023 (US1 / FR-006) — accumulation-phase spending plumbed through
+    // the options bag so accumulateToFire reads from a single source rather
+    // than an undefined inp.annualSpend that fell through to $0.
+    // FRAME: real-$ — today's-$ value, matches accumulateToFire's frame.
+    accumulationSpend:   (typeof getAccumulationSpend === 'function')
+                           ? getAccumulationSpend(inp) : 120000,
   };
 }
 

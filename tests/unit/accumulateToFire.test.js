@@ -2034,3 +2034,133 @@ test('v4-FRAME-08: ficaBreakdown.ssWageBaseHit triggers correctly with real inco
       `v4-FRAME-08: ssWageBaseHit must be false at age ${row.age} with $100k single real income`);
   }
 });
+
+// ===========================================================================
+// Feature 023 — v5 accumulation-spend separation tests
+// Spec: specs/023-accumulation-spend-separation/spec.md US1
+// Contract: specs/023-accumulation-spend-separation/contracts/accumulateToFire-options-bag.contract.md
+//
+// The 4-tier fallback chain:
+//   options.accumulationSpend (preferred)
+//     → inp.annualSpend (v3 backwards-compat)
+//     → inp.monthlySpend × 12 (v1 backwards-compat)
+//     → 0 (final fallback; emits cashFlowWarning='MISSING_SPEND')
+// ===========================================================================
+
+test('v5-spend-1: explicit options.accumulationSpend produces row.annualSpending and spendSource', () => {
+  const inp = baseInp({ annualIncome: 200000, taxRate: 0.28 });
+  const opts = baseOptions({ accumulationSpend: 80000 });
+  const result = accumulateToFire(inp, 52, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.annualSpending, 80000,
+      `v5-spend-1: annualSpending must equal options.accumulationSpend at age ${row.age}`);
+    assert.strictEqual(row.spendSource, 'options.accumulationSpend',
+      `v5-spend-1: spendSource must be 'options.accumulationSpend' at age ${row.age}`);
+  }
+});
+
+test('v5-spend-2: options.accumulationSpend wins when inp.annualSpend also set (preferred path)', () => {
+  const inp = baseInp({ annualIncome: 200000, taxRate: 0.28, annualSpend: 50000 });
+  const opts = baseOptions({ accumulationSpend: 90000 });
+  const result = accumulateToFire(inp, 52, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.annualSpending, 90000,
+      `v5-spend-2: options.accumulationSpend (90000) must win over inp.annualSpend (50000)`);
+    assert.strictEqual(row.spendSource, 'options.accumulationSpend');
+  }
+});
+
+test('v5-spend-3: explicit options.accumulationSpend = 0 is treated as valid (NOT MISSING)', () => {
+  const inp = baseInp({ annualIncome: 100000, taxRate: 0.20 });
+  const opts = baseOptions({ accumulationSpend: 0 });
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.annualSpending, 0,
+      `v5-spend-3: explicit zero is honored at age ${row.age}`);
+    assert.strictEqual(row.spendSource, 'options.accumulationSpend',
+      `v5-spend-3: spendSource is options-tier, NOT MISSING`);
+    assert.notStrictEqual(row.cashFlowWarning, 'MISSING_SPEND',
+      `v5-spend-3: explicit zero must NOT trigger MISSING_SPEND warning`);
+  }
+});
+
+test('v5-spend-4: negative options.accumulationSpend rejected → falls through chain', () => {
+  const inp = baseInp({ annualIncome: 100000, taxRate: 0.20, annualSpend: 60000 });
+  const opts = baseOptions({ accumulationSpend: -100 });
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    // Negative value rejected by v5 fallback's `>= 0` guard → falls to inp.annualSpend.
+    assert.strictEqual(row.annualSpending, 60000,
+      `v5-spend-4: negative options.accumulationSpend falls through to inp.annualSpend`);
+    assert.strictEqual(row.spendSource, 'inp.annualSpend',
+      `v5-spend-4: spendSource is v3 backwards-compat tier`);
+  }
+});
+
+test('v5-spend-5: missing options + missing inp.annualSpend + present inp.monthlySpend → uses monthlySpend × 12', () => {
+  const inp = baseInp({ annualIncome: 100000, taxRate: 0.20, monthlySpend: 4000 });
+  delete inp.annualSpend;
+  const opts = baseOptions(); // no accumulationSpend
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.annualSpending, 48000,
+      `v5-spend-5: must use inp.monthlySpend × 12 = 48000`);
+    assert.strictEqual(row.spendSource, 'inp.monthlySpend×12',
+      `v5-spend-5: spendSource is v1 backwards-compat tier`);
+  }
+});
+
+test('v5-spend-6: all spending sources missing → MISSING_SPEND warning + spendSource=MISSING', () => {
+  const inp = baseInp({ annualIncome: 100000, taxRate: 0.20 });
+  delete inp.annualSpend;
+  delete inp.monthlySpend;
+  const opts = baseOptions(); // no accumulationSpend
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.annualSpending, 0,
+      `v5-spend-6: final fallback resolves annualSpending to 0`);
+    assert.strictEqual(row.spendSource, 'MISSING',
+      `v5-spend-6: spendSource is MISSING (final tier)`);
+    assert.strictEqual(row.cashFlowWarning, 'MISSING_SPEND',
+      `v5-spend-6: MISSING_SPEND warning surfaced for harness misconfig detection`);
+  }
+});
+
+test('v5-spend-7: NEGATIVE_RESIDUAL takes precedence over MISSING_SPEND', () => {
+  // Set up: high spending forces residual negative; spending source is preferred (not MISSING).
+  // NEGATIVE_RESIDUAL is the more-specific signal so it wins.
+  const inp = baseInp({ annualIncome: 50000, taxRate: 0.20 });
+  const opts = baseOptions({ accumulationSpend: 200000 }); // way over income
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    assert.strictEqual(row.cashFlowWarning, 'NEGATIVE_RESIDUAL',
+      `v5-spend-7: NEGATIVE_RESIDUAL set when residual goes negative`);
+    assert.strictEqual(row.spendSource, 'options.accumulationSpend',
+      `v5-spend-7: spendSource still tracks correctly even when residual is clamped`);
+  }
+});
+
+test('v5-spend-8: options.accumulationSpend correctly drives conservation invariant', () => {
+  // Conservation: gross - federalTax - ficaTax - 401kEmp - annualSpending - stockContrib === cashFlowToCash
+  const inp = baseInp({
+    annualIncome: 150000,
+    taxRate: 0.25, // flat rate to avoid auto-bracket complexity
+    raiseRate: 0,
+    inflationRate: 0,
+    contrib401kTrad: 10000,
+    contrib401kRoth: 0,
+    empMatch: 5000,
+    monthlySavings: 1000,
+  });
+  const opts = baseOptions({ accumulationSpend: 70000 });
+  const result = accumulateToFire(inp, 47, opts);
+  for (const row of result.perYearRows) {
+    if (row.cashFlowWarning === 'NEGATIVE_RESIDUAL') continue; // clamped row
+    const lhs = row.grossIncome - row.federalTax - row.ficaTax - row.pretax401kEmployee
+              - row.annualSpending - row.stockContribution;
+    assert.ok(Math.abs(lhs - row.cashFlowToCash) < 1,
+      `v5-spend-8: conservation must hold within $1 at age ${row.age}, lhs=${lhs} cashFlowToCash=${row.cashFlowToCash}`);
+    assert.strictEqual(row.annualSpending, 70000,
+      `v5-spend-8: annualSpending == options.accumulationSpend`);
+  }
+});

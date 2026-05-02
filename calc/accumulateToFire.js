@@ -1,11 +1,26 @@
 /*
  * =============================================================================
- * MODULE: calc/accumulateToFire.js  (v3 — feature 021)
+ * MODULE: calc/accumulateToFire.js  (v5 — feature 023)
  *
- * Feature: 021-tax-category-and-audit-cleanup (extends 020 v2 cash-flow rewrite,
- *          which extended 019 accumulation-drift fix).
- * Spec:    specs/021-tax-category-and-audit-cleanup/spec.md US3
- * Contract: specs/021-tax-category-and-audit-cleanup/contracts/accumulateToFire-v3.contract.md
+ * Feature: 023-accumulation-spend-separation (extends 021 progressive-bracket +
+ *          022 frame-fix, which extended 020 v2 cash-flow rewrite + 019
+ *          accumulation-drift fix).
+ * Spec:    specs/023-accumulation-spend-separation/spec.md US1
+ * Contract: specs/023-accumulation-spend-separation/contracts/accumulateToFire-options-bag.contract.md
+ *
+ * v5 changes vs v3 (v4 was the feature-022 internal frame fix):
+ *   - Reads new options.accumulationSpend (real-$, optional) for the spending
+ *     baseline that drives the cash-flow residual. 4-tier soft-fall preserves
+ *     v3 backwards-compat:
+ *       options.accumulationSpend → inp.annualSpend → inp.monthlySpend×12 → 0
+ *   - Adds per-row `spendSource` diagnostic identifying which tier produced
+ *     the row's `annualSpending` value.
+ *   - Adds new `cashFlowWarning: 'MISSING_SPEND'` value for the final-tier
+ *     fallback (latent-bug detection — surfaces in audit dump).
+ *   - Closes the latent feature-023 bug where every caller relied on
+ *     `inp.annualSpend` which was never assigned on the canonical inp object,
+ *     causing pre-FIRE simulation to spend $0/year and inflate the cash bucket
+ *     by ~$95k/year on RR-baseline.
  *
  * v3 changes vs v2:
  *   - Adds progressive-bracket federal tax computation when inp.taxRate is blank/0
@@ -385,11 +400,27 @@ function accumulateToFire(inp, fireAge, options) {
   //        with inflationRate at the income conversion site below to compute
   //        real wage growth = (1 + raiseRate − inflationRate)^t.
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
-  // Base annual spend: prefer inp.annualSpend (explicit), fall back to monthlySpend*12,
-  // then fall back to 0 (backwards-compatible — v1 callers may not supply these fields).
-  const baseAnnualSpend = (typeof inp.annualSpend === 'number') ? inp.annualSpend
-    : (typeof inp.monthlySpend === 'number') ? inp.monthlySpend * 12
-    : 0;
+  // Feature 023 (FR-006 / US1) — 4-tier fallback chain for accumulation-phase
+  // spending baseline. Preferred path is options.accumulationSpend (real-$,
+  // resolved by getAccumulationSpend(inp) inline-helper in both HTMLs). The
+  // legacy chain inp.annualSpend → inp.monthlySpend×12 → 0 is preserved for
+  // v3 backwards-compat with test fixtures and pre-023 audit-harness personas.
+  // FRAME: real-$ — today's-$ value, constant across accumulation years.
+  let baseAnnualSpend;
+  let _spendSource;  // diagnostic: which fallback tier produced the value
+  if (typeof opts.accumulationSpend === 'number' && opts.accumulationSpend >= 0) {
+    baseAnnualSpend = opts.accumulationSpend;
+    _spendSource = 'options.accumulationSpend';  // preferred (feature 023)
+  } else if (typeof inp.annualSpend === 'number') {
+    baseAnnualSpend = inp.annualSpend;
+    _spendSource = 'inp.annualSpend';  // v3 backwards-compat
+  } else if (typeof inp.monthlySpend === 'number') {
+    baseAnnualSpend = inp.monthlySpend * 12;
+    _spendSource = 'inp.monthlySpend×12';  // v1 backwards-compat
+  } else {
+    baseAnnualSpend = 0;
+    _spendSource = 'MISSING';  // final fallback — surface in cashFlowWarning
+  }
 
   // v2 override inputs
   const cashflowOverrideEnabled = !!(inp.pviCashflowOverrideEnabled);
@@ -621,6 +652,14 @@ function accumulateToFire(inp, fireAge, options) {
       cashFlowToCash = 0;
     }
 
+    // Feature 023 (FR-006) — surface MISSING_SPEND when the spend baseline fell
+    // through to the final tier. NEGATIVE_RESIDUAL takes precedence (more
+    // specific signal). MISSING_SPEND on every accumulation row is a red flag
+    // for harness misconfig or a third-party caller that forgot the options bag.
+    if (!cashFlowWarning && _spendSource === 'MISSING') {
+      cashFlowWarning = 'MISSING_SPEND';
+    }
+
     // --- Snapshot row (pre-mutation, pre-growth) ---
     perYearRows.push({
       // v1 fields (unchanged)
@@ -645,11 +684,15 @@ function accumulateToFire(inp, fireAge, options) {
       empMatchToTrad: empMatchAmt,
       stockContribution,
       cashFlowToCash,
-      cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | undefined
+      cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | 'MISSING_SPEND' (feature 023) | undefined
       // v3 fields (NEW — feature 021 progressive-bracket + FICA)
       ficaTax,
       federalTaxBreakdown,
       ficaBreakdown,
+      // v5 fields (NEW — feature 023 accumulation-spend separation)
+      // FRAME: pure-data — diagnostic string, no $ value. Identifies which
+      //        fallback tier produced the annualSpending value.
+      spendSource: _spendSource,
     });
 
     // --- Accumulation arithmetic (steps 8–9 per v2 contract) ---
