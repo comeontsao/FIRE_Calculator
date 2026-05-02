@@ -1306,3 +1306,21 @@ concepts: "current spending" (drives accumulation phase) vs the country-tier
 | `expenses.caption.appliesTo` | Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country. | 計入累積階段現金流。退休後支出由所選國家獨立設定。 |
 | `geo.tooltip.postFireOnly` | Annual budget applies post-FIRE, in {0} | 年度預算適用於FIRE後，於 {0} |
 
+### Feature 023 follow-up — UX clarity (B-023-3 + B-023-4)
+
+Added 2026-05-02 alongside the chart-threshold visualization + status copy
+clarification. Both EN + zh-TW keys live in `TRANSLATIONS.en` +
+`TRANSLATIONS.zh` of `FIRE-Dashboard.html` and `FIRE-Dashboard-Generic.html`
+(lockstep). New keys + revised copy:
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `chart.lifecycle.fireNumberTarget` (NEW) | 🎯 FIRE Number target (~${0}K) | 🎯 FIRE 目標金額（約 ${0}K） |
+| `dyn.statusNeedsOpt` (REVISED) | ⚡ Long timeline — FIRE in ~{0} years at current pace · {1}% to target | ⚡ 時程較長 — 以目前速度還要約 {0} 年達 FIRE · 已達標 {1}% |
+| `dyn.statusBehindSched` (REVISED) | ⚠️ Distant target — FIRE in {0}+ years · {1}% to target. Consider increasing savings or lowering retirement spending to retire sooner. | ⚠️ 目標距離遠 — 還要 {0}+ 年達 FIRE · 已達標 {1}%。可考慮提高儲蓄或降低退休後支出以提前退休。 |
+
+**Why revised**: the prior "Behind Schedule" copy implied dollar-shortfall
+when it actually meant time-distance to FIRE. New copy makes the time
+dimension explicit ("FIRE in N+ years") and frames the situation as
+factual rather than judgmental ("Distant target" vs "Behind Schedule").
+

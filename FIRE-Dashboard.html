@@ -5568,8 +5568,8 @@ const TRANSLATIONS = {
     'kpi.yearsSuffix': 'yrs',
     'kpi.yearsOver': '40+',
     // Status banner (RR wording)
-    'dyn.statusNeedsOpt': '⚡ Needs Optimization — {0} years at current pace · {1}% there',
-    'dyn.statusBehindSched': '⚠️ Behind Schedule — {0}+ years · {1}% there. Increase savings or reduce target.',
+    'dyn.statusNeedsOpt': '⚡ Long timeline — FIRE in ~{0} years at current pace · {1}% to target',
+    'dyn.statusBehindSched': '⚠️ Distant target — FIRE in {0}+ years · {1}% to target. Consider increasing savings or lowering retirement spending to retire sooner.',
     // Progress bar labels
     'dyn.progressNeeded': '${0} total needed',
     'dyn.progressCurrent': '${0} total now',
@@ -6203,6 +6203,7 @@ const TRANSLATIONS = {
     'lifecycle.assetTable.col.total': 'Total',
     'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE (age {0})',
+    'chart.lifecycle.fireNumberTarget': '🎯 FIRE Number target (~${0}K)',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 Original FIRE (age {0})',
     'chart.lifecycle.originalFireShort': 'Original FIRE',
@@ -6656,8 +6657,8 @@ const TRANSLATIONS = {
     'kpi.yearsSubIncrease': '需要增加儲蓄',
     'kpi.yearsSuffix': '年',
     'kpi.yearsOver': '40+',
-    'dyn.statusNeedsOpt': '⚡ 需要優化 — 以目前速度還要 {0} 年 · {1}% 已達標',
-    'dyn.statusBehindSched': '⚠️ 進度落後 — 還要 {0}+ 年 · {1}% 已達標。請增加儲蓄或降低目標。',
+    'dyn.statusNeedsOpt': '⚡ 時程較長 — 以目前速度還要約 {0} 年達 FIRE · 已達標 {1}%',
+    'dyn.statusBehindSched': '⚠️ 目標距離遠 — 還要 {0}+ 年達 FIRE · 已達標 {1}%。可考慮提高儲蓄或降低退休後支出以提前退休。',
     'dyn.progressNeeded': '所需總資產 ${0}',
     'dyn.progressCurrent': '目前總資產 ${0}',
     'college.label.janet': 'Janet 的大學',
@@ -7262,6 +7263,7 @@ const TRANSLATIONS = {
     'lifecycle.assetTable.col.total': '總計',
     'lifecycle.assetTable.fireBadge': 'FIRE',
     'chart.lifecycle.fireMarker': '🔥 FIRE（{0} 歲）',
+    'chart.lifecycle.fireNumberTarget': '🎯 FIRE 目標金額（約 ${0}K）',
     'chart.lifecycle.fireMarkerShort': 'FIRE',
     'chart.lifecycle.originalFire': '📍 原 FIRE（{0} 歲）',
     'chart.lifecycle.originalFireShort': '原 FIRE',
@@ -15602,6 +15604,24 @@ function renderGrowthChart(inp) {
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true, _chartOpts);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.ageRoger;
+  // Feature 023 (B-023-3) — compute FIRE NUMBER threshold in Book Value frame
+  // so the chart can render a horizontal target line. Reuses the same
+  // findMinTotalAtFireNumerical helper that drives the KPI card; mode-aware.
+  // FRAME: conversion — real-$ → nominal-$ Book Value at fireAge.
+  let _fireNumberThresholdBookValue = null;
+  try {
+    const _thresholdReal = (typeof getTwoPhaseFireNum === 'function')
+      ? getTwoPhaseFireNum(inp, scenarioSpend, fireAge) : null;
+    if (Number.isFinite(_thresholdReal) && typeof globalThis !== 'undefined'
+        && globalThis.displayConverter
+        && typeof inp.inflationRate === 'number'
+        && typeof fireAge === 'number') {
+      _fireNumberThresholdBookValue = globalThis.displayConverter.toBookValue(
+        _thresholdReal, fireAge, inp.ageRoger, inp.inflationRate);
+    } else if (Number.isFinite(_thresholdReal)) {
+      _fireNumberThresholdBookValue = _thresholdReal; // fallback to real-$
+    }
+  } catch (_e) { /* defensive — threshold line is decorative */ }
   // FRAME: conversion (Wave 4b / FR-008d) — extend lifecycle rows with *BookValue
   // companions so the chart's data: maps below read BookValue directly.
   try {
@@ -15740,6 +15760,23 @@ function renderGrowthChart(inp) {
       pointHoverRadius: 15,
     },
   ];
+  // Feature 023 (B-023-3) — FIRE NUMBER target as a horizontal threshold line.
+  // Renders ONLY when threshold computed successfully. Spans the full chart so
+  // users can see exactly where their portfolio trajectory crosses the target.
+  if (Number.isFinite(_fireNumberThresholdBookValue) && _fireNumberThresholdBookValue > 0) {
+    datasets.push({
+      label: t('chart.lifecycle.fireNumberTarget', Math.round(_fireNumberThresholdBookValue / 1000)),
+      data: lifecycle.map(() => Math.round(_fireNumberThresholdBookValue)),
+      borderColor: 'rgba(0, 230, 130, 0.85)',
+      borderDash: [12, 6],
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      fill: false,
+      tension: 0,
+      order: -1, // render behind other lines (Chart.js v4: lower order draws first)
+    });
+  }
   // Track where the FIRE marker landed in the dataset array so the drag
   // helpers can find it even as we add/remove other lines (replaces the old
   // hard-coded index 3). Stamped onto the chart instance after construction.
