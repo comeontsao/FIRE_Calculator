@@ -5938,7 +5938,7 @@ const TRANSLATIONS = {
     'dyn.progressComplete': '{0}% complete',
     'dyn.accessibleNeededAtFire': 'Total assets needed at FIRE (age {0}) — {1} mode{2}',
     'dyn.cushionSuffix': ' (incl. {0}yr end-of-life cushion)',
-    'dyn.accessibleNeededSub': '{0} total at FIRE{1}',
+    'dyn.accessibleNeededSub': '{0} projected portfolio at FIRE{1}',
     'dyn.phase1Info': 'FIRE ({0}) → 59.5: {1} yrs, taxable only, {2}{3}',
     'dyn.phase1MtgAdjusted': ' (mtg-adjusted)',
     'dyn.phase2Info': '59.5 → {0}: {1} yrs, 401K unlocks',
@@ -7015,7 +7015,7 @@ const TRANSLATIONS = {
     'dyn.progressComplete': '已完成 {0}%',
     'dyn.accessibleNeededAtFire': 'FIRE 時（{0} 歲）所需總資產 — {1} 模式{2}',
     'dyn.cushionSuffix': '（含 {0} 年臨終緩衝）',
-    'dyn.accessibleNeededSub': '{0} FIRE 時總資產{1}',
+    'dyn.accessibleNeededSub': '{0} FIRE 時預估資產{1}',
     'dyn.phase1Info': 'FIRE（{0}）→ 59.5：{1} 年，僅應稅帳戶，{2}{3}',
     'dyn.phase1MtgAdjusted': '（含房貸調整）',
     'dyn.phase2Info': '59.5 → {0}：{1} 年，401K 解鎖',
@@ -12984,14 +12984,34 @@ function recalcAll() {
 
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
-  // Part A/C (feature 019): totalFireNum = total assets needed at FIRE (401k + accessible).
-  // Replaces the old accessible-only metric so the FIRE NUMBER card and progress bar
-  // are chart-consistent and never contradict the lifecycle chart.
-  const totalFireNum = getTwoPhaseFireNum(inp, effectiveSpend, fireAge);
-  // Keep accessibleFireNum as an alias for callsites that only need the display value.
+  // Feature 023 follow-up — FIRE NUMBER displays the PROJECTED portfolio total
+  // AT the FIRE age (chart-consistent), not the minimum-feasibility threshold.
+  // Per user requirement: "I want the FIRE number to be the amount I need to
+  // have when I retire" → match the chart's value at FIRE age by construction.
+  let _projectedTotalAtFire = null;
+  try {
+    const _kpiChartStrategyId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId)
+      || null;
+    const _kpiChartOpts = Object.assign({},
+      (_kpiChartStrategyId && _kpiChartStrategyId !== 'bracket-fill-smoothed')
+        ? { strategyOverride: _kpiChartStrategyId } : null,
+      (typeof getActiveMortgageStrategyOptions === 'function') ? getActiveMortgageStrategyOptions() : {});
+    const _kpiLifecycle = projectFullLifecycle(inp, effectiveSpend, fireAge, true, _kpiChartOpts);
+    if (Array.isArray(_kpiLifecycle)) {
+      const _fireRow = _kpiLifecycle.find(r => r && r.age === fireAge);
+      if (_fireRow && Number.isFinite(_fireRow.total)) {
+        _projectedTotalAtFire = _fireRow.total;
+      }
+    }
+  } catch (_e) { /* defensive — fall through to legacy threshold */ }
+  const totalFireNum = Number.isFinite(_projectedTotalAtFire)
+    ? _projectedTotalAtFire
+    : getTwoPhaseFireNum(inp, effectiveSpend, fireAge);
   const accessibleFireNum = totalFireNum;
   const simpleNum = calcSimpleFIRENumber(mtgAdjDisplay.annualSpend, inp.swr);
-  // Part C: progress = current_total / totalFireNum.
+  // Progress = currentTotal / projected-at-fire. Reaches 100% when current
+  // assets equal what your projection says you'll have at retirement.
   const currentTotal = accessible + locked;
   const progress = (currentTotal / totalFireNum) * 100;
   const totalMonthlyExp = getTotalMonthlyExpenses();
@@ -16020,24 +16040,6 @@ function renderGrowthChart(inp) {
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true, _chartOpts);
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.agePerson1;
-  // Feature 023 (B-023-3) — compute FIRE NUMBER threshold in Book Value frame
-  // so the chart can render a horizontal target line. Reuses the same
-  // findMinTotalAtFireNumerical helper that drives the KPI card; mode-aware.
-  // FRAME: conversion — real-$ → nominal-$ Book Value at fireAge.
-  let _fireNumberThresholdBookValue = null;
-  try {
-    const _thresholdReal = (typeof getTwoPhaseFireNum === 'function')
-      ? getTwoPhaseFireNum(inp, scenarioSpend, fireAge) : null;
-    if (Number.isFinite(_thresholdReal) && typeof globalThis !== 'undefined'
-        && globalThis.displayConverter
-        && typeof inp.inflationRate === 'number'
-        && typeof fireAge === 'number') {
-      _fireNumberThresholdBookValue = globalThis.displayConverter.toBookValue(
-        _thresholdReal, fireAge, inp.agePerson1, inp.inflationRate);
-    } else if (Number.isFinite(_thresholdReal)) {
-      _fireNumberThresholdBookValue = _thresholdReal; // fallback to real-$
-    }
-  } catch (_e) { /* defensive — threshold line is decorative */ }
   // FRAME: conversion (Wave 4b / FR-008d) — extend lifecycle rows with *BookValue
   // companions so the chart's data: maps below read BookValue directly.
   try {
@@ -16046,6 +16048,21 @@ function renderGrowthChart(inp) {
         ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth']);
     }
   } catch (_e) { /* defensive — render real-$ if helper unavailable */ }
+  // Feature 023 follow-up — FIRE NUMBER target line uses projected total at
+  // FIRE age (matches KPI card semantics, matches chart marker). Reads the
+  // lifecycle row at fireAge — totalBookValue companion is now populated by
+  // _extendRowsWithBookValues above. FRAME: nominal-$ (Book Value).
+  let _fireNumberThresholdBookValue = null;
+  try {
+    const _fireRow = lifecycle.find(r => r && r.age === fireAge);
+    if (_fireRow) {
+      if (Number.isFinite(_fireRow.totalBookValue)) {
+        _fireNumberThresholdBookValue = _fireRow.totalBookValue;
+      } else if (Number.isFinite(_fireRow.total)) {
+        _fireNumberThresholdBookValue = _fireRow.total; // fallback to real-$
+      }
+    }
+  } catch (_e) { /* defensive — threshold line is decorative */ }
   // Feature 006 — Cache the lifecycle dataset + context the mirror sidebar chart needs.
   _lastLifecycleDataset = {
     lifecycle,
