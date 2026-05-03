@@ -3102,6 +3102,11 @@
       <label><span data-i18n="invest.inflation">Inflation Rate</span> <span class="val" id="inflationVal">3.0%</span></label>
       <input type="range" id="inflationRate" min="1" max="6" step="0.5" value="3" oninput="document.getElementById('inflationVal').textContent=this.value+'%';recalcAll()">
     </div>
+    <!-- Feature 024 (B-023-5) — SS COLA decoupling. -->
+    <div class="control-group">
+      <label><span data-i18n="invest.ssCOLA">SS COLA Rate</span> <span class="val" id="ssCOLARateVal">3.0%</span> <span class="info-tip" data-i18n-tip="invest.ssCOLAHelp" data-tip="Annual cost-of-living adjustment for Social Security. Historical SSA average ~2.5%/yr. When set lower than inflation, real-$ SS shrinks across retirement.">?</span></label>
+      <input type="range" id="ssCOLARate" min="0" max="5" step="0.5" value="3" oninput="document.getElementById('ssCOLARateVal').textContent=this.value+'%';recalcAll()">
+    </div>
     <div class="control-group">
       <label><span data-i18n="invest.swr">Safe Withdrawal Rate</span> <span class="val" id="swrVal">4.0%</span> <span class="info-tip" data-tip="The % of portfolio you withdraw annually. 4% = the classic Trinity Study rule. 3.5% is more conservative.">?</span></label>
       <input type="range" id="swr" min="2.5" max="5" step="0.25" value="4" oninput="document.getElementById('swrVal').textContent=this.value+'%';recalcAll()">
@@ -5723,6 +5728,8 @@ const TRANSLATIONS = {
     'invest.returnStocks': 'Annual Return (Stocks)',
     'invest.return401k': '401K Annual Return',
     'invest.inflation': 'Inflation Rate',
+    'invest.ssCOLA': 'SS COLA Rate',
+    'invest.ssCOLAHelp': "Annual cost-of-living adjustment for Social Security. Historical SSA average ~2.5%/yr. When set lower than inflation, real-$ SS shrinks across retirement.",
     'invest.swr': 'Safe Withdrawal Rate',
     'invest.monthlySavings': 'Monthly Stock Contribution',
     'invest.monthlySavingsTooltip': 'Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow.',
@@ -6814,6 +6821,8 @@ const TRANSLATIONS = {
     'invest.returnStocks': '年回報率（股票）',
     'invest.return401k': '401K 年回報率',
     'invest.inflation': '通膨率',
+    'invest.ssCOLA': '社安福利調整率',
+    'invest.ssCOLAHelp': '社會安全福利的年度生活成本調整率。SSA 歷史平均約 2.5%/年。設定低於通膨率時，社安福利的實質購買力會逐年下降。',
     'invest.swr': '安全提領率',
     'invest.monthlySavings': '每月股票投入',
     'invest.monthlySavingsTooltip': '稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。',
@@ -8137,6 +8146,12 @@ function getInputs() {
     returnRate: parseFloat(document.getElementById('returnRate').value) / 100,
     return401k: parseFloat(document.getElementById('return401k').value) / 100,
     inflationRate: parseFloat(document.getElementById('inflationRate').value) / 100,
+    // Feature 024 (B-023-5) — ssCOLARate decoupled from inflationRate.
+    ssCOLARate: (function() {
+      const _el = document.getElementById('ssCOLARate');
+      const _v = _el ? parseFloat(_el.value) / 100 : NaN;
+      return Number.isFinite(_v) ? _v : (parseFloat(document.getElementById('inflationRate').value) / 100);
+    })(),
     swr: parseFloat(document.getElementById('swr').value) / 100,
     monthlySavings: parseFloat(document.getElementById('monthlySavings').value),
     contrib401kTrad: parseFloat(document.getElementById('contrib401k').value) || 0,
@@ -9391,7 +9406,8 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
     const isRetired = age >= fireAge;
     const is401kUnlocked = age >= unlockAge;
     const ssActive = age >= inp.ssClaimAge;
-    const ssThisYear = ssActive ? ssAnnual : 0;
+    // Feature 024 (B-023-5) — apply per-year SS COLA factor.
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // Snapshot balances at phase transitions + trajectory sampling for
     // Safe-mode "every year" enforcement across all 3 phases.
@@ -9926,7 +9942,8 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     const yearsFromNow = age - inp.agePerson1;
     const is401kUnlocked = age >= unlockAge;
     const ssActive = age >= inp.ssClaimAge;
-    const ssThisYearFull = ssActive ? ssAnnual : 0;
+    // Feature 024 (B-023-5) — SS COLA factor before partial-year scale.
+    const ssThisYearFull = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // FRAME: pure-data — pro-rate scale for the partial FIRE-year row.
     // scale = (1 − mFraction) on first iteration; 1.0 on all subsequent
@@ -10249,7 +10266,8 @@ function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, f
     data.push({ age, portfolio: Math.max(0, total) });
 
     const is401kUnlocked = age >= unlockAge;
-    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual : 0;
+    // Feature 024 (B-023-5) — SS COLA factor.
+    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     const withdrawal = Math.max(0, annualSpend - ssThisYear);
 
@@ -10612,7 +10630,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     const isRetired = age >= fireAge;
     const is401kUnlocked = age >= unlockAge;
     const ssActive = (age >= inp.ssClaimAge) && withSS;
-    const ssThisYear = ssActive ? ssAnnual : 0;
+    // Feature 024 (B-023-5) — apply per-year SS COLA factor.
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // At FIRE, settle the home sale.
     // T033 (feature 018 US4) — LH-Inv-3 lifecycle handoff truncation.
@@ -11864,7 +11883,8 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       const unlockAge = _effectiveUnlockAge(bfOpts);
       const canAccess401k = age >= unlockAge;
       const ssActive = age >= _qInp.ssClaimAge;
-      const ssThisYear = ssActive ? ssAnnual : 0;
+      // Feature 024 (B-023-5) — apply per-year SS COLA factor.
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
       const taxableSS = ssThisYear * 0.85;
       const rmdThisYear = (age >= 73 && pTrad > 0) ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
       const targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - bfOpts.safetyMargin);
@@ -12007,10 +12027,20 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       // feasibility uses the SAME mortgage trajectory the chart shows (LH-Inv-1).
       const _mortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
         ? getActiveMortgageStrategyOptions() : {};
+      // Feature 024 (B-022-1) — quantize age inputs to monthly precision so
+      // ±0.01yr perturbations in fireAge produce stable per-strategy
+      // feasibility verdicts. Mirrors feature 022 US5's quantization in
+      // _simulateStrategyLifetime; extends to _chartFeasibility, dropping
+      // E3 LOW count 1 → 0.
+      // FRAME: pure-data — quantize; no $ math.
+      const _qFireAge = Math.floor(fireAge * 12) / 12;
+      const _qInpForChart = Object.assign({}, inp, {
+        agePerson1: Math.floor((inp.agePerson1 != null ? inp.agePerson1 : inp.ageRoger) * 12) / 12,
+      });
       const traj = projectFullLifecycle(
-        inp,
-        inp.annualSpend || retireSpend,
-        fireAge,
+        _qInpForChart,
+        _qInpForChart.annualSpend || retireSpend,
+        _qFireAge,
         true,
         Object.assign({},
           strategyId && strategyId !== 'bracket-fill-smoothed'
@@ -12354,7 +12384,8 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     const yearsFromNow = age - inp.agePerson1;
     const year = 2026 + yearsFromNow;
     const ssActive = age >= inp.ssClaimAge;
-    const ssThisYear = ssActive ? ssAnnual : 0;
+    // Feature 024 (B-023-5) — apply per-year SS COLA factor.
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age, inp);
     const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
@@ -13722,6 +13753,26 @@ function renderHealthcareCard(inp) {
   const blendedDelta = getBlendedHealthcareDelta(selectedScenario, fireAge, inp.endAge, inp);
   const annualImpact = blendedDelta;
 
+  // Feature 024 (B-022-3) — convert healthcare card values to Book Value
+  // at the phase-midpoint age (matches feature 022 + 023 user-facing terminology).
+  const _hcCurrentAge = inp.agePerson1;
+  const _hcEndAge = inp.endAge || 100;
+  const _hcInflation = inp.inflationRate;
+  const _hcPreMidAge = (_hcCurrentAge + 65) / 2;
+  const _hcPostMidAge = (65 + _hcEndAge) / 2;
+  const _hcConvert = (v, atAge) => {
+    if (typeof globalThis !== 'undefined' && globalThis.displayConverter
+        && typeof _hcInflation === 'number') {
+      try { return globalThis.displayConverter.toBookValue(v, atAge, _hcCurrentAge, _hcInflation); }
+      catch (_e) {}
+    }
+    return v;
+  };
+  const _effPreBV = _hcConvert(effPre, _hcPreMidAge);
+  const _effPostBV = _hcConvert(effPost, _hcPostMidAge);
+  const _annualImpactBV = _hcConvert(annualImpact, _hcPostMidAge);
+  const _hcBVSuffix = ' ' + (typeof t === 'function' ? t('display.frame.bookValueColumnSuffix') : '(Book Value)');
+
   // Current scenario card
   const cardEl = document.getElementById('hcScenarioCard');
   if (cardEl) {
@@ -13735,26 +13786,26 @@ function renderHealthcareCard(inp) {
       <div style="font-size:0.8em;color:var(--text-dim);margin-bottom:10px;line-height:1.5">${hcNoteTrans}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div style="padding:8px;background:rgba(100,180,255,0.08);border-radius:6px">
-          <div style="font-size:0.72em;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">${t('hc.pre65Label')} ${preIsOverride ? t('hc.overrideSuffix') : ''}</div>
-          <div style="font-size:1.2em;font-weight:700;color:var(--accent2)">$${effPre.toLocaleString()}<span style="font-size:0.6em;color:var(--text-dim)">/mo</span></div>
+          <div style="font-size:0.72em;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">${t('hc.pre65Label')}${_hcBVSuffix} ${preIsOverride ? t('hc.overrideSuffix') : ''}</div>
+          <div style="font-size:1.2em;font-weight:700;color:var(--accent2)">$${Math.round(_effPreBV).toLocaleString()}<span style="font-size:0.6em;color:var(--text-dim)">/mo</span></div>
           <div style="font-size:0.72em;color:var(--text-dim)">${t('hc.familyOf4')}</div>
         </div>
         <div style="padding:8px;background:rgba(180,255,100,0.08);border-radius:6px">
-          <div style="font-size:0.72em;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">${t('hc.post65Label')} ${postIsOverride ? t('hc.overrideSuffix') : ''}</div>
-          <div style="font-size:1.2em;font-weight:700;color:var(--success)">$${effPost.toLocaleString()}<span style="font-size:0.6em;color:var(--text-dim)">/mo</span></div>
+          <div style="font-size:0.72em;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">${t('hc.post65Label')}${_hcBVSuffix} ${postIsOverride ? t('hc.overrideSuffix') : ''}</div>
+          <div style="font-size:1.2em;font-weight:700;color:var(--success)">$${Math.round(_effPostBV).toLocaleString()}<span style="font-size:0.6em;color:var(--text-dim)">/mo</span></div>
           <div style="font-size:0.72em;color:var(--text-dim)">${t('hc.coupleMedicare')}</div>
         </div>
       </div>
       <div style="margin-top:10px;padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:0.78em">
         <strong>${t('hc.fireImpact')}</strong>
-        <span style="color:${annualImpact > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">
-          ${t('hc.fireImpactValue', annualImpact > 0 ? '+' : '', Math.round(annualImpact).toLocaleString())}
+        <span style="color:${_annualImpactBV > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">
+          ${t('hc.fireImpactValue', _annualImpactBV > 0 ? '+' : '', Math.round(_annualImpactBV).toLocaleString())}
         </span>
       </div>
     `;
   }
 
-  // Comparison table (all countries)
+  // Comparison table (all countries) — Book Value at phase midpoints.
   const compEl = document.getElementById('hcComparisonTable');
   if (compEl) {
     const rows = scenarios.map(s => {
@@ -13762,10 +13813,12 @@ function renderHealthcareCard(inp) {
       if (!c) return '';
       const isSelected = s.id === selectedScenario;
       const nameTrans = t('country.' + s.id) || s.name;
+      const _cPreBV = _hcConvert(c.pre65, _hcPreMidAge);
+      const _cPostBV = _hcConvert(c.post65, _hcPostMidAge);
       return `<tr style="${isSelected ? 'background:rgba(100,180,255,0.08);font-weight:600' : ''}">
         <td style="padding:4px 6px">${s.flag} ${nameTrans}</td>
-        <td style="padding:4px 6px;text-align:right">$${c.pre65.toLocaleString()}</td>
-        <td style="padding:4px 6px;text-align:right">$${c.post65.toLocaleString()}</td>
+        <td style="padding:4px 6px;text-align:right">$${Math.round(_cPreBV).toLocaleString()}</td>
+        <td style="padding:4px 6px;text-align:right">$${Math.round(_cPostBV).toLocaleString()}</td>
       </tr>`;
     }).join('');
     compEl.innerHTML = `
@@ -19841,6 +19894,8 @@ function copyDebugInfo() {
       // Feature 023 — accumulation-phase spending (real-$, today's-$).
       accumulationSpend: _accumulationSpend,
       accumulationSpend_source: _accumulationSpend_source,
+      // Feature 024 (B-023-5) — SS COLA rate (decoupled from inflationRate).
+      ssCOLARate: (typeof ds !== 'undefined' && ds && ds.inp && typeof ds.inp.ssCOLARate === 'number') ? ds.inp.ssCOLARate : null,
       bufferUnlock_yrs: bufUnlock,
       bufferSS_yrs: bufSS,
       summary,
