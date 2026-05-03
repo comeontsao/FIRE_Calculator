@@ -88,3 +88,39 @@ Threshold of 1% delta + $1000 delta unchanged. New unit test T7b verifies the si
 - CLAUDE.md SPECKIT block flipped to AWAITING USER BROWSER-SMOKE (closeout commit).
 - Full test gate at closeout: **502 tests, 501 pass, 1 intentional skip, 0 fail**.
 - Constitution VIII gate: **7/7 green** throughout all 9 implementation phases.
+
+---
+
+## Scope expansion addendum (2026-05-03)
+
+Surfaced during user-validation triage of the age-54 lump-sum hiccup screenshot. 3 user-validation findings folded into the 024 branch as US7+US8+US9.
+
+### B-024-3 (US7): cash-first lump-sum bucket priority
+
+**Status**: ✓ landed in both HTMLs at line ~10362 (RR) / ~10707 (Generic).
+
+**SC**: Lifecycle chart drain at lump-sum age routes principal from `portfolioCash` first (no LTCG), `portfolioStocks` second (LTCG gross-up applied to remainder only). When cash ≥ paidOff, stocks bucket is unchanged; LTCG cost = $0.
+
+**Verification**: Browser-smoke gate (cannot be unit-tested cleanly because the drain logic is in inline HTML, not a calc module).
+
+### B-024-2 (US8): lump-sum unconditionally inhibited when sellAtFire=true
+
+**Status**: ✓ landed in `calc/payoffVsInvest.js:553` (trigger condition gate).
+
+**SC**: When `sellAtFire === true`, `lumpSumEvent === null` regardless of pre-FIRE brokerage growth. Home sale at FIRE handles the mortgage from sale proceeds.
+
+**Verification**: New regression test `B-024-2 (v5) lump-sum unconditionally inhibited when sellAtFire=true even with sufficient brokerage` in `tests/unit/payoffVsInvest.test.js`. Test creates a high-extra/high-return scenario where the trigger WOULD fire pre-FIRE if not for the guard. Asserts `out.lumpSumEvent === null` AND `out.homeSaleEvent !== null`.
+
+### US9: KPI relabel "Current Net Worth" → "Whole Portfolio Net Worth"
+
+**Status**: ✓ landed in both HTMLs (translation keys + value rendering + sub-line breakdown).
+
+**SC**: Value now sums `accessible + locked = total`, matching the "Total Portfolio" line in the Lifecycle chart tooltip at currentAge. EN + zh-TW + Translation Catalog updated. Both HTMLs lockstep.
+
+**Verification**: Browser-smoke gate (UI presentation; lockstep grep confirms 2 occurrences each of "Whole Portfolio Net Worth" + "總投資組合淨資產" per HTML).
+
+### Tests after scope expansion
+
+- **Total**: 502 → **503 passing**, 1 intentional skip, 0 fail.
+- Constitution VIII gate: 7/7 green.
+- Findings: 0 CRITICAL · 0 HIGH · 0 MEDIUM · 0 LOW (unchanged).

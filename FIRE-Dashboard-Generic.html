@@ -5638,7 +5638,7 @@ const TRANSLATIONS = {
     'status.onTrack': 'On Track',
     'status.warning': 'Warning',
     'status.behind': 'Behind',
-    'kpi.netWorth': 'Current Net Worth',
+    'kpi.netWorth': 'Whole Portfolio Net Worth',
     'kpi.netWorthSub': 'as of Apr 2026',
     'kpi.fireNumber': 'FIRE Number (Primary)',
     'kpi.fireNumberSub': 'based on selected scenario',
@@ -5969,7 +5969,7 @@ const TRANSLATIONS = {
     'dyn.childFinancedLabel': 'Child {0}: % financed',
     'dyn.childParentLabel': 'Child {0}: % parent repays',
     // ==================== i18n Phase 4 additions (2026-04-21) ====================
-    'kpi.netWorthSubDyn': 'accessible (+ ${0} locked 401K)',
+    'kpi.netWorthSubDyn': '${0} accessible · ${1} locked 401K',
     'kpi.progressSubAccess': 'of total target',
     'kpi.yearsSubFireBy': 'FIRE by {0} (age {1})',
     'kpi.yearsSubIncrease': 'Need to increase savings',
@@ -6731,7 +6731,7 @@ const TRANSLATIONS = {
     'status.onTrack': '正軌',
     'status.warning': '注意',
     'status.behind': '落後',
-    'kpi.netWorth': '目前淨資產',
+    'kpi.netWorth': '總投資組合淨資產',
     'kpi.netWorthSub': '截至 2026 年 4 月',
     'kpi.fireNumber': 'FIRE 目標金額（主要）',
     'kpi.fireNumberSub': '基於所選情境',
@@ -7061,7 +7061,7 @@ const TRANSLATIONS = {
     'dyn.childFinancedLabel': '小孩 {0}：貸款比例',
     'dyn.childParentLabel': '小孩 {0}：父母代償比例',
     // ==================== i18n Phase 4 additions (2026-04-21) ====================
-    'kpi.netWorthSubDyn': '可用（另有 ${0} 401K 鎖定中）',
+    'kpi.netWorthSubDyn': '可用 ${0} · 401K 鎖定 ${1}',
     'kpi.progressSubAccess': '達成總資產目標',
     'kpi.yearsSubFireBy': '{0} 年 FIRE（{1} 歲）',
     'kpi.yearsSubIncrease': '需要增加儲蓄',
@@ -8678,14 +8678,24 @@ function renderKpiCards(state) {
   const yrsToFire = (typeof fireAge === 'number' && typeof snap.currentAge === 'number')
     ? fireAge - snap.currentAge
     : snap.yrsToFire;
+  // B-024 (feature 024): KPI shows the WHOLE portfolio (= accessible + locked
+  // 401K), matching the "Total Portfolio" line in the Lifecycle chart tooltip
+  // at currentAge. Sub-line shows the accessible/locked breakdown.
   if (netWorthEl) {
-    netWorthEl.textContent = Number.isFinite(snap.accessible)
-      ? '$' + Math.round(snap.accessible).toLocaleString()
+    const _wholeNW = (Number.isFinite(snap.accessible) ? snap.accessible : 0)
+                   + (Number.isFinite(snap.locked) ? snap.locked : 0);
+    netWorthEl.textContent = (Number.isFinite(snap.accessible) || Number.isFinite(snap.locked))
+      ? '$' + Math.round(_wholeNW).toLocaleString()
       : '—';
   }
   if (netWorthSubEl) {
-    netWorthSubEl.textContent = Number.isFinite(snap.locked)
-      ? t('kpi.netWorthSubDyn', Math.round(snap.locked).toLocaleString())
+    // The template ('${0} accessible · ${1} locked 401K' / '可用 ${0} · 401K 鎖定 ${1}')
+    // bakes the `$` literal into the string per original `kpi.netWorthSubDyn` convention;
+    // pass the raw `toLocaleString()` value so we don't double-prefix the dollar sign.
+    netWorthSubEl.textContent = (Number.isFinite(snap.accessible) && Number.isFinite(snap.locked))
+      ? t('kpi.netWorthSubDyn',
+          Math.round(snap.accessible).toLocaleString(),
+          Math.round(snap.locked).toLocaleString())
       : '—';
   }
   if (fireNumEl) {
@@ -10700,14 +10710,30 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     }
     // T018/T019 (feature 018) — Lump-sum drain. Fires once at lumpSumEvent.age,
     // strictly when strategy === 'invest-lump-sum' AND calc module reported an
-    // event. Subtracts the LTCG-grossed-up amount from portfolioStocks so the
-    // chart visibly shows the brokerage drop the user already sees in the
-    // Payoff-vs-Invest panel. After this age, mortgage P&I is $0 (handled by
-    // the _pviAmort lookup below — calc rows after lumpSum payoff have $0 P&I).
+    // event. After this age, mortgage P&I is $0 (handled by the _pviAmort lookup
+    // below — calc rows after lumpSum payoff have $0 P&I).
+    //
+    // B-024-3 (feature 024): cash-first bucket priority. The lump-sum payoff
+    // funds the principal from `portfolioCash` first (no LTCG owed), then taps
+    // `portfolioStocks` for any remainder (with LTCG gross-up applied only to
+    // the stock portion). Previously the entire grossed-up amount was drained
+    // from stocks even when cash sat idle — paying avoidable LTCG tax.
+    //
+    //   cashUsed       = min(portfolioCash, paidOff)
+    //   stockPrincipal = paidOff - cashUsed
+    //   stockDrain     = stockPrincipal × grossUpFactor   (LTCG only on stocks)
+    //   grossUpFactor  = actualDrawdown / paidOff (recovered from event;
+    //                    avoids re-reading inp.ltcgRate / inp.stockGainPct here).
     if (_mortgageStrategy === 'invest-lump-sum' && _pviLumpSumEvent && !_pviLumpSumDrained
         && typeof _pviLumpSumEvent.age === 'number' && age >= _pviLumpSumEvent.age) {
-      const _drain = (_pviLumpSumEvent.brokerageBefore || 0) - (_pviLumpSumEvent.brokerageAfter || 0);
-      if (_drain > 0) portfolioStocks = Math.max(0, portfolioStocks - _drain);
+      const _paidOff = _pviLumpSumEvent.paidOff || 0;
+      const _actualDrawdown = _pviLumpSumEvent.actualDrawdown || _paidOff;
+      const _grossUpFactor = _paidOff > 0 ? (_actualDrawdown / _paidOff) : 1;
+      const _cashUsed = Math.min(Math.max(0, portfolioCash), _paidOff);
+      const _stockPrincipal = Math.max(0, _paidOff - _cashUsed);
+      const _stockDrain = _stockPrincipal * _grossUpFactor;
+      portfolioCash = Math.max(0, portfolioCash - _cashUsed);
+      portfolioStocks = Math.max(0, portfolioStocks - _stockDrain);
       _pviLumpSumDrained = true;
     }
 

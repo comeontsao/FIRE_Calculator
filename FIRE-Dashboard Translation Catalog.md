@@ -34,7 +34,7 @@
 
 | English | Type | Location |
 |---------|------|----------|
-| "Current Net Worth" | Static | `<div class="label">` (line ~911) |
+| "Whole Portfolio Net Worth" | Static | `<div class="label">` (line ~911). Feature 024: relabeled from "Current Net Worth"; value now reflects accessible + locked 401K (= chart Total Portfolio at currentAge). |
 | "as of Apr 2026" | Static | `<div class="sub">` (line ~912) |
 | "FIRE Number (Primary)" | Static | `<div class="label">` (line ~916) |
 | "based on selected scenario" | Static | `<div class="sub">` (line ~917) |
@@ -783,7 +783,7 @@ Phase 4 hunts down every remaining user-visible English string identified in the
 Already-wired `dyn.fireInYears` now used from RR (was template-literal before). New: `dyn.statusNeedsOpt`, `dyn.statusBehindSched` (replaces `dyn.warningYears`/`dyn.behind` in both files).
 
 ### Category B — KPI sub-labels (renderKpiCards)
-`kpi.netWorthSubDyn` (with `${locked}` interpolation), `kpi.progressSubAccess`, `kpi.yearsSubFireBy`, `kpi.yearsSubIncrease`, `kpi.yearsSuffix`, `kpi.yearsOver`.
+`kpi.netWorthSubDyn` (feature 024: now `${accessible} accessible · ${locked} locked 401K` — two interpolations after the KPI value flipped to whole-portfolio), `kpi.progressSubAccess`, `kpi.yearsSubFireBy`, `kpi.yearsSubIncrease`, `kpi.yearsSuffix`, `kpi.yearsOver`.
 
 ### Category C — Progress bar
 `dyn.progressNeeded`, `dyn.progressCurrent`.

@@ -419,9 +419,17 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 ---
 
-## Done in feature 024 — Deferred Fixes Cleanup (2026-05-02)
+## Done in feature 024 — Deferred Fixes Cleanup (2026-05-02 → 2026-05-03)
 
-Bundles 5 deferred backlog items + 023 docs drift cleanup. Single autonomous run; 5 commits.
+Bundles 5 deferred backlog items + 023 docs drift cleanup. Initial 5 commits 2026-05-02; scope expansion 2026-05-03 added 3 more user-validation findings while branch was awaiting browser-smoke gate.
+
+### Scope expansion (2026-05-03 — added during browser-smoke triage)
+
+- **US7 (P2) — B-024-3 Cash-first bucket priority for lump-sum mortgage payoff**: User noticed at age 54 that the "Invest then lump-sum payoff" strategy was draining ~$269k from stocks (incurring LTCG gross-up) while $260k in cash sat idle. Root cause: `_pviLumpSumEvent` drain in lifecycle simulator (line ~10362 RR / ~10707 Generic) subtracted entire grossed-up amount from `portfolioStocks` only, ignoring `portfolioCash`. Fix: cash funds principal first (no LTCG owed), stocks cover only the remainder with LTCG gross-up applied to the smaller stock principal. Both HTMLs lockstep. Formula: `cashUsed = min(portfolioCash, paidOff); stockDrain = max(0, paidOff - cashUsed) × grossUpFactor`. Backlog cross-reference closes the gap surfaced by the user's age-54 hiccup screenshot.
+- **US8 (P2) — B-024-2 Lump-sum unconditionally inhibited when sellAtFire=true**: Feature 018 added a lump-sum guard at age ≥ fireAge when sellAtFire is set, but pre-FIRE lump-sum still fired — wasteful when the home sale at FIRE will discharge the mortgage from sale proceeds anyway. Fix: `calc/payoffVsInvest.js` trigger condition changed from `(!sellAtFireSet || age < inputs.fireAge)` to `!sellAtFireSet`. Effective behavior: when `sellAtFire=true`, the `invest-lump-sum` strategy simulates as `invest-keep-paying` until the home sale at FIRE discharges the mortgage. New regression test `B-024-2 (v5) lump-sum unconditionally inhibited when sellAtFire=true even with sufficient brokerage`.
+- **US9 (P3) — KPI relabel: "Current Net Worth" → "Whole Portfolio Net Worth"**: User requested the headline KPI value match the "Total Portfolio" line in the Lifecycle chart tooltip at currentAge ($609,454 in their scenario). Pre-024 the KPI showed only the accessible portion ($525,000) with a "+$84,454 locked 401K" sub-line, which read as a partial picture. Fix: value now sums `accessible + locked` (all 4 buckets); sub-line shows breakdown `$X accessible · $Y locked 401K`. Translation updates EN + zh-TW + Translation Catalog. Both HTMLs lockstep.
+
+### Original scope (2026-05-02)
 
 - **US1 (P2) — B-022-1 `_chartFeasibility` quantization fix**: Extended monthly-precision quantization (`Math.floor(age*12)/12`) from `_simulateStrategyLifetime` (feature 022 US5) to `_chartFeasibility`. Synthesized `_qInpForChart` + `_qFireAge` shadow-vars in both HTMLs before `projectFullLifecycle` invocation. Expected to clear the residual E3 LOW finding on `RR-pessimistic-frugal` (1 → 0). Browser-smoke verifies (CLI audit harness doesn't include E3 invariant).
 - **US2 (P3) — B-022-2 `scenario.tax.china` deduplication**: The key was assigned twice in the EN translation block of both HTMLs (zh-TW string mistakenly on EN key, immediately overwritten by correct EN string), with NO entry in the zh-TW block. Fix: removed the bogus EN-keyed zh-TW value AND added a proper zh-TW entry under `TRANSLATIONS.zh`. Now each HTML has exactly 1 EN + 1 zh-TW occurrence, verified via grep.
@@ -430,9 +438,9 @@ Bundles 5 deferred backlog items + 023 docs drift cleanup. Single autonomous run
 - **US5 (P2) — B-023-6 Sim reconciliation via `expected` annotation refinement**: Investigation revealed `signedLifecycleEndBalance` ALREADY uses `taxOptimizedWithdrawal` (same as `projectFullLifecycle`); the divergence is NOT a missing-spending-floor-pass bug. The actual divergence is the deliberate Feature 015 invariant: signed sim preserves negative pool balances post-shortfall to surface infeasibility, while chart sim clamps to ≥ 0 via spending-floor pass redistribution. Fix: extended `calc/calcAudit.js _invariantA` to mark divergences as `expected: true` when BOTH sims produce non-negative end balances (clamping artifact); `expected: false` when signed < 0 and chart ≥ 0 (genuine bug — chart hides what signed flagged). Threshold of 1% delta + $1k delta unchanged. New unit test T7b verifies the signed-negative + chart-positive non-expected case.
 - **US6 (P3) — Documentation drift cleanup**: `BACKLOG.md` "Done in feature 023" gained "Post-closeout polish" sub-section listing 7 polish commits (`7694c1f` → `2f64c1a`) with rationale. `specs/023-accumulation-spend-separation/CLOSEOUT.md` gained "Post-closeout polish (2026-05-02)" appendix with detailed entries for each commit.
 
-**Tests**: 501 → 502 passing (+1 net new from T7b). 1 intentional skip preserved. 0 failures. Constitution VIII gate (`spendingFloorPass.test.js`): 7/7 throughout. Findings: 0 CRITICAL · 0 HIGH · 0 MEDIUM · 0 LOW (down from 1 LOW post-023 baseline).
+**Tests**: 501 → 503 passing (+1 from T7b for US5; +1 from B-024-2 regression test for US8). 1 intentional skip preserved. 0 failures. Constitution VIII gate (`spendingFloorPass.test.js`): 7/7 throughout. Findings: 0 CRITICAL · 0 HIGH · 0 MEDIUM · 0 LOW (down from 1 LOW post-023 baseline).
 
-Remaining manual gate: open both files in a real browser, run the 6-step browser smoke per `specs/024-deferred-fixes-cleanup/quickstart.md`. Cannot be automated.
+Remaining manual gate: open both files in a real browser, run the 6-step browser smoke per `specs/024-deferred-fixes-cleanup/quickstart.md` PLUS the 3 scope-expansion checks: (a) verify lump-sum cliff disappears when sellAtFire=true, (b) verify lump-sum drains cash first when sellAtFire=false (no cliff in stocks if cash covers principal), (c) verify KPI shows whole-portfolio total at currentAge matching chart Total Portfolio tooltip. Cannot be automated.
 
 ---
 

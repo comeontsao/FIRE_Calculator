@@ -3,8 +3,69 @@
 **Feature**: Deferred Fixes Cleanup
 **Branch**: `024-deferred-fixes-cleanup`
 **Started**: 2026-05-02 (same day as feature 023 merge)
-**Implemented**: 2026-05-02 (single autonomous run)
-**Status**: **AWAITING USER BROWSER-SMOKE** before merge to `main`
+**Implemented**: 2026-05-02 (initial 6 user stories — single autonomous run); scope expansion 2026-05-03 (US7+US8+US9)
+**Status**: **AWAITING USER BROWSER-SMOKE** before merge to `main` — smoke needs re-running after 2026-05-03 scope expansion (3 new user stories surfaced from user-validation triage)
+
+---
+
+## Scope expansion appendix (2026-05-03)
+
+While the feature was in browser-smoke gate, the user's manual validation surfaced 3 additional user-validation findings tied to the lump-sum mortgage payoff strategy + KPI presentation. These were folded into the 024 branch as US7+US8+US9 rather than spawning a feature 025, since they touch the same code areas and the branch had not yet merged.
+
+### US7 — B-024-3 Cash-first bucket priority for lump-sum payoff
+
+**Trigger**: User screenshot at age 54 showed Lifecycle tooltip with `Cash: $260,932` essentially untouched while `Stocks: $731,275` took a ~$269k hit (incurring LTCG gross-up). Asked: "can't we prioritize that for using cash mostly, then from the money that comes back from the sell of the house?"
+
+**Root cause**: Lifecycle simulator drain at `FIRE-Dashboard.html:10362` / `FIRE-Dashboard-Generic.html:10707` computed `_drain = brokerageBefore - brokerageAfter` (= grossed-up `actualDrawdown`) and subtracted the entire amount from `portfolioStocks` only, ignoring `portfolioCash`. The calc module's lump-sum trigger fires on a brokerage-only model (correct for the Payoff-vs-Invest comparison panel), but the lifecycle simulator has both buckets and should route the drain optimally.
+
+**Fix**: At the drain site in both HTMLs, compute:
+
+```
+cashUsed       = min(portfolioCash, paidOff)            // no LTCG owed on cash
+stockPrincipal = max(0, paidOff - cashUsed)             // remainder from stocks
+grossUpFactor  = actualDrawdown / paidOff               // recovered from event
+stockDrain     = stockPrincipal × grossUpFactor         // LTCG only on stock portion
+portfolioCash  -= cashUsed
+portfolioStocks -= stockDrain
+```
+
+When cash ≥ paidOff (user's age-54 case), `stockPrincipal = 0` → `stockDrain = 0` → stocks bucket unchanged. LTCG cost = $0 instead of ~$18k. Cliff in stocks visualization disappears.
+
+### US8 — B-024-2 Lump-sum unconditionally inhibited when sellAtFire=true
+
+**Trigger**: User screenshot showed lump-sum payoff at age 54 (with $269k drain) followed by home-sale-at-FIRE at age 56 dumping $564k back into the brokerage. The home sale would have discharged the remaining mortgage from sale proceeds — the pre-FIRE lump-sum was wasteful.
+
+**Root cause**: Feature 018 added a guard at `calc/payoffVsInvest.js:543` blocking lump-sum trigger at `age >= fireAge` when sellAtFire is set, but pre-FIRE lump-sum still fired. The original guard reasoning was "home sale at FIRE handles the mortgage from sale proceeds, so don't fire lump-sum AT FIRE." But the same logic applies BEFORE FIRE: if sale proceeds will cover the mortgage anyway, no need to drain the brokerage early.
+
+**Fix**: Trigger condition changed from `(!sellAtFireSet || age < inputs.fireAge)` to `!sellAtFireSet`. Effective behavior: when `sellAtFire=true`, the `invest-lump-sum` strategy simulates as `invest-keep-paying` until the home sale at FIRE discharges the mortgage. Calc module label still says `invest-lump-sum` (user's explicit choice), but `lumpSumEvent === null` and the lifecycle drain at the HTML level never fires. New regression test `B-024-2 (v5) lump-sum unconditionally inhibited when sellAtFire=true even with sufficient brokerage` (sets up high-extra/high-return scenario where the trigger WOULD fire pre-FIRE if not for the guard).
+
+### US9 — KPI relabel: "Current Net Worth" → "Whole Portfolio Net Worth"
+
+**Trigger**: User screenshot showed the KPI value `$525,000` ("accessible") with sub-line `+$84,454 locked 401K`, while the Lifecycle chart tooltip at age 42 (currentAge) showed `Total Portfolio: 609,454`. The two numbers should match on a "today" tooltip but visually didn't because the KPI showed only the accessible portion.
+
+**Fix**: Relabeled to `Whole Portfolio Net Worth`; value now sums `accessible + locked = $609,454` (matches chart tooltip). Sub-line shows breakdown `$525,000 accessible · $84,454 locked 401K`. EN + zh-TW + Translation Catalog updated. Both HTMLs lockstep.
+
+| Translation key | Pre-024 | Feature 024 |
+|---|---|---|
+| `kpi.netWorth` (EN) | "Current Net Worth" | "Whole Portfolio Net Worth" |
+| `kpi.netWorth` (zh) | "目前淨資產" | "總投資組合淨資產" |
+| `kpi.netWorthSubDyn` (EN) | "accessible (+ ${0} locked 401K)" | "${0} accessible · ${1} locked 401K" |
+| `kpi.netWorthSubDyn` (zh) | "可用（另有 ${0} 401K 鎖定中）" | "可用 ${0} · 401K 鎖定 ${1}" |
+
+### Tests after scope expansion
+
+- **Total**: 502 → 503 passing (+1 from B-024-2 regression test added in `tests/unit/payoffVsInvest.test.js`).
+- 1 intentional skip preserved.
+- 0 failures.
+- Constitution VIII gate (`spendingFloorPass.test.js`): 7/7 throughout.
+
+### Browser-smoke addendum for the scope expansion
+
+The 6-step smoke in `quickstart.md` needs 3 additional checks before merge:
+
+7. **B-024-3 cash-first lump-sum**: With `mortgageStrategy='invest-lump-sum'` AND sufficient cash to cover principal at lump-sum age, verify Lifecycle chart shows cash bucket dropping while stocks bucket stays roughly flat (vs. pre-024 behavior where stocks dropped sharply).
+8. **B-024-2 sellAtFire inhibits lump-sum**: With `mortgageStrategy='invest-lump-sum'` AND `mtgSellAtFire='yes'`, verify `Copy Debug` reports `lumpSumEvent: null`, no lump-sum cliff in Lifecycle chart, and the home sale at FIRE handles the mortgage.
+9. **US9 KPI relabel**: Open the dashboard at default state. Verify (a) the headline KPI label reads "Whole Portfolio Net Worth" / "總投資組合淨資產", (b) the value matches the "Total Portfolio" line in the Lifecycle chart tooltip when the cursor is at currentAge, (c) the sub-line shows the breakdown `$X accessible · $Y locked 401K`.
 
 ---
 
