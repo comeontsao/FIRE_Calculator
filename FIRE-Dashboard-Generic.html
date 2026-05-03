@@ -16303,6 +16303,14 @@ function renderGrowthChart(inp) {
       pointHoverRadius: 15,
     },
   ];
+  // Track where the FIRE marker landed in the dataset array so the drag
+  // helpers can find it even as we add/remove other lines (replaces the old
+  // hard-coded index 3). Stamped onto the chart instance after construction.
+  // CRITICAL: this MUST be captured BEFORE any subsequent datasets.push()
+  // call (FIRE NUMBER target line, ghost marker, unlock/SS markers) —
+  // otherwise datasets.length - 1 drifts past the FIRE marker and the
+  // drag handler can't find it. Regression fix.
+  const _fireMarkerDatasetIdx = datasets.length - 1;
   // Feature 023 (B-023-3) — FIRE NUMBER target as a horizontal threshold line.
   // Renders ONLY when threshold computed successfully. Spans the full chart so
   // users can see exactly where their portfolio trajectory crosses the target.
@@ -16320,10 +16328,6 @@ function renderGrowthChart(inp) {
       order: -1, // render behind other lines (Chart.js v4: lower order draws first)
     });
   }
-  // Track where the FIRE marker landed in the dataset array so the drag
-  // helpers can find it even as we add/remove other lines (replaces the old
-  // hard-coded index 3). Stamped onto the chart instance after construction.
-  const _fireMarkerDatasetIdx = datasets.length - 1;
 
   // Ghost marker for original FIRE when override is active
   if (hasOverride) {
