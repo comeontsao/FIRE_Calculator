@@ -430,6 +430,17 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 - **Calc-engine v3 → v5**: `calc/accumulateToFire.js` reads `options.accumulationSpend` with 4-tier soft-fall. New per-row `spendSource` diagnostic. New `cashFlowWarning='MISSING_SPEND'` value surfaces the latent-bug class for future detection. Module-header docblock + `// FRAME: real-$` annotation updated.
 - **Tests**: 478 (baseline) → 501 passing (+23 net new). 1 intentional skip preserved. 0 failures. Constitution VIII gate (`spendingFloorPass.test.js`): 7/7 throughout. Findings: 0 CRITICAL · 0 HIGH · 0 MEDIUM · 1 LOW (B-022-1 unchanged).
 
+### Post-closeout polish (2026-05-02, 7 commits)
+
+After Phase 9 closeout, user-validation surfaced UX gaps that were addressed in 7 follow-up commits:
+
+- **`7694c1f` — B-023-3 chart threshold visualization + B-023-4 status copy clarity**: Horizontal "🎯 FIRE Number target" green dashed line on Lifecycle chart; verdict pill copy revised from "Behind Schedule — N+ years" to "Distant target — FIRE in N+ years" for time-distance vs dollar-shortfall clarity.
+- **`2639964` — FIRE NUMBER reframe**: KPI primary value switched from minimum-feasibility threshold to projected portfolio at FIRE age (chart-consistent). Sub-text "total at FIRE" → "projected portfolio at FIRE". User-mental-model alignment: the displayed number now matches the chart's tooltip value at the FIRE marker by construction.
+- **`185c51d` — Age display fix + Year-by-Year Cash Flow audit section**: Mode-consistent verdict-pill age (uses resolver's `_vFireRes.years` for both duration AND displayed age, eliminating the DWZ-51-vs-Safe-52 discrepancy). New audit-tab section showing per-year income/SS/withdrawals/tax/savings/spending breakdown.
+- **`2a3ac10` — Cash Flow column split**: SS and Withdraw separated from "Money In" so per-year withdrawal amount is directly visible.
+- **`c9b15fd` — Audit Book Value display + B-023-7 strategy field-name fix**: Audit lifecycle + cashflow tables now display Book Value (matching chart frame). Discovered + fixed a CRITICAL display bug in `calc/calcAudit.js` where audit was reading `r.endBalance` and `r.lifetimeFederalTax` (undefined → 0) instead of the simulator's `r.endOfPlanNetWorthReal` and `r.cumulativeFederalTaxReal` (suffix-Real per Constitution VI). Pre-fix: ALL strategies displayed $0 endBalance + $0 lifetime tax in the audit, hiding per-strategy differentiation. Post-fix: audit shows actual per-strategy values. Display-only bug; ranker scoring was correct.
+- **`2f64c1a` — Comprehensive Book Value (real-money) sweep**: Audited every `_fmtMoney` + `Math.round(...).toLocaleString()` site in both HTMLs (35+ sites). Found and fixed 9 remaining real-$ leaks: Audit Spending table, Gate-violation tables, FireAge candidate table, Strategy Ranking table, Progress bar "total needed" + midpoint tick, DWZ-precise message, Coast FIRE note. All converted via `displayConverter.toBookValue` at the appropriate age. Per the user's Money Terminology rule (CLAUDE.md), every user-facing $ value is now in Book Value frame.
+
 Remaining manual gate: open both files in a real browser, run the 8-step browser smoke per `specs/023-accumulation-spend-separation/quickstart.md`. Cannot be automated.
 
 ---
