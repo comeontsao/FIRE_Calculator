@@ -1805,6 +1805,44 @@ test('v3 Inv-4 lump-sum LTCG gross-up: brokerage drops by realBalance × (1 + lt
   );
 });
 
+// B-024-2 (feature 024) — Inv-3 v5 extension: lump-sum trigger inhibited
+// UNCONDITIONALLY when sellAtFire=true, even if brokerage would be sufficient
+// pre-FIRE. Rationale: home sale at FIRE will discharge the mortgage from sale
+// proceeds, so a pre-FIRE lump-sum needlessly drains the brokerage and incurs
+// avoidable LTCG.
+test('B-024-2 (v5) lump-sum unconditionally inhibited when sellAtFire=true even with sufficient brokerage', () => {
+  // High-extra, high-return scenario where the lump-sum trigger condition (brokerage
+  // >= grossed-up real mortgage balance) WOULD be met pre-FIRE if sellAtFire were
+  // false. With sellAtFire=true, the trigger must stay inhibited regardless.
+  const inputs = baseInputs({
+    mortgage: baseMortgage({ sellAtFire: true }),
+    mortgageStrategy: 'invest-lump-sum',
+    stocksReturn: 0.12,
+    extraMonthly: 3000,
+    fireAge: 60,  // pushed out so brokerage has time to grow past threshold
+    endAge: 99,
+  });
+
+  const out = computePayoffVsInvest(inputs);
+
+  // Assertion: lumpSumEvent === null even though brokerage would otherwise hit
+  // the threshold. Sell-at-FIRE inhibits unconditionally per B-024-2 (v5).
+  assert.strictEqual(
+    out.lumpSumEvent,
+    null,
+    '[B-024-2] lumpSumEvent must be null when sellAtFire=true regardless of pre-FIRE brokerage growth. ' +
+    `Got: ${JSON.stringify(out.lumpSumEvent)}. ` +
+    'Sell-at-FIRE is expected to discharge the mortgage from sale proceeds; pre-FIRE lump-sum is inhibited.'
+  );
+
+  // Sanity: home sale event should be present and discharge the mortgage at FIRE.
+  assert.ok(
+    out.homeSaleEvent !== null && out.homeSaleEvent !== undefined,
+    '[B-024-2] homeSaleEvent must be non-null when sellAtFire=true and mortgageEnabled=true. ' +
+    `Got: ${JSON.stringify(out.homeSaleEvent)}.`
+  );
+});
+
 // T036 — v3 US2 sidebar formatter: produces expected display-template descriptor
 // CONTRACT (T037 helper):
 //   _formatSidebarMortgageIndicator(strategy, activePayoffAge) →

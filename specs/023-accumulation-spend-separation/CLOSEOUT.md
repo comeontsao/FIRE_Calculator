@@ -129,3 +129,54 @@ Once browser-smoke is green, merge with: `git checkout main && git pull origin m
 3. **Soft-fall fallback chains preserve fixture stability**. The 4-tier fallback (`options.accumulationSpend → inp.annualSpend → inp.monthlySpend × 12 → 0` with `MISSING_SPEND` warning) lets the bug fix ship without coupling to a test/persona migration. ~30 existing accumulateToFire test calls continue to work; the new `MISSING_SPEND` warning surfaces if any caller forgets the field. Better than hard-fail for a multi-call-site bug fix.
 
 4. **Audit invariants are the durable contract**. The two new invariant families (`country-tier-isolation`, `accumulation-spend-consistency`) lock the bug fix into the regression suite. A future refactor that re-introduces the bug class (e.g., adding back an `inp.annualSpend` read inside the calc loop) will fire the invariant before reaching production. Constitution IV pays back here.
+
+---
+
+## Post-closeout polish (2026-05-02)
+
+After the Phase 9 closeout commit (`56f7f92`), user-validation surfaced UX gaps and field-name bugs that warranted immediate follow-up before merge. 7 polish commits were applied directly on the 023 branch (commits `7694c1f` → `2f64c1a`):
+
+### `7694c1f` — B-023-3 + B-023-4
+- **B-023-3 chart threshold visualization**: horizontal "🎯 FIRE Number target" green dashed line on Lifecycle chart, sitting at the FIRE NUMBER value at FIRE age. Resolves user's "where does my trajectory cross the threshold?" question visually.
+- **B-023-4 status copy clarity**: verdict pill revised. "Behind Schedule — N+ years" → "Distant target — FIRE in N+ years"; "Needs Optimization" → "Long timeline". Old copy implied dollar shortfall when it actually meant time-distance.
+
+### `2639964` — FIRE NUMBER reframe
+User feedback: "I want the FIRE number to be the amount I need to have when I retire" — interpreted as "what I will actually have at retirement, matching the chart at the FIRE marker." Replaced `findMinTotalAtFireNumerical` (minimum-feasibility threshold) with projected portfolio at FIRE age (chart-consistent). Sub-text "total at FIRE" → "projected portfolio at FIRE". KPI now matches the chart marker by construction.
+
+### `185c51d` — Age display fix + Year-by-Year Cash Flow audit section
+- **Age fix**: Verdict pill displayed inconsistent age across modes (DWZ 51 vs Safe/Exact 52) when month-precision resolver returned the same months but integer-floor differed. Now uses `_vFireRes.years` for the displayed age so it matches the displayed months.
+- **New audit section**: "Year-by-Year Cash Flow" between Lifecycle and Cross-Validation. Per-year breakdown: Age | Phase | Money In | Tax | Saved | Spent | Cash Δ. Required extending `calc/calcAudit.js _buildLifecycleProjection` to preserve v3 cash-flow accounting fields (previously dropped during snapshot serialization).
+
+### `2a3ac10` — Cash Flow column split
+User feedback: "I still don't see it very clear how much money is the total of withdraw in the Audit". Money In column was bundling SS + Withdrawals into a single value. Split into 9 columns: Age | Phase | Income | SS | Withdraw | Tax | Saved | Spent | Cash Δ.
+
+### `c9b15fd` — Audit Book Value display + B-023-7 strategy field-name fix
+- **Audit Book Value**: New `_bvConvert` helper in both HTMLs converts every audit dollar field to Book Value at row age using `displayConverter.toBookValue` with `inflationRate` from snapshot. Audit's lifecycle Total at age 52 now reads $2.09M (matching chart) instead of $1.55M (real-$).
+- **B-023-7 root cause fix**: Discovered `calc/calcAudit.js _buildStrategyRanking` was reading `r.endBalance` and `r.lifetimeFederalTax` (without "Real" suffix) — the simulator emits `r.endOfPlanNetWorthReal` and `r.cumulativeFederalTaxReal`. Both fields were undefined; `_round(undefined) = 0` → ALL 7 strategies displayed $0 endBalance + $0 lifetime tax in the audit. **Critical display bug**: The ranker scored correctly, but the audit hid per-strategy differentiation. Fixed with fallback chain reading `endOfPlanNetWorthReal ?? endBalance` and `cumulativeFederalTaxReal ?? lifetimeFederalTaxReal ?? lifetimeFederalTax`.
+
+### `2f64c1a` — Comprehensive Book Value (real-money) sweep
+User feedback: "I need to read the Real Value of the money, not the buying power. Please investigate the whole code if there are other places seeing this type of big problem."
+
+Audited every `_fmtMoney` + `Math.round(...).toLocaleString()` site in both HTMLs (35+ sites). Fixed 9 remaining real-$ leaks:
+
+1. Audit Spending table (raw spend, college, home2 carry, mortgage delta) — Book Value at row age
+2. Audit Gate-violation tables (Safe/Exact/DWZ floor + total) — Book Value at row age
+3. Audit FireAge candidate table (signedEndBalance) — Book Value at endAge
+4. Audit Strategy Ranking (endBalance + lifetimeFederalTax) — Book Value at endAge
+5. Progress bar "total needed" + midpoint tick — Book Value at FIRE age
+6. DWZ-precise message "end balance $X at age N" — Book Value at endAge
+7. Coast FIRE note (futureValue, target, gap) — Book Value at age 60
+
+All converted via `displayConverter.toBookValue` with appropriate per-row age and snapshot inflation rate. Column headers gain "(Book Value)" suffix where applicable. Per the user's Money Terminology rule (CLAUDE.md), every user-facing $ across the dashboard is now in Book Value frame.
+
+### Test totals after polish (2026-05-02)
+
+- 501 tests passing (unchanged from Phase 9 closeout baseline).
+- 1 intentional skip preserved.
+- 0 failures.
+- Constitution VIII gate green throughout.
+- Audit findings: 0 CRITICAL / 0 HIGH / 0 MEDIUM / 1 LOW (B-022-1 unchanged; not affected by 023 plumbing).
+
+### Post-merge state (2026-05-02 evening)
+
+Feature 023 merged to main as merge commit `9c08b4c`. Local 023 branch deleted. Origin/main pushed (28 commits — 022 merge + 023 merge). Origin/022-nominal-dollar-display deleted from remote.

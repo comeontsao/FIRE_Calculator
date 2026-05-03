@@ -34,7 +34,7 @@
 
 | English | Type | Location |
 |---------|------|----------|
-| "Current Net Worth" | Static | `<div class="label">` (line ~911) |
+| "Whole Portfolio Net Worth" | Static | `<div class="label">` (line ~911). Feature 024: relabeled from "Current Net Worth"; value now reflects accessible + locked 401K (= chart Total Portfolio at currentAge). |
 | "as of Apr 2026" | Static | `<div class="sub">` (line ~912) |
 | "FIRE Number (Primary)" | Static | `<div class="label">` (line ~916) |
 | "based on selected scenario" | Static | `<div class="sub">` (line ~917) |
@@ -783,7 +783,7 @@ Phase 4 hunts down every remaining user-visible English string identified in the
 Already-wired `dyn.fireInYears` now used from RR (was template-literal before). New: `dyn.statusNeedsOpt`, `dyn.statusBehindSched` (replaces `dyn.warningYears`/`dyn.behind` in both files).
 
 ### Category B — KPI sub-labels (renderKpiCards)
-`kpi.netWorthSubDyn` (with `${locked}` interpolation), `kpi.progressSubAccess`, `kpi.yearsSubFireBy`, `kpi.yearsSubIncrease`, `kpi.yearsSuffix`, `kpi.yearsOver`.
+`kpi.netWorthSubDyn` (feature 024: now `${accessible} accessible · ${locked} locked 401K` — two interpolations after the KPI value flipped to whole-portfolio), `kpi.progressSubAccess`, `kpi.yearsSubFireBy`, `kpi.yearsSubIncrease`, `kpi.yearsSuffix`, `kpi.yearsOver`.
 
 ### Category C — Progress bar
 `dyn.progressNeeded`, `dyn.progressCurrent`.
@@ -1305,6 +1305,19 @@ concepts: "current spending" (drives accumulation phase) vs the country-tier
 | `expenses.caption.currentSpending` | Current spending (US household, today's dollars) | 目前支出（美國家計，今日購買力） |
 | `expenses.caption.appliesTo` | Sums into accumulation-phase cash flow. Retirement spending is set separately by your selected country. | 計入累積階段現金流。退休後支出由所選國家獨立設定。 |
 | `geo.tooltip.postFireOnly` | Annual budget applies post-FIRE, in {0} | 年度預算適用於FIRE後，於 {0} |
+
+### Feature 024 (B-023-5) — SS COLA Decoupling
+
+Added 2026-05-02 alongside the new `ssCOLARate` slider on the Investment tab.
+Allows users to model SS payments where COLA differs from general inflation
+(historical SSA COLA ~2.4–2.5%/yr vs CPI ~2.6–3.0%/yr). Default = `inflationRate`
+preserves all existing behavior; setting lower produces real-$ SS that shrinks
+across retirement.
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `invest.ssCOLA` | SS COLA Rate | 社安福利調整率 |
+| `invest.ssCOLAHelp` | Annual cost-of-living adjustment for Social Security. Historical SSA average ~2.5%/yr. When set lower than inflation, real-$ SS shrinks across retirement. | 社會安全福利的年度生活成本調整率。SSA 歷史平均約 2.5%/年。設定低於通膨率時，社安福利的實質購買力會逐年下降。 |
 
 ### Feature 023 follow-up — UX clarity (B-023-3 + B-023-4)
 

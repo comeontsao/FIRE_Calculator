@@ -537,10 +537,16 @@ function computePayoffVsInvest(inputs) {
       // real-dollar brokerage equals the remaining real-dollar mortgage balance.
       // See specs/017-.../data-model.md §"Lump-sum trigger algorithm".
       // v3 (feature 018, T028): Inv-3 extension — when sellAtFire===true, the trigger
-      // is inhibited at age >= fireAge (home sale at FIRE retires the mortgage instead).
+      // was inhibited at age >= fireAge (home sale at FIRE retires the mortgage instead).
+      // v5 (feature 024, B-024-2): Inv-3 extended further — when sellAtFire===true the
+      // trigger is inhibited UNCONDITIONALLY (not just at age >= fireAge). The home
+      // sale at FIRE will discharge the remaining mortgage from sale proceeds, so a
+      // pre-FIRE lump-sum payoff would needlessly drain the brokerage AND incur
+      // avoidable LTCG. Effective behavior in this scenario: invest-lump-sum
+      // simulates as invest-keep-paying.
       var sellAtFireSet = inputs.mortgage && inputs.mortgage.sellAtFire === true && inputs.mortgageEnabled;
       if (lumpSumPayoff && lumpSumEvent === null && mortgageActiveThisMonth && mortgageStateI.balance > 0
-          && (!sellAtFireSet || age < inputs.fireAge)) {
+          && !sellAtFireSet) {
         const yearOffsetForTrigger = age - inputs.currentAge;
         const inflationFactorAtTrigger = Math.pow(1 + (inputs.inflation || 0), yearOffsetForTrigger);
         const realBalance = mortgageStateI.balance / inflationFactorAtTrigger;

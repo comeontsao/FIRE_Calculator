@@ -283,8 +283,32 @@ test('T7: planted endBalance mismatch produces endBalance-mismatch warning, delt
   const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
   assert.ok(warn, 'expected endBalance-mismatch warning');
   assert.equal(Math.round(warn.delta), 100000);
-  // T7 active strategy is bracket-fill-smoothed by default → not expected.
+  // Feature 024 (B-023-6) — `expected` semantics extended: when BOTH sims
+  // produce non-negative end balances (both feasible), the divergence is a
+  // clamping artifact (Feature 015 design intent). T7's signed=$100k +
+  // chart=$200k both ≥ 0 → expected = true under the new rule.
+  // The strategy-mismatch path (T8) and signed<0 path (T9-equivalent) still
+  // distinguish true bugs from clamping noise.
+  assert.equal(warn.expected, true);
+});
+
+test('T7b (NEW Feature 024 / B-023-6): signed-sim negative + chart-sim positive remains a non-expected warning', () => {
+  // When signed sim catches shortfall (negative endBalance) but chart sim
+  // clamps to a positive value, the divergence IS a genuine signal — the
+  // signed sim is correctly surfacing what the chart's clamping hides.
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 50000; // chart clamped to positive
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    signedLifecycleEndBalance: () => ({ endBalance: -150000 }), // signed sees infeasibility
+    projectFullLifecycle: () => fakeChart,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.ok(warn, 'expected endBalance-mismatch warning');
+  // Genuine bug class: chart hides what signed sim flagged.
   assert.equal(warn.expected, false);
+  assert.match(warn.reason, /shortfall.*chart-sim clamping hides/);
 });
 
 // ----------------------------------------------------------------------------

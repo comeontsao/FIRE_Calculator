@@ -669,8 +669,29 @@ function _invariantA(options, ctx) {
   const denom = Math.max(Math.abs(A), Math.abs(B), 1);
   const deltaPct = (delta / denom) * 100;
   if (delta > 1000 && deltaPct > 1) {
-    const expected = !!(ctx.activeStrategyId
+    // Feature 024 (B-023-6) — extend `expected` annotation to cover the
+    // clamping-artifact divergence class. The signed sim deliberately
+    // preserves negative pool balances post-shortfall (Feature 015 invariant),
+    // while chart sim clamps pools to ≥0 via spending-floor pass. When BOTH
+    // sims agree on feasibility (both ≥ 0) but differ on the dollar amount,
+    // the divergence is a clamping artifact, not a genuine bug.
+    //   - Strategy mismatch (was the only case): expected = true.
+    //   - Both positive (both feasible): expected = true (clamping noise).
+    //   - Chart positive but signed negative: expected = false (signed sim
+    //     correctly catches what chart's clamping hides — keep as warning).
+    //   - Both negative or chart negative: expected = false (genuine issue).
+    const strategyMismatch = !!(ctx.activeStrategyId
       && ctx.activeStrategyId !== BRACKET_FILL_STRATEGY_ID);
+    const bothFeasible = A >= 0 && B >= 0;
+    const expected = strategyMismatch || bothFeasible;
+    let reason;
+    if (strategyMismatch) {
+      reason = `signedLifecycleEndBalance is bracket-fill-only — active strategy is ${ctx.activeStrategyId}.`;
+    } else if (bothFeasible) {
+      reason = 'signed-sim ≠ chart-sim end balance, but both ≥ 0 — clamping artifact (Feature 015 design intent: signed sim preserves negative shortfall while chart sim clamps to ≥ 0). Verdict agreement intact.';
+    } else {
+      reason = 'signed-sim end balance differs from chart-sim end balance — signed sim flags shortfall that chart-sim clamping hides.';
+    }
     out.push({
       kind: 'endBalance-mismatch',
       valueA: _round(A),
@@ -678,9 +699,7 @@ function _invariantA(options, ctx) {
       delta: _round(delta),
       deltaPct: Math.round(deltaPct * 10) / 10,
       expected,
-      reason: expected
-        ? `signedLifecycleEndBalance is bracket-fill-only — active strategy is ${ctx.activeStrategyId}.`
-        : 'signed-sim end balance differs from chart-sim end balance.',
+      reason,
       dualBarSeries: {
         labels: ['signed-sim', 'chart-sim'],
         data: [_round(A), _round(B)],
