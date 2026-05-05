@@ -530,6 +530,18 @@
         <div class="hint" data-i18n="vault.settings.exportHint">Plain-text JSON. Encrypted export coming in Phase 10.</div>
       </div>
       <div class="form-row">
+        <label data-i18n="vault.settings.import">Import / Restore from JSON</label>
+        <input id="settings-import-file" type="file" accept="application/json,.json" style="display: none">
+        <div style="display: flex; gap: 6px; margin-bottom: 6px">
+          <button id="settings-import-file-btn" data-i18n="vault.settings.importFileBtn">Choose JSON file</button>
+          <button id="settings-import-paste-btn" data-i18n="vault.settings.importPasteBtn">Paste JSON instead</button>
+        </div>
+        <textarea id="settings-import-textarea" rows="6" placeholder="" style="display: none; width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; margin-bottom: 6px"></textarea>
+        <button id="settings-import-paste-confirm" class="primary" style="display: none" data-i18n="vault.settings.importPasteConfirm">Import pasted JSON</button>
+        <div class="hint" data-i18n="vault.settings.importHint">Replaces ALL current vault data. Confirm before applying. Use this to restore from backup or load a pre-populated seed (e.g., from your Tax folder).</div>
+        <div id="settings-import-status" style="margin-top: 6px"></div>
+      </div>
+      <div class="form-row">
         <label data-i18n="vault.settings.fireImport">Import balances from RR FIRE Dashboard</label>
         <button id="settings-fire-import-btn" data-i18n="vault.settings.fireImportBtn">Inspect FIRE Dashboard localStorage</button>
         <div class="hint" data-i18n="vault.settings.fireImportHint">One-way: reads aggregate bucket totals from FIRE-Dashboard.html's localStorage and shows them so you can manually allocate across vault accounts.</div>
@@ -812,6 +824,17 @@
       'vault.settings.fireImportEmpty': 'No FIRE Dashboard data in this browser\'s localStorage. Open FIRE-Dashboard.html in this same browser first, save state, then return here.',
       'vault.settings.fireImportFound': 'Found FIRE Dashboard state. Buckets shown below are aggregates — assign them across your vault accounts manually:',
       'vault.settings.fireImportError': 'Could not parse FIRE Dashboard state.',
+      'vault.settings.import': 'Import / Restore from JSON',
+      'vault.settings.importFileBtn': 'Choose JSON file',
+      'vault.settings.importPasteBtn': 'Paste JSON instead',
+      'vault.settings.importPasteConfirm': 'Import pasted JSON',
+      'vault.settings.importHint': 'Replaces ALL current vault data. Confirm before applying. Use this to restore from backup or load a pre-populated seed (e.g., from your Tax folder).',
+      'vault.settings.importParseError': 'Invalid JSON: ',
+      'vault.settings.importSchemaError': 'Schema validation failed: ',
+      'vault.settings.importPreview': 'Found {accounts} account(s), {lifeIns} life insurance policy/policies, {contacts} contact(s). REPLACE current vault?',
+      'vault.settings.importConfirm': 'Replace current vault with this data?',
+      'vault.settings.importDone': '✓ Imported {accounts} accounts.',
+      'vault.settings.importPasteHint': 'Paste the contents of vault-prepopulate-rr.json (or any prior export) here.',
     },
     'zh-TW': {
       'vault.title': '家庭財務檔案 — Roger 與 Rebecca',
@@ -1074,6 +1097,17 @@
       'vault.settings.fireImportEmpty': '本瀏覽器 localStorage 內未發現 FIRE Dashboard 資料。請先於同一瀏覽器開啟 FIRE-Dashboard.html 並儲存狀態，再回到此處。',
       'vault.settings.fireImportFound': '已找到 FIRE Dashboard 狀態。下列為合計金額，請手動分配至各帳戶：',
       'vault.settings.fireImportError': '無法解析 FIRE Dashboard 狀態。',
+      'vault.settings.import': '匯入 / 從 JSON 還原',
+      'vault.settings.importFileBtn': '選擇 JSON 檔案',
+      'vault.settings.importPasteBtn': '改用貼上 JSON',
+      'vault.settings.importPasteConfirm': '匯入貼上之 JSON',
+      'vault.settings.importHint': '此操作將取代目前所有檔案資料。請於確認後執行。可用於還原備份或載入預先建立之種子（例如位於 Tax 資料夾的檔案）。',
+      'vault.settings.importParseError': 'JSON 格式錯誤：',
+      'vault.settings.importSchemaError': '資料結構驗證失敗：',
+      'vault.settings.importPreview': '找到 {accounts} 個帳戶、{lifeIns} 張保單、{contacts} 位聯絡人。確定**取代**目前檔案？',
+      'vault.settings.importConfirm': '確定以此資料取代目前檔案？',
+      'vault.settings.importDone': '✓ 已匯入 {accounts} 個帳戶。',
+      'vault.settings.importPasteHint': '請將 vault-prepopulate-rr.json（或任何先前匯出檔）的內容貼上於此。',
     },
   };
 
@@ -3461,6 +3495,82 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /* ============================================================
+     Import vault from JSON (file or paste) — replaces ALL vault data
+     ============================================================ */
+  function importVaultFromText(jsonText) {
+    const status = document.getElementById('settings-import-status');
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      status.innerHTML = '<div style="color: var(--accent-error); font-size: 12px">' + escapeHtml(t('vault.settings.importParseError') + e.message) + '</div>';
+      return;
+    }
+    // Strip _meta and any unknown top-level keys silently before validation
+    const candidate = {
+      version: parsed.version || 'v1',
+      locale: parsed.locale || 'en',
+      apiKey: parsed.apiKey || null,
+      chatboxEnabled: !!parsed.chatboxEnabled,
+      chatboxModel: parsed.chatboxModel || 'claude-opus-4-7',
+      redactAccountNumbersInAI: parsed.redactAccountNumbersInAI !== false,
+      encryption: parsed.encryption || null,
+      accounts: Array.isArray(parsed.accounts) ? parsed.accounts.map(a => Object.assign({}, a, {
+        accountNumberFull: a.accountNumberFull === undefined ? null : a.accountNumberFull,
+        loginUrl: a.loginUrl === undefined ? null : a.loginUrl,
+        contactPhone: a.contactPhone === undefined ? null : a.contactPhone,
+        contactEmail: a.contactEmail === undefined ? null : a.contactEmail,
+        contactAddress: a.contactAddress === undefined ? null : a.contactAddress,
+        beneficiary: a.beneficiary === undefined ? null : a.beneficiary,
+        notes: a.notes === undefined ? null : a.notes,
+        history: Array.isArray(a.history) ? a.history : [],
+        deceasedFlag: a.deceasedFlag || null,
+        accountNumberLast4: a.accountNumberLast4 || '',
+      })) : [],
+      criticalFamilyInfo: parsed.criticalFamilyInfo || {
+        will: null, poaFinancial: null, poaHealthcare: null,
+        healthcareDirective: null, guardianship: null,
+        lifeInsurance: [], passwordVault: null,
+        funeral: { notes: null }, contacts: [],
+      },
+      obligations: parsed.obligations || {},
+      snapshotHistory: Array.isArray(parsed.snapshotHistory) ? parsed.snapshotHistory : [],
+    };
+    const errors = validateVault(candidate);
+    if (errors.length) {
+      status.innerHTML = '<div style="color: var(--accent-error); font-size: 12px; max-height: 100px; overflow-y: auto">' + escapeHtml(t('vault.settings.importSchemaError')) + '<br>' + errors.map(escapeHtml).join('<br>') + '</div>';
+      return;
+    }
+    const cfi = ensureCriticalShape(candidate.criticalFamilyInfo);
+    const previewMsg = t('vault.settings.importPreview', {
+      accounts: candidate.accounts.length,
+      lifeIns: cfi.lifeInsurance.length,
+      contacts: cfi.contacts.length,
+    });
+    if (!window.confirm(previewMsg)) return;
+    state.vault = candidate;
+    saveVault(state.vault);
+    applyLocale();
+    renderInventory();
+    if (state.activeTab === 'critical-info') renderCriticalInfo();
+    if (state.activeTab === 'obligations') renderObligations();
+    if (state.activeTab === 'snapshots') renderSnapshots();
+    status.innerHTML = '<div style="color: var(--accent-success); font-size: 12px">' + escapeHtml(t('vault.settings.importDone', { accounts: candidate.accounts.length })) + '</div>';
+  }
+
+  function importVaultFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      importVaultFromText(String(ev.target.result || ''));
+    };
+    reader.onerror = () => {
+      document.getElementById('settings-import-status').innerHTML =
+        '<div style="color: var(--accent-error); font-size: 12px">File read error</div>';
+    };
+    reader.readAsText(file);
+  }
+
   function wipeVaultWithConfirm() {
     const confirmText = prompt(t('vault.settings.wipeConfirm'));
     if (confirmText === 'WIPE') {
@@ -3548,6 +3658,39 @@
     document.getElementById('settings-wipe-btn').addEventListener('click', wipeVaultWithConfirm);
     const fireImportBtn = document.getElementById('settings-fire-import-btn');
     if (fireImportBtn) fireImportBtn.addEventListener('click', inspectFireDashboard);
+
+    // JSON Import — file picker
+    const importFileInput = document.getElementById('settings-import-file');
+    const importFileBtn = document.getElementById('settings-import-file-btn');
+    if (importFileBtn && importFileInput) {
+      importFileBtn.addEventListener('click', () => importFileInput.click());
+      importFileInput.addEventListener('change', (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        if (f) importVaultFromFile(f);
+        ev.target.value = '';  // reset so re-selecting same file fires change again
+      });
+    }
+
+    // JSON Import — paste flow
+    const importPasteBtn = document.getElementById('settings-import-paste-btn');
+    const importTextarea = document.getElementById('settings-import-textarea');
+    const importPasteConfirm = document.getElementById('settings-import-paste-confirm');
+    if (importPasteBtn && importTextarea && importPasteConfirm) {
+      importPasteBtn.addEventListener('click', () => {
+        const showing = importTextarea.style.display !== 'none';
+        importTextarea.style.display = showing ? 'none' : 'block';
+        importPasteConfirm.style.display = showing ? 'none' : 'block';
+        if (!showing) {
+          importTextarea.placeholder = t('vault.settings.importPasteHint');
+          importTextarea.focus();
+        }
+      });
+      importPasteConfirm.addEventListener('click', () => {
+        const text = importTextarea.value.trim();
+        if (!text) return;
+        importVaultFromText(text);
+      });
+    }
 
     // Procedure modal
     document.getElementById('procedure-close-btn').addEventListener('click', () => hideModal('procedure-modal'));
