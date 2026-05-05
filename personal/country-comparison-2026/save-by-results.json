@@ -1,0 +1,348 @@
+{
+  "generated": "2026-05-05T19:01:59.885Z",
+  "scenarios": [
+    {
+      "id": "us",
+      "name": "US (Massachusetts)",
+      "annualSpend": 96000,
+      "feasible": true,
+      "fireAge": 59,
+      "yearsToFire": 17,
+      "fourPctRuleTarget": 2400000,
+      "calcEngineRequired_real": 1849093.05136569,
+      "calcEngineRequired_eff_real": 1730252.8486282649,
+      "saveByTarget_nominal": 3056269.0717999297,
+      "saveByTarget_eff_nominal": 2859844.3240866815,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 1030727.0726266798
+    },
+    {
+      "id": "taiwan",
+      "name": "Taiwan (Taichung)",
+      "annualSpend": 42000,
+      "feasible": true,
+      "fireAge": 55,
+      "yearsToFire": 13,
+      "fourPctRuleTarget": 1050000,
+      "calcEngineRequired_real": 1502196.2855592472,
+      "calcEngineRequired_eff_real": 1419161.9795337522,
+      "saveByTarget_nominal": 2206025.8895654688,
+      "saveByTarget_eff_nominal": 2084087.2117939747,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 710510.0215766411
+    },
+    {
+      "id": "thailand",
+      "name": "Thailand (Bangkok)",
+      "annualSpend": 54000,
+      "feasible": true,
+      "fireAge": 56,
+      "yearsToFire": 14,
+      "fourPctRuleTarget": 1350000,
+      "calcEngineRequired_real": 1519620.1369816172,
+      "calcEngineRequired_eff_real": 1428153.898715102,
+      "saveByTarget_nominal": 2298561.8048813115,
+      "saveByTarget_eff_nominal": 2160210.9127082312,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 465097.192710996
+    },
+    {
+      "id": "china",
+      "name": "China (Shanghai)",
+      "annualSpend": 66000,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1650000,
+      "calcEngineRequired_real": 1626620.942460882,
+      "calcEngineRequired_eff_real": 1526385.4946637065,
+      "saveByTarget_nominal": 2534222.4275144823,
+      "saveByTarget_eff_nominal": 2378058.8658580957,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 696081.4735855868
+    },
+    {
+      "id": "vietnam",
+      "name": "Vietnam (HCM/Da Nang)",
+      "annualSpend": 36000,
+      "feasible": true,
+      "fireAge": 54,
+      "yearsToFire": 12,
+      "fourPctRuleTarget": 900000,
+      "calcEngineRequired_real": 1398173.3514992762,
+      "calcEngineRequired_eff_real": 1323246.6726286078,
+      "saveByTarget_nominal": 1993460.8775983031,
+      "saveByTarget_eff_nominal": 1886633.3494832201,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 600922.8445731704
+    },
+    {
+      "id": "philippines",
+      "name": "Philippines (Boracay)",
+      "annualSpend": 30000,
+      "feasible": true,
+      "fireAge": 54,
+      "yearsToFire": 12,
+      "fourPctRuleTarget": 750000,
+      "calcEngineRequired_real": 1404173.3514992762,
+      "calcEngineRequired_eff_real": 1329246.6726286078,
+      "saveByTarget_nominal": 2002015.4429193803,
+      "saveByTarget_eff_nominal": 1895187.9148042973,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 1001338.0226255251
+    },
+    {
+      "id": "indonesia",
+      "name": "Indonesia (Bali, Ubud)",
+      "annualSpend": 42000,
+      "feasible": true,
+      "fireAge": 55,
+      "yearsToFire": 13,
+      "fourPctRuleTarget": 1050000,
+      "calcEngineRequired_real": 1502196.2855592472,
+      "calcEngineRequired_eff_real": 1419161.9795337522,
+      "saveByTarget_nominal": 2206025.8895654688,
+      "saveByTarget_eff_nominal": 2084087.2117939747,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 710510.0215766411
+    },
+    {
+      "id": "japan",
+      "name": "Japan (Tokyo)",
+      "annualSpend": 66000,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1650000,
+      "calcEngineRequired_real": 1626620.942460882,
+      "calcEngineRequired_eff_real": 1526385.4946637065,
+      "saveByTarget_nominal": 2534222.4275144823,
+      "saveByTarget_eff_nominal": 2378058.8658580957,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 696081.4735855868
+    },
+    {
+      "id": "singapore",
+      "name": "Singapore",
+      "annualSpend": 120000,
+      "feasible": true,
+      "fireAge": 61,
+      "yearsToFire": 19,
+      "fourPctRuleTarget": 3000000,
+      "calcEngineRequired_real": 2183166.884357131,
+      "calcEngineRequired_eff_real": 2044203.778676332,
+      "saveByTarget_nominal": 3828196.346597706,
+      "saveByTarget_eff_nominal": 3584523.699632032,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": {
+          "age": 59,
+          "year": 2043,
+          "balance": 2101493.0513656903
+        },
+        "3M": null
+      },
+      "endBalanceReal": 1172670.1367016141
+    },
+    {
+      "id": "hybrid_jp_tw",
+      "name": "Hybrid: Japan + Taiwan",
+      "annualSpend": 57000,
+      "isHybrid": true,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1425000,
+      "calcEngineRequired_real": 1635620.942460882,
+      "calcEngineRequired_eff_real": 1535385.4946637065,
+      "saveByTarget_nominal": 2548244.134263889,
+      "saveByTarget_eff_nominal": 2392080.572607503,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 1285089.1193934374
+    },
+    {
+      "id": "hybrid_jp_th",
+      "name": "Hybrid: Japan + Thailand",
+      "annualSpend": 60000,
+      "isHybrid": true,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1500000,
+      "calcEngineRequired_real": 1632620.942460882,
+      "calcEngineRequired_eff_real": 1532385.4946637065,
+      "saveByTarget_nominal": 2543570.2320140866,
+      "saveByTarget_eff_nominal": 2387406.6703577004,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 1088753.2374574875
+    },
+    {
+      "id": "hybrid_jp_ph",
+      "name": "Hybrid: Japan + Philippines",
+      "annualSpend": 51000,
+      "isHybrid": true,
+      "feasible": true,
+      "fireAge": 56,
+      "yearsToFire": 14,
+      "fourPctRuleTarget": 1275000,
+      "calcEngineRequired_real": 1522620.1369816172,
+      "calcEngineRequired_eff_real": 1431153.898715102,
+      "saveByTarget_nominal": 2303099.5740558766,
+      "saveByTarget_eff_nominal": 2164748.681882797,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 678282.6198819317
+    }
+  ]
+}

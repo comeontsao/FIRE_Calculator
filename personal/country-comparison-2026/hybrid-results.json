@@ -1,0 +1,89 @@
+{
+  "generated": "2026-05-05T19:33:50.285Z",
+  "scenarios": [
+    {
+      "id": "hybrid_jp_tw",
+      "name": "Hybrid: Japan + Taiwan (50/50)",
+      "annualSpend": 57000,
+      "notes": "6mo Japan ($33k) + 6mo Taiwan ($21k) + flights/transit ($3k). <180 days each = no tax residency anywhere extra.",
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "feasible": true,
+      "endBalanceReal": 1285089.1193934374,
+      "balanceAtUnlockReal": 1414157.3558203178,
+      "balanceAtSSReal": 1301245.9391656565,
+      "fireNumber": 1425000,
+      "lifetimeSpend": 3306000
+    },
+    {
+      "id": "hybrid_jp_th",
+      "name": "Hybrid: Japan + Thailand (50/50)",
+      "annualSpend": 60000,
+      "notes": "6mo Japan ($33k) + 6mo Thailand ($27k) + flights ($3k). LTR visa needed for Thailand half.",
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "feasible": true,
+      "endBalanceReal": 1088753.2374574875,
+      "balanceAtUnlockReal": 1401417.9638203178,
+      "balanceAtSSReal": 1260786.8849420256,
+      "fireNumber": 1500000,
+      "lifetimeSpend": 3480000
+    },
+    {
+      "id": "hybrid_jp_ph",
+      "name": "Hybrid: Japan + Philippines (50/50)",
+      "annualSpend": 51000,
+      "notes": "6mo Japan ($33k) + 6mo Philippines ($15k) + flights ($3k). SRRV needed for PH half.",
+      "fireAge": 56,
+      "yearsToFire": 14,
+      "feasible": true,
+      "endBalanceReal": 678282.6198819317,
+      "balanceAtUnlockReal": 1197007.4744763179,
+      "balanceAtSSReal": 1062881.2763331712,
+      "fireNumber": 1275000,
+      "lifetimeSpend": 2958000
+    },
+    {
+      "id": "hybrid_jp_id",
+      "name": "Hybrid: Japan + Indonesia/Bali (50/50)",
+      "annualSpend": 57000,
+      "notes": "6mo Japan ($33k) + 6mo Bali ($21k) + flights ($3k). Retirement KITAS needed for Bali half (age 55+). WEATHER: Bali wet season Nov-Apr conflicts with winter-escape goal.",
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "feasible": true,
+      "endBalanceReal": 1285089.1193934374,
+      "balanceAtUnlockReal": 1414157.3558203178,
+      "balanceAtSSReal": 1301245.9391656565,
+      "fireNumber": 1425000,
+      "lifetimeSpend": 3306000
+    },
+    {
+      "id": "taiwan_only",
+      "name": "Taiwan only",
+      "annualSpend": 42000,
+      "notes": "Boss's baseline Taiwan scenario",
+      "fireAge": 55,
+      "yearsToFire": 13,
+      "feasible": true,
+      "endBalanceReal": 710510.0215766411,
+      "balanceAtUnlockReal": 1107785.9383841576,
+      "balanceAtSSReal": 1016556.471925324,
+      "fireNumber": 1050000,
+      "lifetimeSpend": 2436000
+    },
+    {
+      "id": "japan_only",
+      "name": "Japan only",
+      "annualSpend": 66000,
+      "notes": "Boss's baseline Japan scenario",
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "feasible": true,
+      "endBalanceReal": 696081.4735855868,
+      "balanceAtUnlockReal": 1375939.1798203178,
+      "balanceAtSSReal": 1179868.776494764,
+      "fireNumber": 1650000,
+      "lifetimeSpend": 3828000
+    }
+  ]
+}
