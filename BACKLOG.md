@@ -419,6 +419,35 @@ Remaining manual gate: open both files in a real browser, run the 5-step smoke p
 
 ---
 
+## Done in feature 025 — Family Financial Vault (RR-only) (2026-05-04)
+
+Brand-new RR-only single-file HTML app `FIRE-Family-Vault-RR.html`, beside FIRE-Dashboard.html. Estate-planning playbook + monthly check-in companion. Bilingual EN + zh-TW from v1. Optional Claude Opus 4.7 chatbox with locked context. Local-only: zero outbound network calls in chatbox-disabled mode.
+
+### Stories shipped
+
+- **US1 (P1) — Account inventory CRUD**: 13 account categories (US bank joint/solo, US brokerage TOD/JTWROS, employer Roth/Trad 401k, traditional/Roth IRA, Taiwan bank, China bank, Taiwan life insurance, Ark7 REIT, other). Filter by Owner / Country. localStorage namespace `vault.rr.v1`. Schema validation + immutable updates per CLAUDE.md style.
+- **US2 (P1) — Death-procedure playbook**: Hand-authored knowledge base for all 13 categories × EN + zh-TW. Each entry has `whoToContact`, `expectedTimeline`, `paperworkChecklist`, `taxStrategyNotes`, `commonMistakes`. UPPAbaby HR contact placeholders (`hrContactName/Phone/Email`) on `employer-401k-roth` + `employer-401k-trad` entries — Roger fills before merge per locked decision 6. Disclaimer banner on every panel. Print-procedure button.
+- **US3 (P1) — Inherited-account withdrawal calculator**: 3-strategy comparison (lump-sum / even-tenths / bracket-fill) with year-by-year breakdown. IRMAA + ACA + AMT cliff badges. Roth-aware — federal tax shows $0 but cliffs still surface (locked decision 7). Bracket-fill saves 12.9% nominal tax + avoids ACA + AMT cliffs on the SC-003 fixture ($500K Trad + $60K other income, Single).
+- **US4 (P2) — Recurring tax obligations calendar**: 10 obligations pre-populated from `2025_Tax_Filing_Guide_FATCA_FBAR.md` (FBAR Roger, FBAR Rebecca, Federal 1040, MA Form 1, Form 8938 FATCA, four 1040-ES quarters, charitable-receipts year-end reminder). Per-year done flags. Overdue + 30-day approaching banners.
+- **US5 (P2) — Claude API chatbox**: Default model `claude-opus-4-7`. System prompt embeds the vault JSON with redacted account numbers (FR-032), enforces refusal patterns, requires citations. `cache_control: ephemeral` on system block for prompt caching. Show-system-prompt debug toggle. Reset-key button. Single POST to api.anthropic.com per submission.
+- **US6 (P2) — Monthly snapshot history**: Refresh-balances flow appends to per-account `history[]`. CSV export with vault-snapshot-YYYY-MM-DD.csv naming. Total / delta-from-last / stale-account summary cards. Passive "Last updated: N days ago" caption per locked decision 4 (no nag UI).
+- **US7 (P2) — Critical Family Info**: 8 subsections — will, POA financial, POA healthcare, healthcare directive, guardianship, life insurance[], password vault, funeral, contacts[]. Inline auto-save on blur. Lifecycle-aware "If something has happened" CTA on home page switches to this tab.
+- **US8 (P3) — Import from RR FIRE Dashboard**: Settings → "Inspect FIRE Dashboard localStorage" button reads `fire_dashboard_state` and surfaces recognizable bucket totals (stocks, cash, roth401k, ira, homeEquity, etc.) so the user can manually allocate them across vault accounts.
+- **US9 (P1) — Privacy architecture**: Static grep test (`tests/vault/no-external-resources.test.js`) enforces zero `<script src="http*">`, `<link>`, `<iframe>`, `<img>`, `@import`, or `url()` to external origins. Allow-list of in-text URL references: api.anthropic.com (chatbox POST), console.anthropic.com (instructional link), bsaefiling.fincen.gov (FBAR), irs.gov (1040-ES). No analytics/telemetry markers. Encryption toggle present (default OFF per locked decision 3); cipher implementation deferred to v1.1.
+
+### Bilingual
+
+EN + zh-TW from v1 per locked decision 1. ~250 new translation keys; every UI string + every procedure block + every obligation label has both. Test asserts parity (`tests/vault/schema.test.js` + `tests/vault/procedure-lookup.test.js`).
+
+**Tests**: 503 → **557 passing** (+54 vault tests across schema, privacy, procedure-lookup, withdrawal calc). 1 intentional skip preserved. 0 failures.
+
+**Files added**: `FIRE-Family-Vault-RR.html` (~3,200 LOC); `specs/025-family-financial-vault/` (10 docs); `tests/vault/` (4 test files).
+**Files modified**: none — feature is structurally a new file alongside the existing dashboards. Lockstep rule does NOT apply (RR-only by design).
+
+**Pending user gate**: (a) browser smoke per `specs/025-family-financial-vault/quickstart.md`; (b) Roger provides UPPAbaby HR contact info to bake into the procedure entries.
+
+---
+
 ## Done in feature 024 — Deferred Fixes Cleanup (2026-05-02 → 2026-05-03)
 
 Bundles 5 deferred backlog items + 023 docs drift cleanup. Initial 5 commits 2026-05-02; scope expansion 2026-05-03 added 3 more user-validation findings while branch was awaiting browser-smoke gate.
