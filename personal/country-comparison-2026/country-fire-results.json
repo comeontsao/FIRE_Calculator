@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-05T17:33:15.713Z",
+  "generated": "2026-05-06T14:24:56.983Z",
   "baseline": {
     "ageRoger": 42,
     "ageRebecca": 41,
@@ -278,33 +278,33 @@
       "id": "japan",
       "name": "Japan (Tokyo)",
       "flag": "🇯🇵",
-      "annualSpend": 66000,
-      "notes": "NHI is excellent and cheap (~$300/mo couple post-65). Japanese language is the daily-life tax.",
+      "annualSpend": 78000,
+      "notes": "Furnished serviced apartment for hybrid use case (no Japanese tax residency = cant sign long-term lease). NHI is excellent and cheap (~$300/mo couple post-65). Japanese language is the daily-life tax.",
       "relocationCost": 20000,
       "safe": {
         "feasible": true,
-        "fireAge": 57,
-        "yearsToFire": 15,
-        "endBalanceReal": 696081.4735855868,
-        "balanceAtUnlockReal": 1375939.1798203178,
-        "balanceAtSSReal": 1179868.776494764,
-        "fireNumberSWR": 1650000,
-        "balanceAtFireAge": 1626620.942460882,
+        "fireAge": 58,
+        "yearsToFire": 16,
+        "endBalanceReal": 1017588.1097824306,
+        "balanceAtUnlockReal": 1588649.733420318,
+        "balanceAtSSReal": 1365001.8199851008,
+        "fireNumberSWR": 1950000,
+        "balanceAtFireAge": 1738381.7801593174,
         "lifecycleLength": 59
       },
       "exact": {
         "feasible": true,
-        "fireAge": 57,
-        "yearsToFire": 15,
-        "endBalanceReal": 696081.4735855868,
-        "balanceAtUnlockReal": 1375939.1798203178,
-        "balanceAtSSReal": 1179868.776494764,
-        "fireNumberSWR": 1650000,
-        "balanceAtFireAge": 1626620.942460882,
+        "fireAge": 58,
+        "yearsToFire": 16,
+        "endBalanceReal": 1017588.1097824306,
+        "balanceAtUnlockReal": 1588649.733420318,
+        "balanceAtSSReal": 1365001.8199851008,
+        "fireNumberSWR": 1950000,
+        "balanceAtFireAge": 1738381.7801593174,
         "lifecycleLength": 59
       },
-      "fireNumberSWR": 1650000,
-      "lifetimeSpend58yrs": 3828000
+      "fireNumberSWR": 1950000,
+      "lifetimeSpend58yrs": 4524000
     },
     {
       "id": "singapore",

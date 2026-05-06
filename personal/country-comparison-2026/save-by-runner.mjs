@@ -43,12 +43,12 @@ const SCENARIOS = [
   { id: 'vietnam', name: 'Vietnam (HCM/Da Nang)', annualSpend: 36000 },
   { id: 'philippines', name: 'Philippines (Boracay)', annualSpend: 30000 },
   { id: 'indonesia', name: 'Indonesia (Bali, Ubud)', annualSpend: 42000 },
-  { id: 'japan', name: 'Japan (Tokyo)', annualSpend: 66000 },
+  { id: 'japan', name: 'Japan (Tokyo)', annualSpend: 78000 },
   { id: 'singapore', name: 'Singapore', annualSpend: 120000 },
   // Hybrids
-  { id: 'hybrid_jp_tw', name: 'Hybrid: Japan + Taiwan', annualSpend: 57000, isHybrid: true },
-  { id: 'hybrid_jp_th', name: 'Hybrid: Japan + Thailand', annualSpend: 60000, isHybrid: true },
-  { id: 'hybrid_jp_ph', name: 'Hybrid: Japan + Philippines', annualSpend: 51000, isHybrid: true },
+  { id: 'hybrid_jp_tw', name: 'Hybrid: Japan + Taiwan', annualSpend: 63000, isHybrid: true },
+  { id: 'hybrid_jp_th', name: 'Hybrid: Japan + Thailand', annualSpend: 69000, isHybrid: true },
+  { id: 'hybrid_jp_ph', name: 'Hybrid: Japan + Philippines', annualSpend: 57000, isHybrid: true },
 ];
 
 function buildInputs(annualSpend) {

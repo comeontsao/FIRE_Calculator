@@ -1,5 +1,8 @@
 # Boss's Multi-Country FIRE Comparison — May 2026
 
+
+> **Update (May 2026):** Japan housing baseline set at **$3,200/mo (Tokyo serviced 2BR, conservative apartment-japan/Blueground tier)** for planning. Japan solo annual: $78k. Realistic upside: Hmlet/Sumyca in Setagaya/Suginami can deliver 2BR around $2,500/mo, which would shift Japan solo FIRE from 58→57 and JP+PH hybrid from 57→56. Plan tight at the conservative tier; treat actual cheaper rent as bonus FIRE acceleration.
+
 ## What's in here
 
 - **`Boss-Country-FIRE-Deck.pptx`** — 17-slide executive deck (cover, TL;DR, ranking charts, comparison table, **visa-tier strategic map**, one slide per country with **integrated visa pathway**, recommendation, methodology).
@@ -18,7 +21,7 @@
 | 4 | Indonesia (Bali, Ubud) | $42k | 13 | 55 | $0.71M |
 | 5 | Thailand (Bangkok) | $54k | 14 | 56 | $0.47M |
 | 6 | China (Shanghai) | $66k | 15 | 57 | $0.70M |
-| 7 | Japan (Tokyo) | $66k | 15 | 57 | $0.70M |
+| 7 | Japan (Tokyo) | $78k | 16 | 58 | $1.02M |  ← updated May 2026 (housing baseline corrected to serviced apt)
 | 8 | US (Massachusetts) | $96k | 17 | 59 | $1.03M |
 | 9 | Singapore | $120k | 19 | 61 | $1.17M |
 
@@ -49,16 +52,16 @@ The strongest play: **Japan Apr-Sep + Tropical Oct-Mar**. Catches Japan's hanami
 
 | Plan | Annual Spend | Yrs to FIRE | FIRE Age | Weather Sync | Verdict |
 |------|--------------|-------------|----------|--------------|---------|
-| **Japan ⇄ Philippines (Boracay)** | **$51k** | **14** | **56** | ✅ PH dry Dec-May | **BOSS'S BEST FIT** |
-| Japan ⇄ Thailand (Bangkok/Phuket) | $60k | 15 | 57 | ✅ TH dry Nov-Apr | Premium urban option |
-| Japan ⇄ Indonesia (Bali) | $57k | 15 | 57 | ❌ Bali WET Nov-Apr | Weather mismatch |
-| Japan ⇄ Taiwan | $57k | 15 | 57 | (subtropical, not tropical) | Best non-tropical |
+| **Japan ⇄ Philippines (Boracay)** | **$57k** | **15** | **57** | ✅ PH dry Dec-May | **BOSS'S BEST FIT** |
+| Japan ⇄ Thailand (Bangkok/Phuket) | $69k | 15 | 57 | ✅ TH dry Nov-Apr | Premium urban option |
+| Japan ⇄ Indonesia (Bali) | $63k | 15 | 57 | ❌ Bali WET Nov-Apr | Weather mismatch |
+| Japan ⇄ Taiwan | $63k | 15 | 57 | (subtropical, not tropical) | Best non-tropical |
 | (Taiwan only) | $42k | 13 | 55 | n/a | Solo TW baseline |
-| (Japan only) | $66k | 15 | 57 | n/a | Solo JP — but no visa solution |
+| (Japan only) | $78k | 16 | 58 | n/a | Solo JP — but no visa solution |
 
 **Japan + Philippines wins on every axis:**
-- **Cost**: $51k/yr (cheapest hybrid)
-- **FIRE age**: 56 (1 year FASTER than Japan-only at 57)
+- **Cost**: $57k/yr (cheapest hybrid)
+- **FIRE age**: 57 (1 year FASTER than Japan-only at 58)
 - **Flight**: 4 hrs Tokyo↔Manila (closest)
 - **Visa**: SRRV — easiest in Asia ($10k deposit, 20-30 day approval)
 - **Language**: English (official) — no daily-life tax
@@ -120,11 +123,11 @@ The plan IS the flexibility, not the calendar. Build optionality with financial 
 | Vietnam (HCM/Da Nang) | 54 | $36k | $0.90M | **$1.40M** | $1.99M | +55% |
 | Philippines (Boracay) | 54 | $30k | $0.75M | **$1.40M** | $2.00M | +87% |
 | Indonesia (Bali, Ubud) | 55 | $42k | $1.05M | **$1.50M** | $2.21M | +43% |
-| Japan (Tokyo) | 57 | $66k | $1.65M | **$1.63M** | $2.53M | -1% |
+| Japan (Tokyo) | 58 | $78k | $1.95M | **$1.74M** | $2.79M | -11% |
 | Singapore | 61 | $120k | $3.00M | **$2.18M** | $3.83M | -27% |
-| **Hybrid: Japan + Taiwan** | 57 | $57k | $1.43M | **$1.64M** | $2.55M | +15% |
-| **Hybrid: Japan + Thailand** | 57 | $60k | $1.50M | **$1.63M** | $2.54M | +9% |
-| **Hybrid: Japan + Philippines** | 56 | $51k | $1.27M | **$1.52M** | $2.30M | +19% |
+| **Hybrid: Japan + Taiwan** | 57 | $63k | $1.57M | **$1.63M** | $2.54M | +4% |
+| **Hybrid: Japan + Thailand** | 57 | $69k | $1.73M | **$1.62M** | $2.53M | -6% |
+| **Hybrid: Japan + Philippines** | 57 | $57k | $1.43M | **$1.64M** | $2.55M | +15% |
 
 **Three views:**
 - **4% rule** = annual spend × 25 (conservative — assumes you fund spend from portfolio forever, no SS).

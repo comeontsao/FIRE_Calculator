@@ -150,8 +150,8 @@ const COUNTRIES = [
     id: 'japan',
     name: 'Japan (Tokyo)',
     flag: '🇯🇵',
-    annualSpend: 66000,   // $5.5k/mo: central Tokyo 2BR, NHI + supplement
-    notes: 'NHI is excellent and cheap (~$300/mo couple post-65). Japanese language is the daily-life tax.',
+    annualSpend: 78000,   // $6.5k/mo: central Tokyo 2BR FURNISHED SERVICED ($3.2k housing) + NHI + supplement. Updated May 2026 after Boss flagged apartment-japan.com pricing.
+    notes: 'Furnished serviced apartment for hybrid use case (no Japanese tax residency = cant sign long-term lease). NHI is excellent and cheap (~$300/mo couple post-65). Japanese language is the daily-life tax.',
     relocationCost: 20000,
   },
   {

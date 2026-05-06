@@ -35,17 +35,17 @@ const ROGER_BASELINE = {
 };
 
 const SCENARIOS = [
-  { id: 'hybrid_jp_tw', name: 'Hybrid: Japan + Taiwan (50/50)', annualSpend: 57000,
-    notes: '6mo Japan ($33k) + 6mo Taiwan ($21k) + flights/transit ($3k). <180 days each = no tax residency anywhere extra.' },
-  { id: 'hybrid_jp_th', name: 'Hybrid: Japan + Thailand (50/50)', annualSpend: 60000,
-    notes: '6mo Japan ($33k) + 6mo Thailand ($27k) + flights ($3k). LTR visa needed for Thailand half.' },
-  { id: 'hybrid_jp_ph', name: 'Hybrid: Japan + Philippines (50/50)', annualSpend: 51000,
-    notes: '6mo Japan ($33k) + 6mo Philippines ($15k) + flights ($3k). SRRV needed for PH half.' },
-  { id: 'hybrid_jp_id', name: 'Hybrid: Japan + Indonesia/Bali (50/50)', annualSpend: 57000,
-    notes: '6mo Japan ($33k) + 6mo Bali ($21k) + flights ($3k). Retirement KITAS needed for Bali half (age 55+). WEATHER: Bali wet season Nov-Apr conflicts with winter-escape goal.' },
+  { id: 'hybrid_jp_tw', name: 'Hybrid: Japan + Taiwan (50/50)', annualSpend: 63000,
+    notes: '6mo Japan ($39k) + 6mo Taiwan ($21k) + flights/transit ($3k). <180 days each = no tax residency anywhere extra.' },
+  { id: 'hybrid_jp_th', name: 'Hybrid: Japan + Thailand (50/50)', annualSpend: 69000,
+    notes: '6mo Japan ($39k) + 6mo Thailand ($27k) + flights ($3k). LTR visa needed for Thailand half.' },
+  { id: 'hybrid_jp_ph', name: 'Hybrid: Japan + Philippines (50/50)', annualSpend: 57000,
+    notes: '6mo Japan ($39k) + 6mo Philippines ($15k) + flights ($3k). SRRV needed for PH half.' },
+  { id: 'hybrid_jp_id', name: 'Hybrid: Japan + Indonesia/Bali (50/50)', annualSpend: 63000,
+    notes: '6mo Japan ($39k) + 6mo Bali ($21k) + flights ($3k). Retirement KITAS needed for Bali half (age 55+). WEATHER: Bali wet season Nov-Apr conflicts with winter-escape goal.' },
   // Re-include the relevant baselines for context
   { id: 'taiwan_only', name: 'Taiwan only', annualSpend: 42000, notes: 'Boss\'s baseline Taiwan scenario' },
-  { id: 'japan_only',  name: 'Japan only',  annualSpend: 66000, notes: 'Boss\'s baseline Japan scenario' },
+  { id: 'japan_only',  name: 'Japan only',  annualSpend: 78000, notes: 'Boss\'s baseline Japan scenario' },
 ];
 
 function buildInputs(scenarioId, annualSpend, mode) {

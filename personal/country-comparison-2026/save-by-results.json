@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-05T19:01:59.885Z",
+  "generated": "2026-05-06T14:24:57.472Z",
   "scenarios": [
     {
       "id": "us",
@@ -200,15 +200,15 @@
     {
       "id": "japan",
       "name": "Japan (Tokyo)",
-      "annualSpend": 66000,
+      "annualSpend": 78000,
       "feasible": true,
-      "fireAge": 57,
-      "yearsToFire": 15,
-      "fourPctRuleTarget": 1650000,
-      "calcEngineRequired_real": 1626620.942460882,
-      "calcEngineRequired_eff_real": 1526385.4946637065,
-      "saveByTarget_nominal": 2534222.4275144823,
-      "saveByTarget_eff_nominal": 2378058.8658580957,
+      "fireAge": 58,
+      "yearsToFire": 16,
+      "fourPctRuleTarget": 1950000,
+      "calcEngineRequired_real": 1738381.7801593174,
+      "calcEngineRequired_eff_real": 1629026.3544502547,
+      "saveByTarget_nominal": 2789592.436233671,
+      "saveByTarget_eff_nominal": 2614109.0804479485,
       "milestones": {
         "500k": {
           "age": 43,
@@ -223,7 +223,7 @@
         "2M": null,
         "3M": null
       },
-      "endBalanceReal": 696081.4735855868
+      "endBalanceReal": 1017588.1097824306
     },
     {
       "id": "singapore",
@@ -260,6 +260,64 @@
     {
       "id": "hybrid_jp_tw",
       "name": "Hybrid: Japan + Taiwan",
+      "annualSpend": 63000,
+      "isHybrid": true,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1575000,
+      "calcEngineRequired_real": 1629620.942460882,
+      "calcEngineRequired_eff_real": 1529385.4946637065,
+      "saveByTarget_nominal": 2538896.329764284,
+      "saveByTarget_eff_nominal": 2382732.768107898,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 892417.3555215374
+    },
+    {
+      "id": "hybrid_jp_th",
+      "name": "Hybrid: Japan + Thailand",
+      "annualSpend": 69000,
+      "isHybrid": true,
+      "feasible": true,
+      "fireAge": 57,
+      "yearsToFire": 15,
+      "fourPctRuleTarget": 1725000,
+      "calcEngineRequired_real": 1623620.942460882,
+      "calcEngineRequired_eff_real": 1523385.4946637065,
+      "saveByTarget_nominal": 2529548.52526468,
+      "saveByTarget_eff_nominal": 2373384.9636082933,
+      "milestones": {
+        "500k": {
+          "age": 43,
+          "year": 2027,
+          "balance": 541720
+        },
+        "1M": {
+          "age": 49,
+          "year": 2033,
+          "balance": 1015770.7967271734
+        },
+        "2M": null,
+        "3M": null
+      },
+      "endBalanceReal": 499745.5916496372
+    },
+    {
+      "id": "hybrid_jp_ph",
+      "name": "Hybrid: Japan + Philippines",
       "annualSpend": 57000,
       "isHybrid": true,
       "feasible": true,
@@ -285,64 +343,6 @@
         "3M": null
       },
       "endBalanceReal": 1285089.1193934374
-    },
-    {
-      "id": "hybrid_jp_th",
-      "name": "Hybrid: Japan + Thailand",
-      "annualSpend": 60000,
-      "isHybrid": true,
-      "feasible": true,
-      "fireAge": 57,
-      "yearsToFire": 15,
-      "fourPctRuleTarget": 1500000,
-      "calcEngineRequired_real": 1632620.942460882,
-      "calcEngineRequired_eff_real": 1532385.4946637065,
-      "saveByTarget_nominal": 2543570.2320140866,
-      "saveByTarget_eff_nominal": 2387406.6703577004,
-      "milestones": {
-        "500k": {
-          "age": 43,
-          "year": 2027,
-          "balance": 541720
-        },
-        "1M": {
-          "age": 49,
-          "year": 2033,
-          "balance": 1015770.7967271734
-        },
-        "2M": null,
-        "3M": null
-      },
-      "endBalanceReal": 1088753.2374574875
-    },
-    {
-      "id": "hybrid_jp_ph",
-      "name": "Hybrid: Japan + Philippines",
-      "annualSpend": 51000,
-      "isHybrid": true,
-      "feasible": true,
-      "fireAge": 56,
-      "yearsToFire": 14,
-      "fourPctRuleTarget": 1275000,
-      "calcEngineRequired_real": 1522620.1369816172,
-      "calcEngineRequired_eff_real": 1431153.898715102,
-      "saveByTarget_nominal": 2303099.5740558766,
-      "saveByTarget_eff_nominal": 2164748.681882797,
-      "milestones": {
-        "500k": {
-          "age": 43,
-          "year": 2027,
-          "balance": 541720
-        },
-        "1M": {
-          "age": 49,
-          "year": 2033,
-          "balance": 1015770.7967271734
-        },
-        "2M": null,
-        "3M": null
-      },
-      "endBalanceReal": 678282.6198819317
     }
   ]
 }
