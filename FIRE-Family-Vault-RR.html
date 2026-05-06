@@ -1,0 +1,3794 @@
+<!DOCTYPE html>
+<!--
+  FIRE-Family-Vault-RR.html — Family Financial Vault (RR-only)
+  Feature 025-family-financial-vault. Spec: specs/025-family-financial-vault/spec.md
+
+  Privacy posture: zero outbound network calls except explicit Claude POST when
+  the chatbox is enabled (off by default). All data lives in localStorage under
+  vault.rr.v1. Optional AES-GCM encryption (default OFF).
+
+  This file is RR-only; the lockstep rule with FIRE-Dashboard-Generic.html does
+  NOT apply.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Family Financial Vault — Roger & Rebecca</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a1f2e;
+      --card-2: #232936;
+      --border: #2a3142;
+      --text: #e8ecf1;
+      --text-dim: #8b96a8;
+      --text-faint: #5a6478;
+      --accent: #5b9eff;
+      --accent-warn: #f5b342;
+      --accent-error: #ef5350;
+      --accent-success: #66bb6a;
+      --accent-purple: #b07dff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "Microsoft YaHei", "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    header.topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    header.topbar h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.2px; }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+    button, .btn {
+      background: var(--card-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button:hover, .btn:hover { background: var(--border); border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { background: #4a8de0; border-color: #4a8de0; }
+    button.danger { background: var(--accent-error); color: #fff; border-color: var(--accent-error); }
+    button.danger:hover { background: #d63a37; border-color: #d63a37; }
+    button.ghost { background: transparent; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    .critical-cta {
+      background: linear-gradient(135deg, #c62828 0%, #8b1717 100%);
+      color: #fff;
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      text-align: center;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border: 1px solid rgba(255,255,255,0.15);
+      transition: transform 0.1s;
+    }
+    .critical-cta:hover { transform: translateY(-1px); }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 10px 18px;
+      cursor: pointer;
+      color: var(--text-dim);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .section-header h2 { font-size: 18px; font-weight: 600; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .summary-card {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .summary-card .label { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+
+    .filter-bar {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 14px;
+      padding: 12px;
+      background: var(--card-2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .filter-group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .filter-group .label { color: var(--text-dim); font-size: 12px; margin-right: 4px; }
+    .chip {
+      padding: 4px 12px;
+      border-radius: 14px;
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      color: var(--text-dim);
+    }
+    .chip:hover { color: var(--text); }
+    .chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .account-row {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) minmax(120px, auto) minmax(140px, auto) minmax(120px, auto) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      background: var(--card-2);
+    }
+    .account-row:hover { border-color: var(--accent); }
+    .account-row .institution { font-weight: 600; }
+    .account-row .meta-line { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+    .account-row .balance { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .account-row .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .account-row .actions button { padding: 4px 10px; font-size: 12px; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .badge.owner-roger { color: #5b9eff; border-color: #5b9eff; }
+    .badge.owner-rebecca { color: #b07dff; border-color: #b07dff; }
+    .badge.owner-joint { color: #66bb6a; border-color: #66bb6a; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+    }
+    .empty-state h2 { font-size: 22px; color: var(--text); margin-bottom: 10px; }
+
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 24px;
+      width: min(540px, 100%);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal h3 { font-size: 17px; margin-bottom: 16px; }
+
+    .form-row { margin-bottom: 12px; }
+    .form-row label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .form-row input,
+    .form-row select,
+    .form-row textarea {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .form-row input:focus,
+    .form-row select:focus,
+    .form-row textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .form-row .hint { color: var(--text-faint); font-size: 11px; margin-top: 2px; }
+    .form-row .error { color: var(--accent-error); font-size: 12px; margin-top: 4px; }
+
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .disclaimer {
+      background: rgba(245, 179, 66, 0.08);
+      border: 1px solid rgba(245, 179, 66, 0.4);
+      color: var(--accent-warn);
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .placeholder-card {
+      background: var(--card-2);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 30px 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    @media print {
+      header.topbar, .modal-backdrop, .topbar-actions, .tabs, .filter-bar, .account-row .actions { display: none; }
+      .tab-content { display: block !important; }
+      .card { page-break-inside: avoid; break-inside: avoid; }
+      body { background: #fff; color: #000; }
+      .summary-card, .account-row, .card { background: #fff; border-color: #999; color: #000; }
+    }
+
+    @media (max-width: 640px) {
+      main { padding: 14px; }
+      .account-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .account-row .actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1 data-i18n="vault.title">Family Financial Vault — Roger &amp; Rebecca</h1>
+    <div class="topbar-actions">
+      <button id="locale-toggle-btn" data-i18n="vault.localeToggle">中文</button>
+      <button id="settings-btn" data-i18n="vault.settings">Settings</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="critical-cta" class="critical-cta">
+      <span data-i18n="vault.criticalCta">If something has happened, click here →</span>
+    </div>
+
+    <div class="tabs" id="main-tabs">
+      <div class="tab active" data-tab="inventory" data-i18n="vault.tabs.inventory">Accounts</div>
+      <div class="tab" data-tab="critical-info" data-i18n="vault.tabs.criticalInfo">Critical Family Info</div>
+      <div class="tab" data-tab="obligations" data-i18n="vault.tabs.obligations">Tax Calendar</div>
+      <div class="tab" data-tab="snapshots" data-i18n="vault.tabs.snapshots">Monthly Update</div>
+    </div>
+
+    <section id="tab-inventory" class="tab-content active">
+      <div class="section-header">
+        <h2 data-i18n="vault.inventory.title">Account Inventory</h2>
+        <button class="primary" id="add-account-btn" data-i18n="vault.inventory.addAccount">+ Add Account</button>
+      </div>
+
+      <div id="summary-row" class="summary-row" style="display:none">
+        <div class="summary-card">
+          <div class="label" data-i18n="vault.totalNetWorth">Total Net Worth</div>
+          <div class="value" id="summary-total">$0</div>
+        </div>
+        <div class="summary-card">
+          <div class="label" data-i18n="vault.summary.accountCount">Accounts</div>
+          <div class="value" id="summary-count">0</div>
+        </div>
+        <div class="summary-card">
+          <div class="label" data-i18n="vault.summary.foreignTotal">Foreign Total</div>
+          <div class="value" id="summary-foreign">$0</div>
+        </div>
+      </div>
+
+      <div id="filter-bar" class="filter-bar" style="display:none"></div>
+      <div id="account-list"></div>
+
+      <div id="empty-state" class="empty-state">
+        <h2 data-i18n="vault.inventory.emptyTitle">Set up your vault</h2>
+        <p data-i18n="vault.inventory.emptyHint">Add the first account to get started.</p>
+      </div>
+    </section>
+
+    <section id="tab-critical-info" class="tab-content">
+      <div class="disclaimer" id="critical-info-banner" data-i18n="vault.critical.banner">Critical Family Info — pre-expand this section in an estate event. Edit any field inline; changes auto-save.</div>
+      <div id="critical-info-content"></div>
+    </section>
+
+    <section id="tab-obligations" class="tab-content">
+      <div id="obligations-banner-container"></div>
+      <div class="disclaimer" data-i18n="vault.obligations.disclaimer">Tax obligations recur annually. Mark each one done after filing. Sources: IRS, FinCEN, Mass.gov.</div>
+      <div id="obligations-content"></div>
+    </section>
+
+    <section id="tab-snapshots" class="tab-content">
+      <div id="snapshots-content"></div>
+    </section>
+  </main>
+
+  <!-- Chatbox sidebar (right side, fixed) -->
+  <div id="chatbox-sidebar" style="display: none; position: fixed; top: 60px; right: 0; bottom: 0; width: min(420px, 95vw); background: var(--card); border-left: 1px solid var(--border); display: none; flex-direction: column; z-index: 50">
+    <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center">
+      <div style="font-weight: 600; font-size: 14px" data-i18n="vault.chatbox.title">Ask the vault</div>
+      <button id="chatbox-close-btn" style="padding: 4px 8px; font-size: 12px">×</button>
+    </div>
+    <div style="padding: 8px 16px; background: rgba(245,179,66,0.08); border-bottom: 1px solid rgba(245,179,66,0.4); color: var(--accent-warn); font-size: 11px; line-height: 1.4" data-i18n="vault.chatbox.disclaimer">
+      This chatbox echoes information from your local vault. It is not a substitute for a CPA, estate attorney, or financial advisor. For any consequential decision, call a licensed professional.
+    </div>
+    <div id="chatbox-messages" style="flex: 1; overflow-y: auto; padding: 12px 16px"></div>
+    <div style="padding: 8px 16px; border-top: 1px solid var(--border); background: var(--card-2)">
+      <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 11px; color: var(--text-dim)">
+        <select id="chatbox-model-select" style="padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 11px">
+          <option value="claude-opus-4-7">Opus 4.7</option>
+          <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+          <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+        </select>
+        <button id="chatbox-show-prompt-btn" style="padding: 4px 8px; font-size: 11px" data-i18n="vault.chatbox.showPrompt">Show system prompt</button>
+        <button id="chatbox-reset-btn" style="padding: 4px 8px; font-size: 11px" data-i18n="vault.chatbox.resetKey">Reset key</button>
+      </div>
+      <div style="display: flex; gap: 6px">
+        <input id="chatbox-input" type="text" placeholder="" style="flex: 1; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">
+        <button id="chatbox-send-btn" class="primary" data-i18n="vault.chatbox.send">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating chatbox toggle -->
+  <button id="chatbox-toggle-btn" style="position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; background: var(--accent); color: white; border: none; border-radius: 24px; cursor: pointer; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 49" data-i18n="vault.chatbox.toggle">💬 Ask</button>
+
+  <!-- Procedure modal -->
+  <div id="procedure-modal" class="modal-backdrop">
+    <div class="modal" style="width: min(720px, 100%)">
+      <h3 id="procedure-modal-title"></h3>
+      <div id="procedure-account-summary" style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px"></div>
+      <div class="disclaimer" id="procedure-disclaimer"></div>
+      <div id="procedure-content"></div>
+      <div class="form-actions">
+        <button id="procedure-print-btn" data-i18n="vault.procedure.print">Print procedure</button>
+        <button id="procedure-close-btn" data-i18n="vault.modal.close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account add/edit modal -->
+  <div id="account-modal" class="modal-backdrop">
+    <div class="modal">
+      <h3 id="account-modal-title" data-i18n="vault.modal.addAccount">Add Account</h3>
+
+      <div class="form-grid-2">
+        <div class="form-row">
+          <label data-i18n="vault.field.owner">Owner</label>
+          <select id="acct-owner">
+            <option value="roger" data-i18n="vault.owner.roger">Roger</option>
+            <option value="rebecca" data-i18n="vault.owner.rebecca">Rebecca</option>
+            <option value="joint" data-i18n="vault.owner.joint">Joint</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label data-i18n="vault.field.category">Category</label>
+          <select id="acct-category"></select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label data-i18n="vault.field.institution">Institution</label>
+        <input id="acct-institution" type="text" autocomplete="off">
+        <div class="error" id="acct-institution-error" style="display:none"></div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-row">
+          <label data-i18n="vault.field.last4">Account # (last 4)</label>
+          <input id="acct-last4" type="text" maxlength="4" inputmode="numeric" autocomplete="off">
+        </div>
+        <div class="form-row">
+          <label data-i18n="vault.field.balance">Current Balance (USD)</label>
+          <input id="acct-balance" type="number" step="0.01" min="0" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-row">
+          <label data-i18n="vault.field.currency">Currency</label>
+          <select id="acct-currency">
+            <option value="USD">USD</option>
+            <option value="TWD">TWD</option>
+            <option value="CNY">CNY</option>
+            <option value="EUR">EUR</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label data-i18n="vault.field.exchangeRate">FX rate to USD</label>
+          <input id="acct-fx-rate" type="number" step="0.0001" min="0" autocomplete="off">
+          <div class="hint" data-i18n="vault.hint.fxRate">e.g., 0.031 for TWD → USD</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label data-i18n="vault.field.loginUrl">Login URL</label>
+        <input id="acct-login-url" type="url" autocomplete="off">
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-row">
+          <label data-i18n="vault.field.contactPhone">Institution phone</label>
+          <input id="acct-phone" type="text" autocomplete="off">
+        </div>
+        <div class="form-row">
+          <label data-i18n="vault.field.contactEmail">Institution email</label>
+          <input id="acct-email" type="email" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label data-i18n="vault.field.beneficiary">Beneficiary on file</label>
+        <input id="acct-beneficiary" type="text" autocomplete="off">
+      </div>
+
+      <div class="form-row">
+        <label data-i18n="vault.field.notes">Notes</label>
+        <textarea id="acct-notes" rows="3"></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button id="acct-cancel-btn" data-i18n="vault.modal.cancel">Cancel</button>
+        <button id="acct-save-btn" class="primary" data-i18n="vault.modal.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div id="delete-modal" class="modal-backdrop">
+    <div class="modal">
+      <h3 data-i18n="vault.modal.deleteTitle">Confirm Delete</h3>
+      <p id="delete-modal-detail" style="margin-bottom: 12px; color: var(--text-dim); font-size: 13px"></p>
+      <p data-i18n="vault.modal.deleteHint" style="margin-bottom: 8px; color: var(--text-dim); font-size: 13px">Type DELETE to confirm.</p>
+      <input id="delete-confirm" type="text" style="width: 100%">
+      <div class="form-actions">
+        <button id="delete-cancel-btn" data-i18n="vault.modal.cancel">Cancel</button>
+        <button id="delete-confirm-btn" class="danger" disabled data-i18n="vault.modal.delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal">
+      <h3 data-i18n="vault.settings.title">Settings</h3>
+      <div class="disclaimer" data-i18n="vault.settings.disclaimer">Settings are local to this browser. They never leave your laptop.</div>
+      <div class="form-row">
+        <label data-i18n="vault.settings.encryption">Encrypt vault (passphrase)</label>
+        <select id="settings-encryption-toggle">
+          <option value="off" data-i18n="vault.settings.encryptionOff">Off (default)</option>
+          <option value="on" data-i18n="vault.settings.encryptionOn">On</option>
+        </select>
+        <div class="hint" data-i18n="vault.settings.encryptionHint">When on, you'll be prompted for a passphrase on every page load. Phase 10 implements the actual cipher; v1 toggle is a placeholder.</div>
+      </div>
+      <div class="form-row">
+        <label data-i18n="vault.settings.export">Export</label>
+        <button id="settings-export-btn" data-i18n="vault.settings.exportBtn">Download vault as JSON</button>
+        <div class="hint" data-i18n="vault.settings.exportHint">Plain-text JSON. Encrypted export coming in Phase 10.</div>
+      </div>
+      <div class="form-row">
+        <label data-i18n="vault.settings.import">Import / Restore from JSON</label>
+        <input id="settings-import-file" type="file" accept="application/json,.json" style="display: none">
+        <div style="display: flex; gap: 6px; margin-bottom: 6px">
+          <button id="settings-import-file-btn" data-i18n="vault.settings.importFileBtn">Choose JSON file</button>
+          <button id="settings-import-paste-btn" data-i18n="vault.settings.importPasteBtn">Paste JSON instead</button>
+        </div>
+        <textarea id="settings-import-textarea" rows="6" placeholder="" style="display: none; width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; margin-bottom: 6px"></textarea>
+        <button id="settings-import-paste-confirm" class="primary" style="display: none" data-i18n="vault.settings.importPasteConfirm">Import pasted JSON</button>
+        <div class="hint" data-i18n="vault.settings.importHint">Replaces ALL current vault data. Confirm before applying. Use this to restore from backup or load a pre-populated seed (e.g., from your Tax folder).</div>
+        <div id="settings-import-status" style="margin-top: 6px"></div>
+      </div>
+      <div class="form-row">
+        <label data-i18n="vault.settings.fireImport">Import balances from RR FIRE Dashboard</label>
+        <button id="settings-fire-import-btn" data-i18n="vault.settings.fireImportBtn">Inspect FIRE Dashboard localStorage</button>
+        <div class="hint" data-i18n="vault.settings.fireImportHint">One-way: reads aggregate bucket totals from FIRE-Dashboard.html's localStorage and shows them so you can manually allocate across vault accounts.</div>
+        <div id="fire-import-result" style="margin-top: 8px"></div>
+      </div>
+      <div class="form-row">
+        <label data-i18n="vault.settings.wipe">Wipe vault</label>
+        <button id="settings-wipe-btn" class="danger" data-i18n="vault.settings.wipeBtn">Erase all data</button>
+        <div class="hint" data-i18n="vault.settings.wipeHint">Permanently deletes everything in localStorage. Cannot be undone.</div>
+      </div>
+      <div class="form-actions">
+        <button id="settings-close-btn" data-i18n="vault.modal.close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* ============================================================
+     i18n — TRANSLATIONS catalog (EN + zh-TW)
+     ============================================================ */
+  const TRANSLATIONS = {
+    en: {
+      'vault.title': 'Family Financial Vault — Roger & Rebecca',
+      'vault.localeToggle': '中文',
+      'vault.settings': 'Settings',
+      'vault.criticalCta': 'If something has happened, click here →',
+      'vault.tabs.inventory': 'Accounts',
+      'vault.tabs.criticalInfo': 'Critical Family Info',
+      'vault.tabs.obligations': 'Tax Calendar',
+      'vault.tabs.snapshots': 'Monthly Update',
+      'vault.inventory.title': 'Account Inventory',
+      'vault.inventory.addAccount': '+ Add Account',
+      'vault.inventory.emptyTitle': 'Set up your vault',
+      'vault.inventory.emptyHint': 'Add the first account to get started.',
+      'vault.totalNetWorth': 'Total Net Worth',
+      'vault.summary.accountCount': 'Accounts',
+      'vault.summary.foreignTotal': 'Foreign Total',
+      'vault.modal.addAccount': 'Add Account',
+      'vault.modal.editAccount': 'Edit Account',
+      'vault.modal.cancel': 'Cancel',
+      'vault.modal.save': 'Save',
+      'vault.modal.delete': 'Delete',
+      'vault.modal.close': 'Close',
+      'vault.modal.deleteTitle': 'Confirm Delete',
+      'vault.modal.deleteHint': 'Type DELETE to confirm.',
+      'vault.modal.deleteDetail': 'You are about to delete {institution} ({last4}).',
+      'vault.field.owner': 'Owner',
+      'vault.field.category': 'Category',
+      'vault.field.institution': 'Institution',
+      'vault.field.last4': 'Account # (last 4)',
+      'vault.field.balance': 'Current Balance (USD)',
+      'vault.field.currency': 'Currency',
+      'vault.field.exchangeRate': 'FX rate to USD',
+      'vault.field.loginUrl': 'Login URL',
+      'vault.field.contactPhone': 'Institution phone',
+      'vault.field.contactEmail': 'Institution email',
+      'vault.field.beneficiary': 'Beneficiary on file',
+      'vault.field.notes': 'Notes',
+      'vault.hint.fxRate': 'e.g., 0.031 for TWD → USD',
+      'vault.owner.roger': 'Roger',
+      'vault.owner.rebecca': 'Rebecca',
+      'vault.owner.joint': 'Joint',
+      'vault.category.us-bank-joint': 'US Bank (Joint)',
+      'vault.category.us-bank-solo': 'US Bank (Solo)',
+      'vault.category.us-brokerage-tod': 'US Brokerage (TOD)',
+      'vault.category.us-brokerage-jtwros': 'US Brokerage (Joint)',
+      'vault.category.employer-401k-roth': 'Employer Roth 401(k)',
+      'vault.category.employer-401k-trad': 'Employer Traditional 401(k)',
+      'vault.category.traditional-ira': 'Traditional IRA',
+      'vault.category.roth-ira': 'Roth IRA',
+      'vault.category.foreign-bank-taiwan': 'Taiwan Bank',
+      'vault.category.foreign-bank-china': 'China Bank',
+      'vault.category.taiwan-life-insurance': 'Taiwan Life Insurance',
+      'vault.category.reit-ark7': 'REIT (Ark7)',
+      'vault.category.other': 'Other',
+      'vault.country.US': 'US',
+      'vault.country.Taiwan': 'Taiwan',
+      'vault.country.China': 'China',
+      'vault.country.Other': 'Other',
+      'vault.filter.owner': 'Owner',
+      'vault.filter.country': 'Country',
+      'vault.filter.category': 'Category',
+      'vault.filter.all': 'All',
+      'vault.lastUpdated': 'Last updated',
+      'vault.daysAgo': '{n} days ago',
+      'vault.daysAgo.0': 'today',
+      'vault.daysAgo.1': 'yesterday',
+      'vault.never': 'never',
+      'vault.action.edit': 'Edit',
+      'vault.action.delete': 'Delete',
+      'vault.action.procedure': 'Procedure',
+      'vault.error.required': 'This field is required.',
+      'vault.error.invalidNumber': 'Must be a non-negative number.',
+      'vault.error.invalidLast4': 'Must be exactly 4 digits.',
+      'vault.error.invalidUrl': 'Must be a valid URL starting with http:// or https://',
+      'vault.error.invalidFx': 'Must be a positive number.',
+      'vault.settings.title': 'Settings',
+      'vault.settings.disclaimer': 'Settings are local to this browser. They never leave your laptop.',
+      'vault.settings.encryption': 'Encrypt vault (passphrase)',
+      'vault.settings.encryptionOff': 'Off (default)',
+      'vault.settings.encryptionOn': 'On',
+      'vault.settings.encryptionHint': 'When on, you’ll be prompted for a passphrase on every page load. Phase 10 implements the actual cipher; v1 toggle is a placeholder.',
+      'vault.settings.export': 'Export',
+      'vault.settings.exportBtn': 'Download vault as JSON',
+      'vault.settings.exportHint': 'Plain-text JSON. Encrypted export coming in Phase 10.',
+      'vault.settings.wipe': 'Wipe vault',
+      'vault.settings.wipeBtn': 'Erase all data',
+      'vault.settings.wipeHint': 'Permanently deletes everything in localStorage. Cannot be undone.',
+      'vault.settings.wipeConfirm': 'This will erase ALL vault data permanently. Type WIPE to confirm.',
+      'vault.placeholder.criticalInfo': 'Critical Family Info — Phase 5 (will, POAs, guardianship, life insurance, password vault, contacts).',
+      'vault.placeholder.obligations': 'Tax Calendar — Phase 6 (FBAR, FATCA, federal & MA tax, quarterly 1040-ES).',
+      'vault.placeholder.snapshots': 'Monthly Update — Phase 7 (refresh balances, 12-month sparklines, CSV export).',
+      'vault.privacy.notice': 'No outbound network calls in chatbox-disabled mode. All data is local.',
+      'vault.procedure.print': 'Print procedure',
+      'vault.procedure.title': 'Death Procedure',
+      'vault.procedure.disclaimer': 'This procedure is general information, not legal or tax advice. Consult a licensed estate attorney and CPA before acting.',
+      'vault.procedure.whoToContact': 'Who to contact',
+      'vault.procedure.expectedTimeline': 'Expected timeline',
+      'vault.procedure.paperworkChecklist': 'Paperwork checklist',
+      'vault.procedure.taxStrategyNotes': 'Tax strategy notes',
+      'vault.procedure.commonMistakes': 'Common mistakes to avoid',
+      'vault.procedure.hrContact': 'HR / Plan administrator contact',
+      'vault.procedure.hrContactPlaceholder': '(Roger to provide before merge)',
+      'vault.procedure.calculator': 'Inherited-account withdrawal calculator',
+      'vault.procedure.calculatorPlaceholder': 'Comes alive in Phase 4 — compares lump-sum vs. even-tenths vs. bracket-fill strategies.',
+      'vault.procedure.notFound': 'No procedure found for this category. Falling back to the generic "consult a probate attorney" guidance.',
+      'vault.calc.rebeccaAge': 'Rebecca\'s age',
+      'vault.calc.otherIncome': 'Other annual income (USD)',
+      'vault.calc.filingStatus': 'Filing status',
+      'vault.calc.householdSize': 'Household size',
+      'vault.calc.growthRate': 'Annual growth rate',
+      'vault.calc.targetBracket': 'Target bracket cap',
+      'vault.calc.single': 'Single',
+      'vault.calc.qss': 'Qualifying Surviving Spouse',
+      'vault.calc.mfj': 'MFJ (year-of-death)',
+      'vault.calc.recompute': 'Recompute',
+      'vault.calc.lumpSum': 'Lump sum (year 1)',
+      'vault.calc.evenTenths': 'Even tenths',
+      'vault.calc.bracketFill': 'Bracket-fill smoothed',
+      'vault.calc.totalTax': '10-yr total tax',
+      'vault.calc.federalTax': 'Federal',
+      'vault.calc.stateTax': 'MA state',
+      'vault.calc.cliffs': 'Cliffs',
+      'vault.calc.noCliffs': 'No cliffs hit',
+      'vault.calc.recommended': 'Recommended',
+      'vault.calc.rothNote': 'Roth distributions are federally tax-free. Federal columns will read $0, but cliff warnings still apply because IRMAA, ACA, and AMT key off MAGI which Roth distributions affect.',
+      'vault.calc.yearByYearBracket': 'Year-by-year — bracket-fill strategy',
+      'vault.calc.year': 'Year',
+      'vault.calc.withdrawal': 'Withdrawal',
+      'vault.calc.totalIncome': 'Total income',
+      'vault.calc.fed': 'Federal',
+      'vault.calc.state': 'State',
+      'vault.calc.remaining': 'Remaining',
+      'vault.critical.banner': 'Critical Family Info — pre-expand this section in an estate event. Edit any field inline; changes auto-save.',
+      'vault.critical.will': 'Will / Living Trust',
+      'vault.critical.will.location': 'Where the executed copy is stored',
+      'vault.critical.will.executor': 'Executor name',
+      'vault.critical.will.executorContact': 'Executor contact',
+      'vault.critical.will.attorney': 'Drafting attorney',
+      'vault.critical.will.notes': 'Notes',
+      'vault.critical.poaFinancial': 'Power of Attorney — Financial',
+      'vault.critical.poaHealthcare': 'Power of Attorney — Healthcare',
+      'vault.critical.poa.holder': 'Holder',
+      'vault.critical.poa.location': 'Document location',
+      'vault.critical.poa.notes': 'Notes',
+      'vault.critical.healthcareDirective': 'Healthcare Directive / Living Will',
+      'vault.critical.healthcareDirective.location': 'Document location',
+      'vault.critical.healthcareDirective.notes': 'Key wishes / notes',
+      'vault.critical.guardianship': 'Guardianship Plan (for minor children)',
+      'vault.critical.guardianship.primary': 'Primary guardian',
+      'vault.critical.guardianship.alternate': 'Alternate guardian',
+      'vault.critical.guardianship.financial': 'Financial provision plan (e.g., trust, life insurance)',
+      'vault.critical.guardianship.notes': 'Notes',
+      'vault.critical.lifeInsurance': 'Life Insurance Policies',
+      'vault.critical.lifeInsurance.add': '+ Add policy',
+      'vault.critical.lifeInsurance.insurer': 'Insurer',
+      'vault.critical.lifeInsurance.policyType': 'Policy type',
+      'vault.critical.lifeInsurance.faceAmount': 'Face amount (USD)',
+      'vault.critical.lifeInsurance.beneficiaryPrimary': 'Primary beneficiary',
+      'vault.critical.lifeInsurance.beneficiaryContingent': 'Contingent beneficiary',
+      'vault.critical.lifeInsurance.policyNumber': 'Policy number',
+      'vault.critical.lifeInsurance.agentContact': 'Agent contact',
+      'vault.critical.lifeInsurance.notes': 'Notes',
+      'vault.critical.lifeInsurance.type.group': 'Group-term (employer)',
+      'vault.critical.lifeInsurance.type.indTerm': 'Individual term',
+      'vault.critical.lifeInsurance.type.whole': 'Whole life',
+      'vault.critical.lifeInsurance.type.universal': 'Universal life',
+      'vault.critical.passwordVault': 'Password Vault',
+      'vault.critical.passwordVault.manager': 'Manager (1Password / Bitwarden / etc.)',
+      'vault.critical.passwordVault.recovery': 'Master password recovery instructions',
+      'vault.critical.passwordVault.notes': 'Notes',
+      'vault.critical.funeral': 'Funeral / Burial Preferences',
+      'vault.critical.funeral.notes': 'Notes',
+      'vault.critical.contacts': 'Important Contacts',
+      'vault.critical.contacts.add': '+ Add contact',
+      'vault.critical.contacts.role': 'Role',
+      'vault.critical.contacts.name': 'Name',
+      'vault.critical.contacts.phone': 'Phone',
+      'vault.critical.contacts.email': 'Email',
+      'vault.critical.contacts.address': 'Address',
+      'vault.critical.contacts.notes': 'Notes',
+      'vault.critical.contacts.role.cpa': 'CPA',
+      'vault.critical.contacts.role.estateAttorney': 'Estate Attorney',
+      'vault.critical.contacts.role.financialAdvisor': 'Financial Advisor',
+      'vault.critical.contacts.role.doctor': 'Doctor',
+      'vault.critical.contacts.role.hr': 'Employer HR',
+      'vault.critical.contacts.role.insuranceAgent': 'Insurance Agent',
+      'vault.critical.contacts.role.other': 'Other',
+      'vault.critical.removeBtn': 'Remove',
+      'vault.obligations.disclaimer': 'Tax obligations recur annually. Mark each one done after filing. Sources: IRS, FinCEN, Mass.gov.',
+      'vault.obligations.year': 'Year',
+      'vault.obligations.dueDate': 'Due',
+      'vault.obligations.who': 'Who acts',
+      'vault.obligations.done': 'Done',
+      'vault.obligations.markDone': 'Mark done',
+      'vault.obligations.markUndone': 'Mark not done',
+      'vault.obligations.overdueBanner': '⚠ {n} obligation(s) overdue or due within 30 days',
+      'vault.obligations.openLink': 'Open',
+      'vault.obligations.fbar-roger': 'FBAR — Roger (FinCEN Form 114)',
+      'vault.obligations.fbar-roger.desc': 'Roger\'s annual Foreign Bank Account Report. File at bsaefiling.fincen.gov.',
+      'vault.obligations.fbar-rebecca': 'FBAR — Rebecca (FinCEN Form 114)',
+      'vault.obligations.fbar-rebecca.desc': 'Rebecca\'s annual Foreign Bank Account Report. File at bsaefiling.fincen.gov.',
+      'vault.obligations.fed-1040': 'Federal Form 1040',
+      'vault.obligations.fed-1040.desc': 'Federal income tax return. File via FreeTaxUSA.',
+      'vault.obligations.ma-form1': 'MA Form 1',
+      'vault.obligations.ma-form1.desc': 'Massachusetts state income tax return. File via FreeTaxUSA.',
+      'vault.obligations.form-8938': 'Form 8938 (FATCA)',
+      'vault.obligations.form-8938.desc': 'Statement of Specified Foreign Financial Assets, attached to Form 1040.',
+      'vault.obligations.1040es-q1': '1040-ES Q1',
+      'vault.obligations.1040es-q1.desc': 'Q1 federal estimated tax payment. Pay at irs.gov/payments.',
+      'vault.obligations.1040es-q2': '1040-ES Q2',
+      'vault.obligations.1040es-q2.desc': 'Q2 federal estimated tax payment.',
+      'vault.obligations.1040es-q3': '1040-ES Q3',
+      'vault.obligations.1040es-q3.desc': 'Q3 federal estimated tax payment.',
+      'vault.obligations.1040es-q4': '1040-ES Q4',
+      'vault.obligations.1040es-q4.desc': 'Q4 federal estimated tax payment.',
+      'vault.obligations.charitable-receipts': 'Aggregate charitable receipts',
+      'vault.obligations.charitable-receipts.desc': 'Year-end reminder: collect donation receipts (IRC, Doctors Without Borders, etc.) for tax-prep next April.',
+      'vault.obligations.who.roger': 'Roger',
+      'vault.obligations.who.rebecca': 'Rebecca',
+      'vault.obligations.who.both': 'Both',
+      'vault.obligations.status.done': 'Done',
+      'vault.obligations.status.upcoming': 'Upcoming',
+      'vault.obligations.status.approaching': 'Approaching',
+      'vault.obligations.status.overdue': 'Overdue',
+      'vault.obligations.status.future': 'Future',
+      'vault.snapshots.title': 'Monthly Balance Update',
+      'vault.snapshots.disclaimer': 'Update balances monthly. Each row is one account; type the new USD balance and tab away. History persists per-account.',
+      'vault.snapshots.empty': 'Add accounts in the Inventory tab first, then refresh balances here.',
+      'vault.snapshots.refreshAll': 'Refresh all',
+      'vault.snapshots.exportCsv': 'Export current snapshot to CSV',
+      'vault.snapshots.summaryTitle': 'This snapshot',
+      'vault.snapshots.totalNetWorth': 'Total net worth (USD)',
+      'vault.snapshots.changeFromLast': 'Change since last update',
+      'vault.snapshots.staleAccounts': 'Accounts not updated > 60 days',
+      'vault.snapshots.lastUpdated': 'Last updated',
+      'vault.snapshots.newBalance': 'New balance (USD)',
+      'vault.snapshots.history': 'History (last 12 entries)',
+      'vault.snapshots.noHistory': 'No history yet',
+      'vault.snapshots.savedAs': 'Saved snapshot for',
+      'vault.chatbox.title': 'Ask the vault',
+      'vault.chatbox.toggle': '💬 Ask',
+      'vault.chatbox.disclaimer': 'This chatbox echoes information from your local vault. It is not a substitute for a CPA, estate attorney, or financial advisor. For any consequential decision (taxes, withdrawals, beneficiary changes), call a licensed professional.',
+      'vault.chatbox.send': 'Send',
+      'vault.chatbox.placeholder': 'Ask anything about your vault...',
+      'vault.chatbox.setupTitle': 'Setup',
+      'vault.chatbox.setupHint': 'The chatbox uses the Anthropic API directly. Paste your Claude API key to enable. The key is stored ONLY in this browser\'s localStorage and is never sent anywhere except api.anthropic.com.',
+      'vault.chatbox.setupKeyLabel': 'Claude API key (get one at console.anthropic.com/settings/keys)',
+      'vault.chatbox.setupSave': 'Save & enable chatbox',
+      'vault.chatbox.setupSkip': 'Skip — disable chatbox',
+      'vault.chatbox.resetKey': 'Reset key',
+      'vault.chatbox.showPrompt': 'Show system prompt',
+      'vault.chatbox.error.network': 'Network error. Check your internet and the API key is valid.',
+      'vault.chatbox.error.api': 'API error',
+      'vault.chatbox.thinking': 'Thinking...',
+      'vault.chatbox.systemPromptModal': 'System prompt being sent to Claude',
+      'vault.settings.fireImport': 'Import balances from RR FIRE Dashboard',
+      'vault.settings.fireImportBtn': 'Inspect FIRE Dashboard localStorage',
+      'vault.settings.fireImportHint': 'One-way: reads aggregate bucket totals from FIRE-Dashboard.html\'s localStorage and shows them so you can manually allocate across vault accounts.',
+      'vault.settings.fireImportEmpty': 'No FIRE Dashboard data in this browser\'s localStorage. Open FIRE-Dashboard.html in this same browser first, save state, then return here.',
+      'vault.settings.fireImportFound': 'Found FIRE Dashboard state. Buckets shown below are aggregates — assign them across your vault accounts manually:',
+      'vault.settings.fireImportError': 'Could not parse FIRE Dashboard state.',
+      'vault.settings.import': 'Import / Restore from JSON',
+      'vault.settings.importFileBtn': 'Choose JSON file',
+      'vault.settings.importPasteBtn': 'Paste JSON instead',
+      'vault.settings.importPasteConfirm': 'Import pasted JSON',
+      'vault.settings.importHint': 'Replaces ALL current vault data. Confirm before applying. Use this to restore from backup or load a pre-populated seed (e.g., from your Tax folder).',
+      'vault.settings.importParseError': 'Invalid JSON: ',
+      'vault.settings.importSchemaError': 'Schema validation failed: ',
+      'vault.settings.importPreview': 'Found {accounts} account(s), {lifeIns} life insurance policy/policies, {contacts} contact(s). REPLACE current vault?',
+      'vault.settings.importConfirm': 'Replace current vault with this data?',
+      'vault.settings.importDone': '✓ Imported {accounts} accounts.',
+      'vault.settings.importPasteHint': 'Paste the contents of vault-prepopulate-rr.json (or any prior export) here.',
+    },
+    'zh-TW': {
+      'vault.title': '家庭財務檔案 — Roger 與 Rebecca',
+      'vault.localeToggle': 'EN',
+      'vault.settings': '設定',
+      'vault.criticalCta': '如果發生不幸事故，請點擊此處 →',
+      'vault.tabs.inventory': '帳戶清單',
+      'vault.tabs.criticalInfo': '重要家庭資訊',
+      'vault.tabs.obligations': '稅務日曆',
+      'vault.tabs.snapshots': '每月更新',
+      'vault.inventory.title': '帳戶清單',
+      'vault.inventory.addAccount': '＋新增帳戶',
+      'vault.inventory.emptyTitle': '建立您的財務檔案',
+      'vault.inventory.emptyHint': '請新增第一個帳戶以開始。',
+      'vault.totalNetWorth': '總淨值',
+      'vault.summary.accountCount': '帳戶數',
+      'vault.summary.foreignTotal': '海外資產合計',
+      'vault.modal.addAccount': '新增帳戶',
+      'vault.modal.editAccount': '編輯帳戶',
+      'vault.modal.cancel': '取消',
+      'vault.modal.save': '儲存',
+      'vault.modal.delete': '刪除',
+      'vault.modal.close': '關閉',
+      'vault.modal.deleteTitle': '確認刪除',
+      'vault.modal.deleteHint': '請輸入 DELETE 以確認。',
+      'vault.modal.deleteDetail': '您即將刪除 {institution}（末四碼 {last4}）。',
+      'vault.field.owner': '持有人',
+      'vault.field.category': '類別',
+      'vault.field.institution': '金融機構',
+      'vault.field.last4': '帳號末四碼',
+      'vault.field.balance': '目前餘額（美元）',
+      'vault.field.currency': '幣別',
+      'vault.field.exchangeRate': '兌美元匯率',
+      'vault.field.loginUrl': '登入網址',
+      'vault.field.contactPhone': '客服電話',
+      'vault.field.contactEmail': '客服電子郵件',
+      'vault.field.beneficiary': '指定受益人',
+      'vault.field.notes': '備註',
+      'vault.hint.fxRate': '例如：TWD → USD 約 0.031',
+      'vault.owner.roger': 'Roger',
+      'vault.owner.rebecca': 'Rebecca',
+      'vault.owner.joint': '共同',
+      'vault.category.us-bank-joint': '美國銀行（共同）',
+      'vault.category.us-bank-solo': '美國銀行（個人）',
+      'vault.category.us-brokerage-tod': '美國券商（TOD）',
+      'vault.category.us-brokerage-jtwros': '美國券商（共同）',
+      'vault.category.employer-401k-roth': '雇主 Roth 401(k)',
+      'vault.category.employer-401k-trad': '雇主傳統 401(k)',
+      'vault.category.traditional-ira': '傳統 IRA',
+      'vault.category.roth-ira': 'Roth IRA',
+      'vault.category.foreign-bank-taiwan': '台灣銀行',
+      'vault.category.foreign-bank-china': '中國銀行',
+      'vault.category.taiwan-life-insurance': '台灣壽險保單',
+      'vault.category.reit-ark7': '不動產證券（Ark7）',
+      'vault.category.other': '其他',
+      'vault.country.US': '美國',
+      'vault.country.Taiwan': '台灣',
+      'vault.country.China': '中國',
+      'vault.country.Other': '其他',
+      'vault.filter.owner': '持有人',
+      'vault.filter.country': '國家',
+      'vault.filter.category': '類別',
+      'vault.filter.all': '全部',
+      'vault.lastUpdated': '最後更新',
+      'vault.daysAgo': '{n} 天前',
+      'vault.daysAgo.0': '今天',
+      'vault.daysAgo.1': '昨天',
+      'vault.never': '尚未更新',
+      'vault.action.edit': '編輯',
+      'vault.action.delete': '刪除',
+      'vault.action.procedure': '處理流程',
+      'vault.error.required': '此欄位為必填。',
+      'vault.error.invalidNumber': '必須為非負數字。',
+      'vault.error.invalidLast4': '必須為 4 位數字。',
+      'vault.error.invalidUrl': '必須是 http:// 或 https:// 開頭的有效網址。',
+      'vault.error.invalidFx': '必須為正數。',
+      'vault.settings.title': '設定',
+      'vault.settings.disclaimer': '設定僅儲存於本瀏覽器，不會離開您的電腦。',
+      'vault.settings.encryption': '加密金鑰（密碼）',
+      'vault.settings.encryptionOff': '關閉（預設）',
+      'vault.settings.encryptionOn': '開啟',
+      'vault.settings.encryptionHint': '開啟後每次開啟頁面均需輸入密碼。實際加密邏輯於第 10 階段實作；v1 此處為佔位設定。',
+      'vault.settings.export': '匯出',
+      'vault.settings.exportBtn': '下載 JSON 備份',
+      'vault.settings.exportHint': '純文字 JSON。加密匯出於第 10 階段提供。',
+      'vault.settings.wipe': '清除',
+      'vault.settings.wipeBtn': '刪除所有資料',
+      'vault.settings.wipeHint': '永久刪除 localStorage 內所有資料，無法復原。',
+      'vault.settings.wipeConfirm': '此操作將永久刪除所有檔案資料。請輸入 WIPE 以確認。',
+      'vault.placeholder.criticalInfo': '重要家庭資訊 — 第 5 階段（遺囑、授權書、監護人、壽險保單、密碼管理、聯絡人）。',
+      'vault.placeholder.obligations': '稅務日曆 — 第 6 階段（FBAR、FATCA、聯邦與麻州稅務、季度 1040-ES）。',
+      'vault.placeholder.snapshots': '每月更新 — 第 7 階段（更新餘額、12 個月走勢圖、CSV 匯出）。',
+      'vault.privacy.notice': '聊天功能停用時，零外部網路請求。所有資料皆儲存於本機。',
+      'vault.procedure.print': '列印此流程',
+      'vault.procedure.title': '身後處理流程',
+      'vault.procedure.disclaimer': '此流程說明僅為一般性參考，並非法律或稅務建議。執行前請諮詢執照律師及會計師。',
+      'vault.procedure.whoToContact': '聯絡對象',
+      'vault.procedure.expectedTimeline': '預計時程',
+      'vault.procedure.paperworkChecklist': '所需文件',
+      'vault.procedure.taxStrategyNotes': '稅務策略提醒',
+      'vault.procedure.commonMistakes': '常見錯誤',
+      'vault.procedure.hrContact': '人資 / 計畫管理員聯絡資訊',
+      'vault.procedure.hrContactPlaceholder': '（Roger 將於合併前提供）',
+      'vault.procedure.calculator': '繼承帳戶提領試算',
+      'vault.procedure.calculatorPlaceholder': '第 4 階段啟用 — 比較一次性、平均十年及階梯填稅三種策略。',
+      'vault.procedure.notFound': '此類別尚無預設流程。將套用通用「諮詢遺囑律師」指引。',
+      'vault.calc.rebeccaAge': 'Rebecca 年齡',
+      'vault.calc.otherIncome': '其他年所得（美元）',
+      'vault.calc.filingStatus': '申報身分',
+      'vault.calc.householdSize': '家戶人數',
+      'vault.calc.growthRate': '年成長率',
+      'vault.calc.targetBracket': '目標稅級上限',
+      'vault.calc.single': '單身',
+      'vault.calc.qss': '合格生存配偶',
+      'vault.calc.mfj': '夫妻合併（喪偶當年）',
+      'vault.calc.recompute': '重新計算',
+      'vault.calc.lumpSum': '一次性提領（第 1 年）',
+      'vault.calc.evenTenths': '平均十年',
+      'vault.calc.bracketFill': '階梯填稅',
+      'vault.calc.totalTax': '十年累計稅額',
+      'vault.calc.federalTax': '聯邦',
+      'vault.calc.stateTax': '麻州',
+      'vault.calc.cliffs': '斷崖警示',
+      'vault.calc.noCliffs': '未觸發',
+      'vault.calc.recommended': '建議',
+      'vault.calc.rothNote': 'Roth 提領聯邦免稅，故聯邦欄位顯示 $0；但 IRMAA、ACA、AMT 等斷崖以 MAGI 計算，Roth 提領仍會推升 MAGI，故警示仍適用。',
+      'vault.calc.yearByYearBracket': '逐年分析 — 階梯填稅策略',
+      'vault.calc.year': '年度',
+      'vault.calc.withdrawal': '提領金額',
+      'vault.calc.totalIncome': '總所得',
+      'vault.calc.fed': '聯邦',
+      'vault.calc.state': '州',
+      'vault.calc.remaining': '剩餘餘額',
+      'vault.critical.banner': '重要家庭資訊 — 發生事故時請優先檢視此區。所有欄位可即時編輯，自動儲存。',
+      'vault.critical.will': '遺囑 / 生前信託',
+      'vault.critical.will.location': '正本存放地點',
+      'vault.critical.will.executor': '遺囑執行人姓名',
+      'vault.critical.will.executorContact': '執行人聯絡方式',
+      'vault.critical.will.attorney': '草擬律師',
+      'vault.critical.will.notes': '備註',
+      'vault.critical.poaFinancial': '財務授權書（POA - Financial）',
+      'vault.critical.poaHealthcare': '醫療授權書（POA - Healthcare）',
+      'vault.critical.poa.holder': '受授權人',
+      'vault.critical.poa.location': '文件存放地點',
+      'vault.critical.poa.notes': '備註',
+      'vault.critical.healthcareDirective': '預立醫療指示書（Living Will）',
+      'vault.critical.healthcareDirective.location': '文件存放地點',
+      'vault.critical.healthcareDirective.notes': '重要意願 / 備註',
+      'vault.critical.guardianship': '未成年子女監護規劃',
+      'vault.critical.guardianship.primary': '首選監護人',
+      'vault.critical.guardianship.alternate': '次選監護人',
+      'vault.critical.guardianship.financial': '經濟供養安排（信託、壽險等）',
+      'vault.critical.guardianship.notes': '備註',
+      'vault.critical.lifeInsurance': '人壽保單',
+      'vault.critical.lifeInsurance.add': '＋新增保單',
+      'vault.critical.lifeInsurance.insurer': '保險公司',
+      'vault.critical.lifeInsurance.policyType': '保單類型',
+      'vault.critical.lifeInsurance.faceAmount': '保額（美元）',
+      'vault.critical.lifeInsurance.beneficiaryPrimary': '主要受益人',
+      'vault.critical.lifeInsurance.beneficiaryContingent': '備位受益人',
+      'vault.critical.lifeInsurance.policyNumber': '保單號碼',
+      'vault.critical.lifeInsurance.agentContact': '業務員聯絡方式',
+      'vault.critical.lifeInsurance.notes': '備註',
+      'vault.critical.lifeInsurance.type.group': '團體定期壽險（雇主）',
+      'vault.critical.lifeInsurance.type.indTerm': '個人定期壽險',
+      'vault.critical.lifeInsurance.type.whole': '終身壽險',
+      'vault.critical.lifeInsurance.type.universal': '萬用壽險',
+      'vault.critical.passwordVault': '密碼管理工具',
+      'vault.critical.passwordVault.manager': '使用工具（1Password、Bitwarden 等）',
+      'vault.critical.passwordVault.recovery': '主密碼救援指引',
+      'vault.critical.passwordVault.notes': '備註',
+      'vault.critical.funeral': '葬禮 / 後事意願',
+      'vault.critical.funeral.notes': '備註',
+      'vault.critical.contacts': '重要聯絡人',
+      'vault.critical.contacts.add': '＋新增聯絡人',
+      'vault.critical.contacts.role': '角色',
+      'vault.critical.contacts.name': '姓名',
+      'vault.critical.contacts.phone': '電話',
+      'vault.critical.contacts.email': '電子郵件',
+      'vault.critical.contacts.address': '地址',
+      'vault.critical.contacts.notes': '備註',
+      'vault.critical.contacts.role.cpa': '會計師（CPA）',
+      'vault.critical.contacts.role.estateAttorney': '遺囑律師',
+      'vault.critical.contacts.role.financialAdvisor': '財務顧問',
+      'vault.critical.contacts.role.doctor': '醫師',
+      'vault.critical.contacts.role.hr': '雇主人資',
+      'vault.critical.contacts.role.insuranceAgent': '保險業務員',
+      'vault.critical.contacts.role.other': '其他',
+      'vault.critical.removeBtn': '移除',
+      'vault.obligations.disclaimer': '稅務義務每年重複。完成申報後請標記為已辦。資料來源：IRS、FinCEN、Mass.gov。',
+      'vault.obligations.year': '年度',
+      'vault.obligations.dueDate': '截止日',
+      'vault.obligations.who': '辦理人',
+      'vault.obligations.done': '已完成',
+      'vault.obligations.markDone': '標記為已辦',
+      'vault.obligations.markUndone': '標記為未辦',
+      'vault.obligations.overdueBanner': '⚠ {n} 項義務已逾期或 30 天內到期',
+      'vault.obligations.openLink': '開啟',
+      'vault.obligations.fbar-roger': 'FBAR — Roger（FinCEN Form 114）',
+      'vault.obligations.fbar-roger.desc': 'Roger 之海外帳戶申報。於 bsaefiling.fincen.gov 申報。',
+      'vault.obligations.fbar-rebecca': 'FBAR — Rebecca（FinCEN Form 114）',
+      'vault.obligations.fbar-rebecca.desc': 'Rebecca 之海外帳戶申報。於 bsaefiling.fincen.gov 申報。',
+      'vault.obligations.fed-1040': '聯邦 Form 1040',
+      'vault.obligations.fed-1040.desc': '聯邦所得稅申報。透過 FreeTaxUSA 提交。',
+      'vault.obligations.ma-form1': '麻州 Form 1',
+      'vault.obligations.ma-form1.desc': '麻州所得稅申報。透過 FreeTaxUSA 提交。',
+      'vault.obligations.form-8938': 'Form 8938（FATCA）',
+      'vault.obligations.form-8938.desc': '指定海外金融資產報表，隨 Form 1040 提交。',
+      'vault.obligations.1040es-q1': '1040-ES 第 1 季',
+      'vault.obligations.1040es-q1.desc': '第 1 季聯邦估計稅。於 irs.gov/payments 繳納。',
+      'vault.obligations.1040es-q2': '1040-ES 第 2 季',
+      'vault.obligations.1040es-q2.desc': '第 2 季聯邦估計稅。',
+      'vault.obligations.1040es-q3': '1040-ES 第 3 季',
+      'vault.obligations.1040es-q3.desc': '第 3 季聯邦估計稅。',
+      'vault.obligations.1040es-q4': '1040-ES 第 4 季',
+      'vault.obligations.1040es-q4.desc': '第 4 季聯邦估計稅。',
+      'vault.obligations.charitable-receipts': '彙整捐贈收據',
+      'vault.obligations.charitable-receipts.desc': '年終提醒：彙整當年度捐贈收據（IRC、無國界醫生等）以備次年 4 月報稅。',
+      'vault.obligations.who.roger': 'Roger',
+      'vault.obligations.who.rebecca': 'Rebecca',
+      'vault.obligations.who.both': '兩人',
+      'vault.obligations.status.done': '已辦',
+      'vault.obligations.status.upcoming': '即將到期',
+      'vault.obligations.status.approaching': '30 天內到期',
+      'vault.obligations.status.overdue': '已逾期',
+      'vault.obligations.status.future': '未來',
+      'vault.snapshots.title': '每月餘額更新',
+      'vault.snapshots.disclaimer': '請每月更新餘額。每行為一個帳戶；輸入新美元餘額後 tab 鍵離開即儲存。每個帳戶皆保留歷史紀錄。',
+      'vault.snapshots.empty': '請先在「帳戶清單」分頁新增帳戶，再回到此處更新餘額。',
+      'vault.snapshots.refreshAll': '全部更新',
+      'vault.snapshots.exportCsv': '匯出當前快照為 CSV',
+      'vault.snapshots.summaryTitle': '本次快照',
+      'vault.snapshots.totalNetWorth': '總淨值（美元）',
+      'vault.snapshots.changeFromLast': '相較上次變動',
+      'vault.snapshots.staleAccounts': '逾 60 天未更新之帳戶',
+      'vault.snapshots.lastUpdated': '最後更新',
+      'vault.snapshots.newBalance': '新餘額（美元）',
+      'vault.snapshots.history': '歷史紀錄（最近 12 筆）',
+      'vault.snapshots.noHistory': '尚無歷史紀錄',
+      'vault.snapshots.savedAs': '已儲存快照',
+      'vault.chatbox.title': '詢問檔案',
+      'vault.chatbox.toggle': '💬 詢問',
+      'vault.chatbox.disclaimer': '此聊天功能僅回應您本機檔案中的資訊，無法取代會計師、遺囑律師或財務顧問。任何重大決策（稅務、提領、受益人變更）請直接致電執照專業人士。',
+      'vault.chatbox.send': '傳送',
+      'vault.chatbox.placeholder': '請輸入關於您財務檔案的問題...',
+      'vault.chatbox.setupTitle': '初始設定',
+      'vault.chatbox.setupHint': '聊天功能直接呼叫 Anthropic API。請貼上您的 Claude API 金鑰以啟用。金鑰僅儲存於本瀏覽器 localStorage，僅用於 api.anthropic.com 之請求。',
+      'vault.chatbox.setupKeyLabel': 'Claude API 金鑰（於 console.anthropic.com/settings/keys 取得）',
+      'vault.chatbox.setupSave': '儲存並啟用',
+      'vault.chatbox.setupSkip': '略過 — 停用聊天功能',
+      'vault.chatbox.resetKey': '重設金鑰',
+      'vault.chatbox.showPrompt': '檢視系統提示詞',
+      'vault.chatbox.error.network': '網路錯誤。請確認網路連線及 API 金鑰是否有效。',
+      'vault.chatbox.error.api': 'API 錯誤',
+      'vault.chatbox.thinking': '思考中...',
+      'vault.chatbox.systemPromptModal': '即將傳送給 Claude 的系統提示詞',
+      'vault.settings.fireImport': '從 RR FIRE Dashboard 匯入餘額',
+      'vault.settings.fireImportBtn': '查看 FIRE Dashboard localStorage',
+      'vault.settings.fireImportHint': '單向匯入：讀取 FIRE-Dashboard.html localStorage 內的桶別合計，您可手動分配至各帳戶。',
+      'vault.settings.fireImportEmpty': '本瀏覽器 localStorage 內未發現 FIRE Dashboard 資料。請先於同一瀏覽器開啟 FIRE-Dashboard.html 並儲存狀態，再回到此處。',
+      'vault.settings.fireImportFound': '已找到 FIRE Dashboard 狀態。下列為合計金額，請手動分配至各帳戶：',
+      'vault.settings.fireImportError': '無法解析 FIRE Dashboard 狀態。',
+      'vault.settings.import': '匯入 / 從 JSON 還原',
+      'vault.settings.importFileBtn': '選擇 JSON 檔案',
+      'vault.settings.importPasteBtn': '改用貼上 JSON',
+      'vault.settings.importPasteConfirm': '匯入貼上之 JSON',
+      'vault.settings.importHint': '此操作將取代目前所有檔案資料。請於確認後執行。可用於還原備份或載入預先建立之種子（例如位於 Tax 資料夾的檔案）。',
+      'vault.settings.importParseError': 'JSON 格式錯誤：',
+      'vault.settings.importSchemaError': '資料結構驗證失敗：',
+      'vault.settings.importPreview': '找到 {accounts} 個帳戶、{lifeIns} 張保單、{contacts} 位聯絡人。確定**取代**目前檔案？',
+      'vault.settings.importConfirm': '確定以此資料取代目前檔案？',
+      'vault.settings.importDone': '✓ 已匯入 {accounts} 個帳戶。',
+      'vault.settings.importPasteHint': '請將 vault-prepopulate-rr.json（或任何先前匯出檔）的內容貼上於此。',
+    },
+  };
+
+  /* ============================================================
+     Pure helpers — exported on globalThis for test reuse
+     FRAME (feature 025): All values handled in nominal USD
+     (broker-statement frame). No purchasing-power conversion
+     happens in this file.
+     ============================================================ */
+
+  const STORAGE_KEY = 'vault.rr.v1';
+  const LOCALE_FALLBACK = 'en';
+  const SUPPORTED_LOCALES = ['en', 'zh-TW'];
+
+  const ACCOUNT_CATEGORIES = [
+    'us-bank-joint',
+    'us-bank-solo',
+    'us-brokerage-tod',
+    'us-brokerage-jtwros',
+    'employer-401k-roth',
+    'employer-401k-trad',
+    'traditional-ira',
+    'roth-ira',
+    'foreign-bank-taiwan',
+    'foreign-bank-china',
+    'taiwan-life-insurance',
+    'reit-ark7',
+    'other',
+  ];
+
+  const OWNERS = ['roger', 'rebecca', 'joint'];
+
+  function categoryToCountry(category) {
+    if (category === 'foreign-bank-taiwan' || category === 'taiwan-life-insurance') return 'Taiwan';
+    if (category === 'foreign-bank-china') return 'China';
+    if (category === 'other') return 'Other';
+    return 'US';
+  }
+
+  /* ============================================================
+     VAULT_PROCEDURES — bundled, static, NOT generated by an LLM.
+     Hand-authored death-procedure knowledge base keyed by account
+     category. Each entry has en + zh-TW blocks. See spec.md US2
+     and contracts/procedure-entry.contract.md.
+     ============================================================ */
+  const VAULT_PROCEDURES = {
+    'employer-401k-roth': {
+      category: 'employer-401k-roth',
+      en: {
+        whoToContact: 'Contact UPPAbaby (Monahan Products LLC) HR or Benefits team. They liaise with the 401(k) plan administrator (typically Fidelity, Empower, or similar). As the named beneficiary, you are entitled to a Beneficiary Distribution Form and guidance on rollover options.',
+        expectedTimeline: '4–8 weeks from death certificate submission to first distribution.',
+        paperworkChecklist: [
+          'Certified copy of Roger\'s death certificate (the plan administrator may require an original)',
+          'Marriage certificate (proof of spousal status — entitles you to spousal rollover options)',
+          'Beneficiary Distribution Form from the plan administrator',
+          'Your government-issued ID',
+          'Bank account information for the receiving rollover account (or an existing IRA you control)'
+        ],
+        taxStrategyNotes: 'As Roger\'s surviving spouse, your best option is almost always to roll the Roth 401(k) into your own Roth IRA (NOT take a lump-sum cash distribution). Qualified Roth distributions are federally tax-free, BUT large distributions in a single year can still push your MAGI past the IRMAA Medicare-premium threshold (~$103K Single in 2024) and the ACA cliff. Strategy: rollover first (no tax event), then withdraw gradually over 10+ years using the bracket-fill calculator on this page to keep your MAGI in a comfortable range.',
+        commonMistakes: [
+          'Taking a lump-sum cash distribution instead of rolling over — irreversibly converts the account to taxable cash and may push you across MAGI cliffs even though the distribution itself is tax-free.',
+          'Missing the 60-day indirect rollover window (if the plan cuts you a check). Direct trustee-to-trustee rollover avoids this risk.',
+          'Forgetting that even tax-free Roth distributions count toward MAGI for IRMAA + ACA + state-level cliffs.',
+          'Not updating beneficiary on the new IRA you roll into — the chain breaks if you don\'t name your own beneficiaries.'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      },
+      'zh-TW': {
+        whoToContact: '聯絡 UPPAbaby（Monahan Products LLC）的人力資源或福利部門，由他們與 401(k) 計畫管理機構（通常是 Fidelity、Empower 等）對接。作為指定受益人，您有權取得受益人分配申請書及轉存選項說明。',
+        expectedTimeline: '從提交死亡證明至首筆款項撥付，約需 4–8 週。',
+        paperworkChecklist: [
+          'Roger 的死亡證明書認證本（計畫管理機構通常要求正本）',
+          '結婚證書（證明配偶身分以取得配偶轉存權益）',
+          '計畫管理機構提供的「受益人分配申請書」',
+          '您本人的政府核發身分證件',
+          '接收轉存帳戶的銀行資訊（或您本人現有的 IRA 帳戶）'
+        ],
+        taxStrategyNotes: '作為 Roger 的遺孀，最佳做法幾乎都是將 Roth 401(k) 轉存至您本人的 Roth IRA（**不要**直接提領現金）。合格 Roth 提領在聯邦稅上免稅，但若單年提領金額過大，仍可能讓您的 MAGI 超過 IRMAA 醫療保費門檻（2024 年單身約 $103K）及 ACA 補助斷崖。建議策略：先完成轉存（不產生稅務事件），再透過本頁面的階梯填稅試算器，分 10 年以上逐步提領以控管 MAGI。',
+        commonMistakes: [
+          '一次性提領現金而非辦理轉存 — 此舉不可逆地將帳戶轉為應稅現金，即使提領本身免稅也可能跨越 MAGI 各項斷崖。',
+          '若計畫直接開支票給您，未在 60 天內完成間接轉存。直接機構對機構轉存可避免此風險。',
+          '忘記即使免稅的 Roth 提領仍計入 MAGI 用於 IRMAA、ACA 及州級斷崖計算。',
+          '轉存後的新 IRA 未指定新受益人 — 一旦您未指定，繼承鏈將中斷。'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      }
+    },
+
+    'employer-401k-trad': {
+      category: 'employer-401k-trad',
+      en: {
+        whoToContact: 'Contact the employer\'s HR or Benefits team (UPPAbaby / Monahan Products if Roger\'s; Rebecca\'s employer if hers). They will route you to the 401(k) plan administrator who handles spousal beneficiary distributions.',
+        expectedTimeline: '4–8 weeks from death certificate submission.',
+        paperworkChecklist: [
+          'Certified copy of the deceased\'s death certificate',
+          'Marriage certificate',
+          'Beneficiary Distribution Form from the plan administrator',
+          'Your government-issued ID',
+          'Receiving IRA account information (yours or a new spousal-rollover IRA)'
+        ],
+        taxStrategyNotes: 'As surviving spouse, roll the Traditional 401(k) into your own Traditional IRA. Withdrawals are taxed as ordinary income at YOUR rate. **Do NOT take a lump sum** — it would be added to your year-of-death income and likely push you into the 32%+ bracket with IRMAA + ACA cliff hits. The bracket-fill withdrawal calculator on this page recommends spreading withdrawals over 10–30 years to top up your other income to the 22% bracket boundary each year, minimizing lifetime federal tax. Roth conversion ladders are also worth considering once you understand the tax mechanics.',
+        commonMistakes: [
+          'Lump-sum withdrawal — common, costly, and almost never optimal.',
+          'Forgetting that Traditional IRA withdrawals are taxed at ordinary income rates (not capital-gains rates), so MAGI rises rapidly with each dollar withdrawn.',
+          'Not coordinating with Social Security claiming age — taxable IRA income reduces the value of delaying SS.',
+          'Failing to set up RMDs once you reach the applicable RMD age (currently 73, possibly 75 by 2033 under SECURE 2.0).'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      },
+      'zh-TW': {
+        whoToContact: '聯絡雇主的人資或福利部門（如為 Roger 的帳戶則為 UPPAbaby / Monahan Products；如為 Rebecca 的則為其雇主）。他們會引導您與處理配偶受益人事宜的 401(k) 計畫管理機構對接。',
+        expectedTimeline: '從提交死亡證明起約 4–8 週。',
+        paperworkChecklist: [
+          '逝者死亡證明書認證本',
+          '結婚證書',
+          '計畫管理機構提供的受益人分配申請書',
+          '您本人的政府核發身分證件',
+          '接收 IRA 帳戶資訊（您現有 IRA 或新設立的配偶轉存 IRA）'
+        ],
+        taxStrategyNotes: '作為遺孀，將傳統 401(k) 轉存至您本人的傳統 IRA。提領將以**您本人**的稅率列入一般所得課稅。**切勿一次性提領** — 這將計入您當年總所得，極可能推升至 32% 以上稅級並觸發 IRMAA 與 ACA 斷崖。本頁面的階梯填稅試算器建議將提領分散於 10–30 年，每年補足至 22% 稅級上緣，可有效降低終身聯邦稅負。同時可考慮 Roth 轉換階梯策略。',
+        commonMistakes: [
+          '一次性提領 — 常見、代價高昂，且幾乎從不是最佳選擇。',
+          '忘記傳統 IRA 提領為一般所得稅率（非資本利得稅率），每提領一元 MAGI 即上升一元。',
+          '未與社會安全金請領年齡協調 — 應稅 IRA 收入會降低延後請領 SS 的效益。',
+          '達 RMD 年齡後（目前為 73 歲，依 SECURE 2.0 可能 2033 年提高至 75）未設定強制最低提領。'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      }
+    },
+
+    'traditional-ira': {
+      category: 'traditional-ira',
+      en: {
+        whoToContact: 'Contact the IRA custodian directly (e.g., Fidelity, Vanguard, Schwab). For spousal beneficiaries, the simplest option is treating the inherited IRA as your own, which puts it under your name without a separate "Inherited IRA" account.',
+        expectedTimeline: '2–4 weeks (faster than employer 401k since no plan administrator middle-man).',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Marriage certificate',
+          'Custodian\'s spousal-beneficiary form',
+          'Your government-issued ID'
+        ],
+        taxStrategyNotes: 'Spousal rollover into your own Traditional IRA. Same ordinary-income treatment as employer Traditional 401(k). Use the bracket-fill calculator to spread withdrawals over 10–30 years.',
+        commonMistakes: [
+          'Treating it as a non-spouse inherited IRA when you are actually the spouse — the rules differ; spousal options are more flexible.',
+          'Missing 60-day indirect rollover window if the custodian sends a check.',
+          'Forgetting RMD obligations after you reach RMD age.'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      },
+      'zh-TW': {
+        whoToContact: '直接聯絡 IRA 託管機構（如 Fidelity、Vanguard、Schwab）。配偶受益人最簡單的方式是「視同自己的 IRA」處理，可直接掛在您本人名下，無需另開「繼承 IRA」帳戶。',
+        expectedTimeline: '2–4 週（較雇主 401(k) 快，因無計畫管理機構中介）。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '結婚證書',
+          '託管機構提供的配偶受益人申請書',
+          '您本人的政府核發身分證件'
+        ],
+        taxStrategyNotes: '配偶轉存至您本人的傳統 IRA。稅務處理與雇主傳統 401(k) 相同，按一般所得稅率課稅。使用階梯填稅試算器將提領分散 10–30 年。',
+        commonMistakes: [
+          '誤以非配偶繼承 IRA 規則處理 — 配偶選項較彈性。',
+          '若託管機構以支票形式寄出，錯過 60 天間接轉存期限。',
+          '達 RMD 年齡後未履行強制最低提領義務。'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      }
+    },
+
+    'roth-ira': {
+      category: 'roth-ira',
+      en: {
+        whoToContact: 'Contact the IRA custodian directly. Spousal rollover into your own Roth IRA is the standard path.',
+        expectedTimeline: '2–4 weeks.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Marriage certificate',
+          'Custodian\'s spousal-beneficiary form',
+          'Your government-issued ID'
+        ],
+        taxStrategyNotes: 'Roll into your own Roth IRA. Qualified withdrawals are federally tax-free. Surface the IRMAA / ACA / AMT cliff warnings even on Roth — large single-year withdrawals push MAGI even when the withdrawal itself is tax-free, and MAGI determines those cliffs.',
+        commonMistakes: [
+          'Forgetting the 5-year rule on the original Roth account — qualified-distribution status carries through; you don\'t need to wait another 5 years.',
+          'Cashing out instead of rolling over — irreversible.',
+          'Ignoring MAGI implications because "Roth is tax-free".'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      },
+      'zh-TW': {
+        whoToContact: '直接聯絡 IRA 託管機構。配偶轉存至您本人的 Roth IRA 為標準做法。',
+        expectedTimeline: '2–4 週。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '結婚證書',
+          '託管機構提供的配偶受益人申請書',
+          '您本人的政府核發身分證件'
+        ],
+        taxStrategyNotes: '轉存至您本人的 Roth IRA。合格提領聯邦免稅。但即使 Roth 帳戶，仍須留意 IRMAA / ACA / AMT 斷崖警示 — 單年大額提領會推升 MAGI 即使提領本身免稅，而 MAGI 才是斷崖判定基準。',
+        commonMistakes: [
+          '忘記原 Roth 帳戶的 5 年規則 — 合格提領資格可承接，您不需重新等 5 年。',
+          '直接提領現金而非轉存 — 不可逆。',
+          '因「Roth 免稅」而忽略 MAGI 影響。'
+        ],
+        hrContactName: null,
+        hrContactPhone: null,
+        hrContactEmail: null
+      }
+    },
+
+    'us-brokerage-tod': {
+      category: 'us-brokerage-tod',
+      en: {
+        whoToContact: 'Contact the brokerage directly (Webull customer service, Schwab Estate Services, etc.). The TOD designation transfers the account to the named beneficiary outside of probate, typically without an attorney.',
+        expectedTimeline: '2–6 weeks. Schwab is faster (often 2 weeks); Webull and other low-cost brokerages can take longer.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Brokerage\'s Transfer-on-Death claim form',
+          'Your government-issued ID',
+          'New brokerage account opened in your name (if you don\'t already have one)'
+        ],
+        taxStrategyNotes: 'TOD assets receive a **stepped-up cost basis** at date of death — the cost basis is reset to the market value on Roger\'s date of death. Sell soon after inheritance and capital gains are nearly zero. Hold long-term and only future appreciation is taxed. This is one of the most valuable tax features in the US estate code.',
+        commonMistakes: [
+          'Selling BEFORE retitling the account — basis step-up may not apply cleanly.',
+          'Not getting the brokerage\'s written confirmation of the new cost basis after retitling.',
+          'Forgetting to update the TOD beneficiary on the newly retitled account (it\'s now in your sole name; designate a new beneficiary).'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '直接聯絡券商（Webull 客服、Schwab Estate Services 等）。TOD 指定使帳戶不經遺產認證程序直接轉移至受益人，通常不需律師介入。',
+        expectedTimeline: '2–6 週。Schwab 較快（多數 2 週內）；Webull 等低費率券商可能較慢。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '券商提供的 TOD 領取申請書',
+          '您本人的政府核發身分證件',
+          '若您本人尚無券商帳戶，須先開立新帳戶'
+        ],
+        taxStrategyNotes: 'TOD 資產可享**死亡日成本基礎墊高**（cost basis step-up）— 成本基礎重設為 Roger 死亡當日市價。繼承後立即賣出時，資本利得稅近於零；長期持有時僅未來增值課稅。這是美國遺產稅法中最具價值的條款之一。',
+        commonMistakes: [
+          '在重新登記名下前即賣出 — 成本墊高可能無法完整適用。',
+          '重新登記後未取得券商書面確認新成本基礎。',
+          '忘記在新名下帳戶重新指定 TOD 受益人 — 帳戶現為您獨資，繼承鏈中斷。'
+        ]
+      }
+    },
+
+    'us-brokerage-jtwros': {
+      category: 'us-brokerage-jtwros',
+      en: {
+        whoToContact: 'Notify the brokerage. JTWROS (Joint Tenants With Right Of Survivorship) means the account passes automatically to the surviving co-owner with minimal paperwork.',
+        expectedTimeline: '1–3 weeks for the brokerage to update titling.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Brokerage\'s deceased-co-owner notification form',
+          'Your government-issued ID'
+        ],
+        taxStrategyNotes: 'In community property states, BOTH halves of a JTWROS account get a stepped-up basis. In common-law states (Massachusetts), only the deceased\'s half gets the step-up. Either way: don\'t sell before the brokerage applies the step-up to the records.',
+        commonMistakes: [
+          'Forgetting to update the named co-owner / beneficiary after Roger\'s name is removed.',
+          'Selling before the brokerage records the basis step-up.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '通知券商。JTWROS（生存者全權共同帳戶）會自動由生存共同持有人承繼，所需文件極少。',
+        expectedTimeline: '券商完成名義變更約需 1–3 週。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '券商提供的「共同持有人離世」通知書',
+          '您本人的政府核發身分證件'
+        ],
+        taxStrategyNotes: '在共同財產制州，JTWROS 帳戶**雙方**份額皆可享成本墊高。在普通法制州（如麻州），僅逝者半額可墊高。不論如何：在券商完成成本基礎更新前請勿賣出。',
+        commonMistakes: [
+          'Roger 姓名移除後，忘記更新指定共同持有人或受益人。',
+          '在券商記錄成本墊高之前即行賣出。'
+        ]
+      }
+    },
+
+    'us-bank-joint': {
+      category: 'us-bank-joint',
+      en: {
+        whoToContact: 'Visit your bank branch (East West Bank for joint checking) with the death certificate. Joint accounts pass automatically to the surviving co-owner; the bank simply removes the deceased\'s name.',
+        expectedTimeline: '1–2 weeks.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Your government-issued ID',
+          'The bank\'s deceased-co-owner notification form (varies by bank)'
+        ],
+        taxStrategyNotes: 'No tax event. Funds in a joint checking/savings remain accessible throughout. If balance is large enough to trigger FDIC concern (>$250K per ownership category), consider splitting before retitling.',
+        commonMistakes: [
+          'Letting the bank freeze access while paperwork processes — call ahead and confirm continuous access.',
+          'Forgetting to update beneficiaries / payable-on-death designations on the now-sole account.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '攜帶死亡證明前往銀行分行（共同支票帳戶為 East West Bank）。共同帳戶自動由生存共同持有人承繼，銀行僅須移除逝者姓名。',
+        expectedTimeline: '1–2 週。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '您本人的政府核發身分證件',
+          '銀行提供的共同持有人離世通知書（各行格式不同）'
+        ],
+        taxStrategyNotes: '無稅務事件。共同支票/儲蓄帳戶資金全程可存取。若餘額大到觸及 FDIC 保險上限（單一所有權類別 $25 萬美元），可考慮在重新登記前分拆。',
+        commonMistakes: [
+          '銀行作業期間凍結帳戶 — 請事先電話確認帳戶可持續存取。',
+          '帳戶轉為獨資後忘記更新受益人或 POD 指定。'
+        ]
+      }
+    },
+
+    'us-bank-solo': {
+      category: 'us-bank-solo',
+      en: {
+        whoToContact: 'If the account had a Payable-on-Death (POD) designation: contact the bank directly. If no POD: the account goes through probate; contact your estate attorney.',
+        expectedTimeline: 'POD: 2–4 weeks. Probate: 6–18 months.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'POD claim form (if POD designated) OR Letters Testamentary from the probate court',
+          'Your government-issued ID'
+        ],
+        taxStrategyNotes: 'No income tax on bank balance inheritance. POD is highly preferable to probate — fast, free, private. Probate is slow and public.',
+        commonMistakes: [
+          'Discovering accounts have no POD only after death — set up POD on every solo account NOW (you can do this on your own accounts immediately).',
+          'Missing accounts during probate inventory if Roger had accounts you didn\'t know about.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '若帳戶已指定 Payable-on-Death（POD）受益人：直接聯絡銀行。若無 POD：須走遺產認證程序，請聯絡遺囑律師。',
+        expectedTimeline: 'POD：2–4 週。遺產認證：6–18 個月。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          'POD 領取申請書（若已指定）或遺產認證法庭核發的 Letters Testamentary',
+          '您本人的政府核發身分證件'
+        ],
+        taxStrategyNotes: '銀行存款繼承無所得稅。POD 遠優於遺產認證 — 快速、免費、私密。遺產認證緩慢且公開。',
+        commonMistakes: [
+          '逝後才發現帳戶未設 POD — 立即在所有獨資帳戶設定 POD（您可立刻在自己的帳戶上設定）。',
+          'Roger 若有您不知情的獨資帳戶，遺產清冊可能遺漏。'
+        ]
+      }
+    },
+
+    'foreign-bank-taiwan': {
+      category: 'foreign-bank-taiwan',
+      en: {
+        whoToContact: 'Visit the inheritance desk at each Taiwan bank where Roger had accounts. Most major Taiwan banks have English-speaking staff for inheritance cases. If you don\'t speak Mandarin OR if the combined Taiwan estate exceeds NT$5M, hire a Taiwan-licensed attorney (typical flat fee NT$30,000–60,000).',
+        expectedTimeline: '2–6 weeks per bank. Plan to do them in parallel.',
+        paperworkChecklist: [
+          'Apostilled US death certificate (or TECRO authentication if not Hague-Convention)',
+          'Certified Mandarin translation of the death certificate',
+          'Roger\'s Taiwan National ID or Passport (whichever the bank has on file)',
+          'Your ROC ID or Passport',
+          'Marriage certificate (apostilled + translated)',
+          'Bank-specific inheritance application form',
+          'Taiwan inheritance tax clearance certificate from MOF (required by some banks before release)'
+        ],
+        taxStrategyNotes: 'Taiwan inheritance tax has generous spousal exemptions; for Roger\'s combined Taiwan accounts (~$28K USD per his 2025 FBAR), no Taiwan tax due. **No US estate tax** on this size estate either. HOWEVER, you must continue filing **FBAR** and **Form 8938 (FATCA)** annually under your sole name. The accounts triggering reporting before still trigger reporting after, just under your TIN.',
+        commonMistakes: [
+          'Trying to repatriate before inheritance procedure completes — banks freeze accounts immediately on death notification.',
+          'Forgetting to update FBAR / Form 8938 with new ownership in the year-of-death filing.',
+          'Closing accounts to repatriate ALL funds — Taiwan capital is hard to redeploy from the US, and you may want to keep accounts open for future visits.',
+          'Using a non-licensed translation — Taiwan banks often require notarized / certified translations.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '前往 Roger 各台灣銀行的「繼承業務」窗口。多數大型台灣銀行有英語客服處理繼承案件。若您不諳中文或台灣總遺產逾 NT$500 萬，建議聘請台灣執業律師（典型總額費約 NT$3 萬–6 萬）。',
+        expectedTimeline: '每家銀行 2–6 週。建議同時並行處理。',
+        paperworkChecklist: [
+          '美國死亡證明書經 Apostille 認證（或經 TECRO 駐美代表處驗證，如非海牙公約成員）',
+          '死亡證明書中文認證翻譯本',
+          'Roger 的台灣身分證或護照（依銀行留存資料）',
+          '您本人的中華民國身分證或護照',
+          '結婚證書（Apostille 認證 + 翻譯）',
+          '各銀行繼承申請表',
+          '財政部遺產稅完稅證明（部分銀行要求先取得方放款）'
+        ],
+        taxStrategyNotes: '台灣遺產稅配偶免稅額寬厚；Roger 台灣總帳戶（依 2025 FBAR 約 $28K 美元）無遺產稅應繳。此規模亦無**美國遺產稅**。**但您須繼續每年以您名下單獨申報 FBAR 與 Form 8938（FATCA）**。原本觸發申報的帳戶在轉名後仍須申報，只是改用您的 TIN。',
+        commonMistakes: [
+          '繼承程序未完成即匯出資金 — 銀行接獲死亡通知後立即凍結帳戶。',
+          '忘記在當年度申報中更新 FBAR / Form 8938 的所有人資訊。',
+          '為匯回美國而結清所有帳戶 — 台灣資金匯出後不易回流，且未來赴台時保留帳戶較便利。',
+          '使用未認證之翻譯 — 台灣銀行通常要求公證或認證翻譯。'
+        ]
+      }
+    },
+
+    'foreign-bank-china': {
+      category: 'foreign-bank-china',
+      en: {
+        whoToContact: 'Bank of China (Beijing branch) and China Construction Bank (Beijing branch). PBOC capital controls plus inheritance procedures make this the most complex category — strongly recommend hiring a China-licensed attorney before contacting the banks.',
+        expectedTimeline: '6 months to 2 years. Substantially longer than Taiwan or US.',
+        paperworkChecklist: [
+          'Notarized + apostilled US death certificate',
+          'Notarized Mandarin translation by a PRC-recognized translator',
+          'Marriage certificate (notarized + apostilled + translated)',
+          'Roger\'s passport / Chinese visa records if applicable',
+          'Your passport',
+          'Inheritance Right Notarization (繼承權公證書) from a PRC notary OR a court-issued inheritance order — banks will require ONE of these before releasing funds',
+          'PBOC foreign-exchange quota approval if you intend to repatriate funds (capped at $50K USD/year per individual)'
+        ],
+        taxStrategyNotes: 'No PRC inheritance tax (PRC currently has no inheritance tax). However, repatriation is the hard part: PBOC limits individual outbound FX to ~$50K USD/year. For Roger\'s combined ~$10K USD in PRC accounts, this is not binding. For larger amounts, plan multi-year repatriation OR consider hiring a Hong Kong / offshore intermediary (subject to additional costs and disclosure obligations). **Do NOT** attempt informal channels (underground banking, etc.) — these violate both US AML rules and PRC FX rules.',
+        commonMistakes: [
+          'Underestimating timeline — China procedures take far longer than Taiwan or US.',
+          'Trying to repatriate without proper documentation — PBOC will block transfers and may flag the account.',
+          'Using informal FX channels — illegal and risky.',
+          'Not coordinating with the executor of Roger\'s US estate — China procedures may require US-side documents the US executor controls.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '中國銀行（北京分行）及中國建設銀行（北京分行）。央行外匯管制加繼承程序使此類別最為複雜 — 強烈建議在聯絡銀行前先聘請中國執業律師。',
+        expectedTimeline: '6 個月至 2 年。較台灣或美國長甚多。',
+        paperworkChecklist: [
+          '美國死亡證明書經公證 + Apostille 認證',
+          '中華人民共和國認可譯者所製作的公證中譯本',
+          '結婚證書（公證 + Apostille + 翻譯）',
+          'Roger 之護照與中國簽證紀錄（如適用）',
+          '您本人之護照',
+          '中國公證機關核發之**繼承權公證書**或法院繼承裁定 — 銀行通常擇一要求',
+          '若擬匯出資金，須申請央行外匯配額（個人每年上限約 $5 萬美元）'
+        ],
+        taxStrategyNotes: '中國目前無遺產稅。但**匯出資金**是難關：央行對個人對外匯款上限約每年 $5 萬美元。Roger 在中國總計約 $1 萬美元，此限額不會卡住。若金額更大，須規劃多年匯出或考慮香港/境外中介（需額外成本與申報義務）。**切勿**使用非正式管道（地下匯兌等）— 違反美國洗錢防制與中國外匯規定。',
+        commonMistakes: [
+          '低估時程 — 中國程序遠長於台灣或美國。',
+          '文件不全即試圖匯出 — 央行將阻擋並可能標記帳戶。',
+          '使用非正式外匯管道 — 違法且風險高。',
+          '未與 Roger 美國遺產執行人協調 — 中國程序常需美方執行人掌握之文件。'
+        ]
+      }
+    },
+
+    'taiwan-life-insurance': {
+      category: 'taiwan-life-insurance',
+      en: {
+        whoToContact: 'Contact Nan Shan Life Insurance directly (or whichever insurer holds the policy). Beneficiary claim is a standardized procedure.',
+        expectedTimeline: '30–60 days from claim submission to payout.',
+        paperworkChecklist: [
+          'Death certificate (apostilled + translated)',
+          'Original policy document',
+          'Beneficiary\'s ROC ID or Passport',
+          'Bank account information for the payout',
+          'Insurer\'s claim form'
+        ],
+        taxStrategyNotes: 'Taiwan life insurance proceeds to a named beneficiary are generally tax-free in Taiwan AND in the US. (This is a major reason Taiwanese families use cash-value life insurance as an estate-planning tool.) Confirm beneficiary designation on the policy is current.',
+        commonMistakes: [
+          'Missing the policy document — keep a copy in your password vault and a paper copy in the fireproof safe.',
+          'Beneficiary on file outdated (e.g., still listing a parent or first spouse).',
+          'Not knowing the policy number — the insurer can locate by ID, but having the number speeds the claim significantly.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '直接聯絡南山人壽（或承保保險公司）。受益人理賠為標準化流程。',
+        expectedTimeline: '從提交申請到撥付約 30–60 天。',
+        paperworkChecklist: [
+          '死亡證明書（Apostille 認證 + 翻譯）',
+          '保單正本',
+          '受益人之中華民國身分證或護照',
+          '保險金匯入銀行帳戶資訊',
+          '保險公司理賠申請書'
+        ],
+        taxStrategyNotes: '台灣人壽保險金支付給指定受益人時，於台灣及美國皆通常免稅（此為台灣家庭常用儲蓄型壽險作為遺產規劃工具的主因）。請確認保單上受益人指定為最新狀態。',
+        commonMistakes: [
+          '保單正本遺失 — 請於密碼管理工具及防火保險箱各留一份。',
+          '受益人指定過時（如仍登記為父母或前配偶）。',
+          '不知道保單號碼 — 保險公司雖可依身分證查詢，但有號碼可大幅加速理賠。'
+        ]
+      }
+    },
+
+    'reit-ark7': {
+      category: 'reit-ark7',
+      en: {
+        whoToContact: 'Contact Ark7 customer support (support@ark7.com). Ark7 shares are private REIT shares; transfer requires submitting a beneficiary form and supporting documentation.',
+        expectedTimeline: '4–8 weeks (private-market shares move slower than public).',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'Marriage certificate',
+          'Ark7 beneficiary transfer form',
+          'Your government-issued ID',
+          'Ark7 account information (yours, or open new)'
+        ],
+        taxStrategyNotes: 'REIT shares receive stepped-up cost basis at date of death (same as public brokerage). Section 199A QBI deduction continues to flow through to your 1040 — file Schedule K-1 from Ark7 each year. If you prefer to liquidate, request a redemption from Ark7 (subject to their redemption schedule, typically quarterly).',
+        commonMistakes: [
+          'Forgetting that REIT distributions are NOT qualified dividends — they\'re ordinary income (with the QBI 20% deduction).',
+          'Selling within Ark7\'s lockup or redemption windows — can trigger fees.',
+          'Not maintaining Ark7 login credentials — without access, you can\'t see distributions or redemption status.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '聯絡 Ark7 客服（support@ark7.com）。Ark7 為私募 REIT 股份，移轉須提交受益人表單與佐證文件。',
+        expectedTimeline: '4–8 週（私募市場股份移轉較公開市場慢）。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '結婚證書',
+          'Ark7 受益人移轉申請書',
+          '您本人的政府核發身分證件',
+          'Ark7 帳戶資訊（您現有或新開立）'
+        ],
+        taxStrategyNotes: 'REIT 股份在死亡日享有成本基礎墊高（與公開市場券商相同）。Section 199A QBI 抵扣持續流經您的 1040 — 每年依 Ark7 提供之 Schedule K-1 申報。若擬贖回，須向 Ark7 提出申請（依其贖回時程，通常每季開放）。',
+        commonMistakes: [
+          '忘記 REIT 配息**非**合格股利 — 屬一般所得（享 QBI 20% 抵扣）。',
+          '於 Ark7 鎖定期或贖回視窗外賣出 — 可能觸發費用。',
+          '未保留 Ark7 登入資訊 — 無法存取則無法查詢配息與贖回狀態。'
+        ]
+      }
+    },
+
+    'other': {
+      category: 'other',
+      en: {
+        whoToContact: 'Consult a probate attorney licensed in Massachusetts. They will review the asset and recommend a path (TOD, POD, probate, or trust transfer).',
+        expectedTimeline: 'Varies. Generic probate path: 6–18 months.',
+        paperworkChecklist: [
+          'Certified copy of death certificate',
+          'All documentation related to the asset',
+          'Will (if any)',
+          'Trust documents (if any)',
+          'Your government-issued ID'
+        ],
+        taxStrategyNotes: 'Without a category-specific procedure, the safest default is a probate attorney consultation BEFORE taking any action. Some assets have inheritance rules that, if mishandled, lose tax benefits permanently.',
+        commonMistakes: [
+          'Acting without legal advice on an unfamiliar asset class.',
+          'Assuming all assets work like bank accounts — they don\'t.',
+          'Disposing of an asset before consulting a CPA on basis-step-up implications.'
+        ]
+      },
+      'zh-TW': {
+        whoToContact: '諮詢麻州執業遺囑律師，由其檢視資產性質並建議處理路徑（TOD、POD、遺產認證或信託移轉）。',
+        expectedTimeline: '視資產類別而定。一般遺產認證路徑：6–18 個月。',
+        paperworkChecklist: [
+          '死亡證明書認證本',
+          '與資產相關之全部文件',
+          '遺囑（如有）',
+          '信託文件（如有）',
+          '您本人的政府核發身分證件'
+        ],
+        taxStrategyNotes: '若無分類別流程，最安全做法是先**徵詢遺囑律師後再行動**。某些資產的繼承規則一旦處理不當，稅務優惠將永久喪失。',
+        commonMistakes: [
+          '未諮詢律師即處理陌生資產類別。',
+          '誤以所有資產均如銀行帳戶般處理 — 並非如此。',
+          '未先諮詢會計師有關成本墊高影響即處分資產。'
+        ]
+      }
+    }
+  };
+
+  function emptyVault() {
+    return {
+      version: 'v1',
+      locale: LOCALE_FALLBACK,
+      apiKey: null,
+      chatboxEnabled: false,
+      chatboxModel: 'claude-opus-4-7',
+      redactAccountNumbersInAI: true,
+      encryption: null,
+      accounts: [],
+      criticalFamilyInfo: {
+        will: null,
+        poaFinancial: null,
+        poaHealthcare: null,
+        healthcareDirective: null,
+        guardianship: null,
+        lifeInsurance: [],
+        passwordVault: null,
+        funeral: { notes: null },
+        contacts: [],
+      },
+      obligations: {},
+      snapshotHistory: [],
+    };
+  }
+
+  // Schema validation — pure
+  function validateAccount(acct) {
+    const errors = [];
+    if (!acct || typeof acct !== 'object') return ['account must be an object'];
+    if (!acct.id || typeof acct.id !== 'string') errors.push('id required');
+    if (!OWNERS.includes(acct.owner)) errors.push('owner invalid');
+    if (!ACCOUNT_CATEGORIES.includes(acct.category)) errors.push('category invalid');
+    if (!acct.institution || typeof acct.institution !== 'string') errors.push('institution required');
+    if (typeof acct.currentBalanceUSD !== 'number' || acct.currentBalanceUSD < 0 || !isFinite(acct.currentBalanceUSD)) errors.push('currentBalanceUSD invalid');
+    if (acct.accountNumberLast4 && !/^\d{1,4}$/.test(acct.accountNumberLast4)) errors.push('accountNumberLast4 invalid');
+    if (acct.exchangeRateToUSD !== null && acct.exchangeRateToUSD !== undefined) {
+      if (typeof acct.exchangeRateToUSD !== 'number' || acct.exchangeRateToUSD <= 0) errors.push('exchangeRateToUSD invalid');
+    }
+    if (!Array.isArray(acct.history)) errors.push('history must be array');
+    return errors;
+  }
+
+  function validateVault(vault) {
+    const errors = [];
+    if (!vault || typeof vault !== 'object') return ['vault must be an object'];
+    if (vault.version !== 'v1') errors.push('version must be v1');
+    if (!SUPPORTED_LOCALES.includes(vault.locale)) errors.push('locale unsupported');
+    if (!Array.isArray(vault.accounts)) errors.push('accounts must be array');
+    else {
+      vault.accounts.forEach((a, i) => {
+        const aerrs = validateAccount(a);
+        aerrs.forEach(e => errors.push('accounts[' + i + ']: ' + e));
+      });
+    }
+    if (!vault.criticalFamilyInfo || typeof vault.criticalFamilyInfo !== 'object') errors.push('criticalFamilyInfo must be an object');
+    if (!vault.obligations || typeof vault.obligations !== 'object') errors.push('obligations must be an object');
+    if (!Array.isArray(vault.snapshotHistory)) errors.push('snapshotHistory must be array');
+    return errors;
+  }
+
+  /* ============================================================
+     Tax constants — sourced from calc/taxBrackets.js (project canonical),
+     IRS Pub 17 (AMT), CMS (IRMAA), KFF (ACA cliff). See research.md R1-R3.
+     2024 numbers used as the v1 reference; year-stamped so a v1.1 refresh
+     can update them.
+     ============================================================ */
+
+  // 2024 federal Single brackets (Rebecca's filing status post-year-of-death)
+  const BRACKETS_SINGLE_2024 = Object.freeze([
+    { rate: 0.10, upperBound: 11600 },
+    { rate: 0.12, upperBound: 47150 },
+    { rate: 0.22, upperBound: 100525 },
+    { rate: 0.24, upperBound: 191950 },
+    { rate: 0.32, upperBound: 243725 },
+    { rate: 0.35, upperBound: 609350 },
+    { rate: 0.37, upperBound: Infinity },
+  ]);
+  const STD_DEDUCTION_SINGLE_2024 = 14600;
+
+  // 2024 federal MFJ brackets (year-of-death filing OR Qualifying Surviving Spouse years 1-3)
+  const BRACKETS_MFJ_2024 = Object.freeze([
+    { rate: 0.10, upperBound: 23200 },
+    { rate: 0.12, upperBound: 94300 },
+    { rate: 0.22, upperBound: 201050 },
+    { rate: 0.24, upperBound: 383900 },
+    { rate: 0.32, upperBound: 487450 },
+    { rate: 0.35, upperBound: 731200 },
+    { rate: 0.37, upperBound: Infinity },
+  ]);
+  const STD_DEDUCTION_MFJ_2024 = 29200;
+
+  // MA state — 5% flat rate on most ordinary income
+  const MA_FLAT_RATE = 0.05;
+
+  // Cliff thresholds (research.md R2-R3)
+  const IRMAA_THRESHOLD_SINGLE_2024 = 103000;
+  const IRMAA_THRESHOLD_MFJ_2024 = 206000;
+  const ACA_400_FPL_HOUSEHOLD_2_2024 = 84600;   // 400% FPL household of 2 (Rebecca + 0 dependents)
+  const ACA_400_FPL_HOUSEHOLD_4_2024 = 128600;  // 400% FPL household of 4 (Rebecca + 2 minor kids)
+  const AMT_EXEMPTION_SINGLE_2024 = 85700;
+  const AMT_EXEMPTION_MFJ_2024 = 133300;
+
+  function getBrackets(filingStatus) {
+    if (filingStatus === 'mfj' || filingStatus === 'qss') return BRACKETS_MFJ_2024;
+    return BRACKETS_SINGLE_2024;
+  }
+  function getStdDeduction(filingStatus) {
+    if (filingStatus === 'mfj' || filingStatus === 'qss') return STD_DEDUCTION_MFJ_2024;
+    return STD_DEDUCTION_SINGLE_2024;
+  }
+  function getIrmaaThreshold(filingStatus) {
+    if (filingStatus === 'mfj' || filingStatus === 'qss') return IRMAA_THRESHOLD_MFJ_2024;
+    return IRMAA_THRESHOLD_SINGLE_2024;
+  }
+  function getAmtExemption(filingStatus) {
+    if (filingStatus === 'mfj' || filingStatus === 'qss') return AMT_EXEMPTION_MFJ_2024;
+    return AMT_EXEMPTION_SINGLE_2024;
+  }
+
+  /* ============================================================
+     Pure tax math — no DOM, no globals
+     ============================================================ */
+
+  // Apply progressive brackets to taxable income (already net of std deduction)
+  function computeFederalTax(taxableIncome, brackets) {
+    if (taxableIncome <= 0) return 0;
+    let tax = 0;
+    let prev = 0;
+    for (const b of brackets) {
+      if (taxableIncome <= b.upperBound) {
+        tax += (taxableIncome - prev) * b.rate;
+        return tax;
+      }
+      tax += (b.upperBound - prev) * b.rate;
+      prev = b.upperBound;
+    }
+    return tax;
+  }
+
+  // Find the income amount at which the active bracket changes (e.g., upper of 22% bracket)
+  function bracketUpperBound(targetRate, brackets) {
+    for (const b of brackets) {
+      if (b.rate === targetRate) return b.upperBound;
+    }
+    return Infinity;
+  }
+
+  function detectCliffs(magi, filingStatus, householdSize) {
+    const irmaa = magi > getIrmaaThreshold(filingStatus);
+    const acaThreshold = householdSize >= 4 ? ACA_400_FPL_HOUSEHOLD_4_2024 : ACA_400_FPL_HOUSEHOLD_2_2024;
+    const acaCliff = magi > acaThreshold;
+    // AMT is more nuanced; v1 uses a coarse signal — MAGI > 2x exemption
+    const amt = magi > getAmtExemption(filingStatus) * 2;
+    return { irmaa: irmaa, acaCliff: acaCliff, amt: amt };
+  }
+
+  /* ============================================================
+     Withdrawal strategies — pure functions
+     Inputs: { account, rebeccaOtherIncome, filingStatus, householdSize,
+               growthRateAnnual, targetBracketPct, isRoth }
+     Output: WithdrawalSchedule per contracts/withdrawal-calc.contract.md
+     ============================================================ */
+
+  function buildWithdrawalSchedule(yearByYear) {
+    const totalWithdrawn = yearByYear.reduce((s, y) => s + y.withdrawal, 0);
+    const totalFederalTax = yearByYear.reduce((s, y) => s + y.federalTax, 0);
+    const totalStateTax = yearByYear.reduce((s, y) => s + y.stateTax, 0);
+    const endingBalance = yearByYear.length ? yearByYear[yearByYear.length - 1].remainingBalance : 0;
+    const triggeredCliffs = {
+      irmaa: yearByYear.some(y => y.irmaa),
+      acaCliff: yearByYear.some(y => y.acaCliff),
+      amt: yearByYear.some(y => y.amt),
+    };
+    const cliffYears = {
+      irmaa: yearByYear.filter(y => y.irmaa).map(y => y.year),
+      acaCliff: yearByYear.filter(y => y.acaCliff).map(y => y.year),
+      amt: yearByYear.filter(y => y.amt).map(y => y.year),
+    };
+    return {
+      yearByYear: yearByYear,
+      totalWithdrawn: totalWithdrawn,
+      totalFederalTax: totalFederalTax,
+      totalStateTax: totalStateTax,
+      endingBalance: endingBalance,
+      triggeredCliffs: triggeredCliffs,
+      cliffYears: cliffYears,
+    };
+  }
+
+  function makeYearRow(year, withdrawal, otherIncome, isRoth, filingStatus, householdSize, remaining) {
+    const stdDeduction = getStdDeduction(filingStatus);
+    const brackets = getBrackets(filingStatus);
+    const totalIncome = otherIncome + withdrawal;
+    const magi = totalIncome;  // simplification — true MAGI has add-backs, but for v1 calculator MAGI ≈ AGI
+    // For Roth distributions, the withdrawal itself is NOT taxable income, so taxable income excludes it.
+    const taxableIncome = isRoth
+      ? Math.max(0, otherIncome - stdDeduction)
+      : Math.max(0, totalIncome - stdDeduction);
+    const federalTax = computeFederalTax(taxableIncome, brackets);
+    const stateTax = isRoth
+      ? Math.max(0, otherIncome) * MA_FLAT_RATE
+      : Math.max(0, totalIncome) * MA_FLAT_RATE;
+    const cliffs = detectCliffs(magi, filingStatus, householdSize);
+    return {
+      year: year,
+      withdrawal: withdrawal,
+      totalIncome: totalIncome,
+      federalTax: federalTax,
+      stateTax: stateTax,
+      irmaa: cliffs.irmaa,
+      acaCliff: cliffs.acaCliff,
+      amt: cliffs.amt,
+      remainingBalance: Math.max(0, remaining),
+    };
+  }
+
+  function calculateLumpSumStrategy(input) {
+    const { account, rebeccaOtherIncome, filingStatus, householdSize, isRoth } = input;
+    const balance = account.currentBalanceUSD;
+    const yearByYear = [];
+    yearByYear.push(makeYearRow(1, balance, rebeccaOtherIncome, isRoth, filingStatus, householdSize, 0));
+    for (let y = 2; y <= 10; y++) {
+      yearByYear.push(makeYearRow(y, 0, rebeccaOtherIncome, isRoth, filingStatus, householdSize, 0));
+    }
+    return buildWithdrawalSchedule(yearByYear);
+  }
+
+  function calculateEvenTenthsStrategy(input) {
+    const { account, rebeccaOtherIncome, filingStatus, householdSize, growthRateAnnual, isRoth } = input;
+    let remaining = account.currentBalanceUSD;
+    const yearByYear = [];
+    for (let y = 1; y <= 10; y++) {
+      // Withdraw 1/(11-y) of remaining each year, so by y=10 we drain to 0
+      const withdrawal = remaining / (11 - y);
+      remaining = Math.max(0, remaining - withdrawal);
+      // Apply growth on the remaining balance for next year
+      remaining = remaining * (1 + growthRateAnnual);
+      yearByYear.push(makeYearRow(y, withdrawal, rebeccaOtherIncome, isRoth, filingStatus, householdSize, remaining));
+    }
+    return buildWithdrawalSchedule(yearByYear);
+  }
+
+  function calculateBracketFillStrategy(input) {
+    const {
+      account, rebeccaOtherIncome, filingStatus, householdSize,
+      growthRateAnnual, targetBracketPct, isRoth,
+    } = input;
+    const stdDeduction = getStdDeduction(filingStatus);
+    const brackets = getBrackets(filingStatus);
+    const upperBoundIncome = bracketUpperBound(targetBracketPct, brackets) + stdDeduction;
+    let remaining = account.currentBalanceUSD;
+    const yearByYear = [];
+    // Apples-to-apples 10-year comparison window: withdraw at the bracket cap
+    // each year. Do NOT force-drain Y10 — under spousal-rollover rules Rebecca
+    // can keep deferring whatever's left past year 10. The end balance shown to
+    // the user makes the comparison fair: lump-sum trades $0 end balance for
+    // higher year-1 tax; bracket-fill trades a deferred residual for lower
+    // 10-year tax and zero cliffs.
+    for (let y = 1; y <= 10; y++) {
+      const headroom = Math.max(0, upperBoundIncome - rebeccaOtherIncome);
+      const withdrawal = Math.min(headroom, remaining);
+      remaining = Math.max(0, remaining - withdrawal);
+      remaining = remaining * (1 + growthRateAnnual);
+      yearByYear.push(makeYearRow(y, withdrawal, rebeccaOtherIncome, isRoth, filingStatus, householdSize, remaining));
+    }
+    return buildWithdrawalSchedule(yearByYear);
+  }
+
+  function runAllStrategies(input) {
+    return {
+      lumpSum: calculateLumpSumStrategy(input),
+      evenTenths: calculateEvenTenthsStrategy(input),
+      bracketFill: calculateBracketFillStrategy(input),
+    };
+  }
+
+  /* ============================================================
+     Procedure lookup — pure
+     ============================================================ */
+  function lookupProcedure(category) {
+    return VAULT_PROCEDURES[category] || VAULT_PROCEDURES['other'];
+  }
+
+  function getProcedureBlock(category, locale) {
+    const entry = lookupProcedure(category);
+    if (!entry) return null;
+    return entry[locale] || entry['en'];
+  }
+
+  // UUID generator using crypto.randomUUID where available (modern browsers + Node 19+)
+  function newId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Fallback: 16 random hex bytes formatted as UUID-like
+    const arr = new Uint8Array(16);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(arr);
+    else for (let i = 0; i < 16; i++) arr[i] = Math.floor(Math.random() * 256);
+    arr[6] = (arr[6] & 0x0f) | 0x40;
+    arr[8] = (arr[8] & 0x3f) | 0x80;
+    const hex = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+    return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+  }
+
+  function newAccount(partial) {
+    return Object.assign({
+      id: newId(),
+      owner: 'roger',
+      category: 'us-bank-joint',
+      institution: '',
+      accountNumberLast4: '',
+      accountNumberFull: null,
+      currencyNative: 'USD',
+      currentBalanceUSD: 0,
+      exchangeRateToUSD: null,
+      lastUpdated: new Date().toISOString(),
+      loginUrl: null,
+      contactPhone: null,
+      contactEmail: null,
+      contactAddress: null,
+      beneficiary: null,
+      notes: null,
+      history: [],
+      deceasedFlag: null,
+    }, partial || {});
+  }
+
+  // Immutable account update — returns a NEW account, never mutates
+  function updateAccount(account, patch) {
+    return Object.assign({}, account, patch, { lastUpdated: new Date().toISOString() });
+  }
+
+  // Persistence — wraps localStorage with try/catch and schema validation
+  function loadVault() {
+    let raw;
+    try { raw = localStorage.getItem(STORAGE_KEY); }
+    catch (e) { console.warn('[vault] localStorage read failed', e.message); return emptyVault(); }
+    if (!raw) return emptyVault();
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch (e) { console.warn('[vault] localStorage parse failed', e.message); return emptyVault(); }
+    const errs = validateVault(parsed);
+    if (errs.length) {
+      console.warn('[vault] schema mismatch:', errs);
+      // Don't auto-fix — let user re-import. For v1, fall back to empty.
+      return emptyVault();
+    }
+    return parsed;
+  }
+
+  function saveVault(vault) {
+    const errs = validateVault(vault);
+    if (errs.length) throw new Error('saveVault: invalid vault: ' + errs.join('; '));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(vault)); }
+    catch (e) { console.warn('[vault] localStorage write failed', e.message); throw e; }
+  }
+
+  function wipeVault() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
+
+  // Format helpers
+  function formatUSD(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '$0';
+    return '$' + Math.round(n).toLocaleString('en-US');
+  }
+
+  function daysSince(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    const ms = Date.now() - d.getTime();
+    return Math.floor(ms / (1000 * 60 * 60 * 24));
+  }
+
+  /* ============================================================
+     UI state — single source of truth
+     ============================================================ */
+  const state = {
+    vault: emptyVault(),
+    activeTab: 'inventory',
+    filters: { owner: 'all', country: 'all', category: 'all' },
+    editingAccountId: null,   // null = new; otherwise editing existing
+    deletingAccountId: null,
+    procedureAccountId: null,
+  };
+
+  /* ============================================================
+     i18n: t(key, params) and applyLocale()
+     ============================================================ */
+  function t(key, params) {
+    const dict = TRANSLATIONS[state.vault.locale] || TRANSLATIONS[LOCALE_FALLBACK];
+    let s = dict[key];
+    if (s === undefined) {
+      // Fallback to EN, then to the key itself
+      s = (TRANSLATIONS[LOCALE_FALLBACK][key] !== undefined) ? TRANSLATIONS[LOCALE_FALLBACK][key] : key;
+    }
+    if (params) {
+      Object.keys(params).forEach(k => {
+        s = s.replace('{' + k + '}', params[k]);
+      });
+    }
+    return s;
+  }
+
+  function applyLocale() {
+    document.documentElement.setAttribute('lang', state.vault.locale === 'zh-TW' ? 'zh-TW' : 'en');
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      el.textContent = t(key);
+    });
+    // Re-render dynamic content that contains translated strings (these are
+    // built via innerHTML, not via data-i18n attributes, so the generic
+    // querySelectorAll sweep above misses them).
+    renderInventory();
+    // Chatbox: setup view + input placeholder are built at open/render time
+    // and don't carry data-i18n attributes; force a refresh when locale flips.
+    const chatboxInput = document.getElementById('chatbox-input');
+    if (chatboxInput) chatboxInput.placeholder = t('vault.chatbox.placeholder');
+    // Only re-render messages container if chatbox sidebar is currently visible
+    const sidebar = document.getElementById('chatbox-sidebar');
+    if (sidebar && sidebar.style.display && sidebar.style.display !== 'none') {
+      renderChatboxMessages();
+    }
+    // Re-render whichever non-inventory tab is currently active
+    if (state.activeTab === 'critical-info') renderCriticalInfo();
+    else if (state.activeTab === 'obligations') renderObligations();
+    else if (state.activeTab === 'snapshots') renderSnapshots();
+  }
+
+  function toggleLocale() {
+    state.vault.locale = state.vault.locale === 'en' ? 'zh-TW' : 'en';
+    saveVault(state.vault);
+    applyLocale();
+  }
+
+  /* ============================================================
+     Render — inventory list + filters + summary
+     ============================================================ */
+  function getFilteredAccounts() {
+    const f = state.filters;
+    return state.vault.accounts.filter(a => {
+      if (f.owner !== 'all' && a.owner !== f.owner) return false;
+      if (f.country !== 'all' && categoryToCountry(a.category) !== f.country) return false;
+      if (f.category !== 'all' && a.category !== f.category) return false;
+      return true;
+    });
+  }
+
+  function renderFilterBar() {
+    if (state.vault.accounts.length === 0) {
+      document.getElementById('filter-bar').style.display = 'none';
+      return;
+    }
+    const bar = document.getElementById('filter-bar');
+    bar.style.display = 'flex';
+    const f = state.filters;
+    const countries = ['all', 'US', 'Taiwan', 'China', 'Other'];
+    const ownerChips = ['all'].concat(OWNERS).map(o => {
+      const label = o === 'all' ? t('vault.filter.all') : t('vault.owner.' + o);
+      return '<span class="chip ' + (f.owner === o ? 'active' : '') + '" data-filter="owner" data-value="' + o + '">' + escapeHtml(label) + '</span>';
+    }).join('');
+    const countryChips = countries.map(c => {
+      const label = c === 'all' ? t('vault.filter.all') : t('vault.country.' + c);
+      return '<span class="chip ' + (f.country === c ? 'active' : '') + '" data-filter="country" data-value="' + c + '">' + escapeHtml(label) + '</span>';
+    }).join('');
+    bar.innerHTML =
+      '<div class="filter-group"><span class="label">' + escapeHtml(t('vault.filter.owner')) + '</span>' + ownerChips + '</div>' +
+      '<div class="filter-group"><span class="label">' + escapeHtml(t('vault.filter.country')) + '</span>' + countryChips + '</div>';
+    bar.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const dim = chip.getAttribute('data-filter');
+        const val = chip.getAttribute('data-value');
+        state.filters[dim] = val;
+        renderInventory();
+      });
+    });
+  }
+
+  function renderSummary() {
+    if (state.vault.accounts.length === 0) {
+      document.getElementById('summary-row').style.display = 'none';
+      return;
+    }
+    document.getElementById('summary-row').style.display = 'grid';
+    const accts = state.vault.accounts;
+    const total = accts.reduce((s, a) => s + (a.currentBalanceUSD || 0), 0);
+    const foreign = accts
+      .filter(a => categoryToCountry(a.category) !== 'US' && categoryToCountry(a.category) !== 'Other')
+      .reduce((s, a) => s + (a.currentBalanceUSD || 0), 0);
+    document.getElementById('summary-total').textContent = formatUSD(total);
+    document.getElementById('summary-count').textContent = String(accts.length);
+    document.getElementById('summary-foreign').textContent = formatUSD(foreign);
+  }
+
+  function renderAccountRow(account) {
+    const lastDays = daysSince(account.lastUpdated);
+    const lastLabel = lastDays === null
+      ? t('vault.never')
+      : (lastDays === 0 ? t('vault.daysAgo.0')
+         : lastDays === 1 ? t('vault.daysAgo.1')
+         : t('vault.daysAgo', { n: lastDays }));
+    const ownerLabel = t('vault.owner.' + account.owner);
+    const categoryLabel = t('vault.category.' + account.category);
+    const last4 = account.accountNumberLast4 ? '••••' + account.accountNumberLast4 : '';
+    return (
+      '<div class="account-row" data-account-id="' + escapeAttr(account.id) + '">' +
+        '<div>' +
+          '<div class="institution">' + escapeHtml(account.institution || '—') + '</div>' +
+          '<div class="meta-line">' + escapeHtml(categoryLabel) + (last4 ? ' · ' + last4 : '') + '</div>' +
+        '</div>' +
+        '<span class="badge owner-' + escapeAttr(account.owner) + '">' + escapeHtml(ownerLabel) + '</span>' +
+        '<div class="meta-line">' + escapeHtml(t('vault.lastUpdated')) + ': ' + escapeHtml(lastLabel) + '</div>' +
+        '<div class="balance">' + escapeHtml(formatUSD(account.currentBalanceUSD)) + '</div>' +
+        '<div class="actions">' +
+          '<button data-action="procedure" data-id="' + escapeAttr(account.id) + '">' + escapeHtml(t('vault.action.procedure')) + '</button>' +
+          '<button data-action="edit" data-id="' + escapeAttr(account.id) + '">' + escapeHtml(t('vault.action.edit')) + '</button>' +
+          '<button data-action="delete" data-id="' + escapeAttr(account.id) + '">' + escapeHtml(t('vault.action.delete')) + '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderInventory() {
+    const list = document.getElementById('account-list');
+    const empty = document.getElementById('empty-state');
+    if (state.vault.accounts.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      renderSummary();
+      renderFilterBar();
+      return;
+    }
+    empty.style.display = 'none';
+    const filtered = getFilteredAccounts();
+    list.innerHTML = filtered.map(renderAccountRow).join('') || '<div class="placeholder-card">No accounts match the active filters.</div>';
+    list.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        const action = btn.getAttribute('data-action');
+        const id = btn.getAttribute('data-id');
+        if (action === 'edit') openEditAccountModal(id);
+        else if (action === 'delete') openDeleteAccountModal(id);
+        else if (action === 'procedure') openProcedureModal(id);
+      });
+    });
+    renderFilterBar();
+    renderSummary();
+  }
+
+  /* ============================================================
+     FIRE Dashboard import (US8) — read-only inspect
+     ============================================================ */
+
+  const FIRE_DASHBOARD_STATE_KEY = 'fire_dashboard_state';
+
+  function inspectFireDashboard() {
+    const container = document.getElementById('fire-import-result');
+    if (!container) return;
+    let raw;
+    try { raw = localStorage.getItem(FIRE_DASHBOARD_STATE_KEY); }
+    catch (e) {
+      container.innerHTML = '<div style="color: var(--accent-error); font-size: 12px">' + escapeHtml(t('vault.settings.fireImportError')) + '</div>';
+      return;
+    }
+    if (!raw) {
+      container.innerHTML = '<div style="color: var(--text-dim); font-size: 12px">' + escapeHtml(t('vault.settings.fireImportEmpty')) + '</div>';
+      return;
+    }
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch (e) {
+      container.innerHTML = '<div style="color: var(--accent-error); font-size: 12px">' + escapeHtml(t('vault.settings.fireImportError')) + '</div>';
+      return;
+    }
+    // Show whatever bucket-related fields exist. We don't enforce a strict schema
+    // because the FIRE dashboard's state shape evolves.
+    const candidates = ['stocks', 'cash', 'roth401k', 'ira', 'homeEquity', 'rothIRA', 'broker', 'brokerage', 'retirement', 'cashAccount', 'totalNetWorth'];
+    const found = {};
+    candidates.forEach(k => {
+      if (k in parsed && (typeof parsed[k] === 'number' || typeof parsed[k] === 'string')) {
+        found[k] = parsed[k];
+      }
+    });
+    let html = '<div style="color: var(--text-dim); font-size: 12px; margin-bottom: 6px">' + escapeHtml(t('vault.settings.fireImportFound')) + '</div>';
+    if (Object.keys(found).length === 0) {
+      html += '<div style="color: var(--text-dim); font-size: 12px">No recognized bucket totals. Raw keys: ' + escapeHtml(Object.keys(parsed).slice(0, 10).join(', ')) + '...</div>';
+    } else {
+      html += '<table style="width: 100%; font-size: 12px; border-collapse: collapse">';
+      Object.keys(found).forEach(k => {
+        const val = found[k];
+        const display = typeof val === 'number' ? formatUSD(val) : escapeHtml(String(val));
+        html += '<tr style="border-bottom: 1px solid var(--border)"><td style="padding: 4px 6px; color: var(--text-dim)">' + escapeHtml(k) + '</td><td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + display + '</td></tr>';
+      });
+      html += '</table>';
+    }
+    container.innerHTML = html;
+  }
+
+  /* ============================================================
+     Chatbox (US5) — locked-context system prompt + Anthropic API
+     ============================================================ */
+
+  // Build the locked system prompt. Embeds the vault JSON, redacted as
+  // configured, and the rules. See contracts/chatbox-locked-context.contract.md.
+  function buildLockedSystemPrompt(vault, locale) {
+    // Redact full account numbers (FR-032)
+    const redacted = JSON.parse(JSON.stringify(vault));
+    delete redacted.apiKey;
+    if (redacted.accounts && vault.redactAccountNumbersInAI !== false) {
+      redacted.accounts = redacted.accounts.map(a => Object.assign({}, a, { accountNumberFull: a.accountNumberFull ? '***' : null }));
+    }
+    const localeLabel = locale === 'zh-TW' ? 'Traditional Chinese (zh-TW)' : 'English (en)';
+    return [
+      'You are an AI assistant embedded in a private family financial vault. Your ONLY purpose is to help the user understand and navigate the financial information stored in this vault. You have NO authority to give legal, tax, investment, or medical advice.',
+      '',
+      'RULES:',
+      '1. Answer ONLY questions whose answer is grounded in the JSON below.',
+      '2. For every factual claim, cite the account ID or procedure category from the JSON in square brackets, e.g., [account: 7f3a-...] or [procedure: foreign-bank-taiwan].',
+      '3. If asked about something NOT in the JSON, respond: "I don\'t see that in your vault. Please add it via the inventory page, or consult [appropriate professional]." Adapt the professional to the question (CPA for taxes, estate attorney for legal, financial advisor for investments).',
+      '4. REFUSE these question types politely:',
+      '   - Market predictions or specific investment recommendations',
+      '   - Tax advice not pre-authored in the procedures',
+      '   - Legal opinions',
+      '   - General-knowledge questions unrelated to the vault',
+      '   - Anything requiring you to invent dollar amounts, account numbers, or beneficiaries not in the JSON',
+      '5. NEVER hallucinate accounts, balances, or beneficiaries.',
+      '6. When uncertain, say so. Default to caution.',
+      '7. Respond in the user\'s UI language: ' + localeLabel + '. If the user types in the OTHER language, you may respond in that language instead — match what they typed.',
+      '',
+      'REFUSAL TEMPLATES:',
+      'Out-of-scope (EN): "I\'m focused on your vault data. For [topic], please consult [professional]."',
+      'Out-of-scope (zh-TW): "我的回答僅限於您財務檔案內的資料。關於[主題]，請諮詢[專業人士]。"',
+      '',
+      '=== VAULT DATA (your only source of truth) ===',
+      JSON.stringify(redacted, null, 2),
+      '=== END VAULT DATA ===',
+    ].join('\n');
+  }
+
+  // Single POST to api.anthropic.com per FR-031 / FR-042
+  async function callAnthropicAPI(apiKey, model, systemPrompt, userMessages) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 1024,
+        system: [
+          { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+        ],
+        messages: userMessages,
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error('API ' + response.status + ': ' + errText);
+    }
+    const data = await response.json();
+    const blocks = data.content || [];
+    const textBlocks = blocks.filter(b => b.type === 'text').map(b => b.text);
+    return textBlocks.join('\n');
+  }
+
+  // In-memory chatbox state (not persisted — conversation resets on reload)
+  const chatboxState = {
+    messages: [],  // [{role, content}]
+    busy: false,
+  };
+
+  function renderChatboxMessages() {
+    const container = document.getElementById('chatbox-messages');
+    if (!chatboxState.messages.length && !state.vault.apiKey) {
+      // Setup view
+      container.innerHTML = (
+        '<div style="margin-bottom: 10px"><strong>' + escapeHtml(t('vault.chatbox.setupTitle')) + '</strong></div>' +
+        '<div style="font-size: 12px; line-height: 1.5; color: var(--text-dim); margin-bottom: 12px">' + escapeHtml(t('vault.chatbox.setupHint')) + '</div>' +
+        '<div style="margin-bottom: 8px"><label style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 4px">' + escapeHtml(t('vault.chatbox.setupKeyLabel')) + '</label>' +
+        '<input id="chatbox-setup-key" type="password" autocomplete="off" style="width: 100%; padding: 6px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px"></div>' +
+        '<div style="display: flex; gap: 6px"><button id="chatbox-setup-save" class="primary" style="font-size: 12px">' + escapeHtml(t('vault.chatbox.setupSave')) + '</button>' +
+        '<button id="chatbox-setup-skip" style="font-size: 12px">' + escapeHtml(t('vault.chatbox.setupSkip')) + '</button></div>'
+      );
+      const save = document.getElementById('chatbox-setup-save');
+      const skip = document.getElementById('chatbox-setup-skip');
+      if (save) save.addEventListener('click', () => {
+        const key = document.getElementById('chatbox-setup-key').value.trim();
+        if (!key) return;
+        state.vault = Object.assign({}, state.vault, { apiKey: key, chatboxEnabled: true });
+        saveVault(state.vault);
+        renderChatboxMessages();
+      });
+      if (skip) skip.addEventListener('click', () => {
+        state.vault = Object.assign({}, state.vault, { chatboxEnabled: false });
+        saveVault(state.vault);
+        document.getElementById('chatbox-sidebar').style.display = 'none';
+      });
+      return;
+    }
+    container.innerHTML = chatboxState.messages.map(m => {
+      const bg = m.role === 'user' ? 'var(--accent)' : 'var(--card-2)';
+      const color = m.role === 'user' ? '#fff' : 'var(--text)';
+      const align = m.role === 'user' ? 'flex-end' : 'flex-start';
+      return (
+        '<div style="display: flex; justify-content: ' + align + '; margin-bottom: 8px">' +
+          '<div style="max-width: 85%; padding: 8px 12px; background: ' + bg + '; color: ' + color + '; border-radius: 8px; font-size: 13px; line-height: 1.5; white-space: pre-wrap">' + escapeHtml(m.content) + '</div>' +
+        '</div>'
+      );
+    }).join('');
+    if (chatboxState.busy) {
+      container.innerHTML += '<div style="color: var(--text-dim); font-size: 12px; padding: 8px 12px">' + escapeHtml(t('vault.chatbox.thinking')) + '</div>';
+    }
+    container.scrollTop = container.scrollHeight;
+  }
+
+  async function chatboxSend() {
+    const input = document.getElementById('chatbox-input');
+    const text = input.value.trim();
+    if (!text || chatboxState.busy) return;
+    if (!state.vault.apiKey) return;
+    input.value = '';
+    chatboxState.messages.push({ role: 'user', content: text });
+    chatboxState.busy = true;
+    renderChatboxMessages();
+    try {
+      const systemPrompt = buildLockedSystemPrompt(state.vault, state.vault.locale);
+      const model = state.vault.chatboxModel || 'claude-opus-4-7';
+      const reply = await callAnthropicAPI(state.vault.apiKey, model, systemPrompt, chatboxState.messages);
+      chatboxState.messages.push({ role: 'assistant', content: reply });
+    } catch (err) {
+      const errMsg = (err && err.message) ? err.message : String(err);
+      chatboxState.messages.push({ role: 'assistant', content: '⚠ ' + t('vault.chatbox.error.api') + ': ' + errMsg });
+    } finally {
+      chatboxState.busy = false;
+      renderChatboxMessages();
+    }
+  }
+
+  function chatboxOpen() {
+    const sidebar = document.getElementById('chatbox-sidebar');
+    sidebar.style.display = 'flex';
+    document.getElementById('chatbox-toggle-btn').style.display = 'none';
+    // Sync model select with vault state
+    const modelSelect = document.getElementById('chatbox-model-select');
+    if (modelSelect) modelSelect.value = state.vault.chatboxModel || 'claude-opus-4-7';
+    // Update placeholder
+    document.getElementById('chatbox-input').placeholder = t('vault.chatbox.placeholder');
+    renderChatboxMessages();
+  }
+
+  function chatboxClose() {
+    document.getElementById('chatbox-sidebar').style.display = 'none';
+    document.getElementById('chatbox-toggle-btn').style.display = 'block';
+  }
+
+  function chatboxResetKey() {
+    state.vault = Object.assign({}, state.vault, { apiKey: null, chatboxEnabled: false });
+    saveVault(state.vault);
+    chatboxState.messages = [];
+    renderChatboxMessages();
+  }
+
+  function chatboxShowPrompt() {
+    const sp = buildLockedSystemPrompt(state.vault, state.vault.locale);
+    // Show in a modal-like alert via a temporary blob URL the user can copy
+    const blob = new Blob([sp], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  /* ============================================================
+     Monthly snapshot history (US6) — pure helpers
+     ============================================================ */
+
+  function appendBalanceHistory(account, newBalanceUSD, source) {
+    const point = { date: new Date().toISOString(), balanceUSD: newBalanceUSD, source: source || 'manual' };
+    const history = (account.history || []).concat([point]);
+    return Object.assign({}, account, {
+      currentBalanceUSD: newBalanceUSD,
+      lastUpdated: point.date,
+      history: history,
+    });
+  }
+
+  function buildSnapshot(vault) {
+    const accts = vault.accounts || [];
+    const total = accts.reduce((s, a) => s + (a.currentBalanceUSD || 0), 0);
+    const byOwner = { roger: 0, rebecca: 0, joint: 0 };
+    const byCategory = {};
+    const byCountry = { US: 0, Taiwan: 0, China: 0, Other: 0 };
+    accts.forEach(a => {
+      byOwner[a.owner] = (byOwner[a.owner] || 0) + (a.currentBalanceUSD || 0);
+      byCategory[a.category] = (byCategory[a.category] || 0) + (a.currentBalanceUSD || 0);
+      const c = categoryToCountry(a.category);
+      byCountry[c] = (byCountry[c] || 0) + (a.currentBalanceUSD || 0);
+    });
+    return {
+      date: new Date().toISOString(),
+      totalNetWorthUSD: total,
+      byOwner: byOwner,
+      byCategory: byCategory,
+      byCountry: byCountry,
+      accountIds: accts.map(a => a.id),
+    };
+  }
+
+  function csvEscape(s) {
+    if (s === null || s === undefined) return '';
+    const str = String(s);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  function snapshotToCsv(vault) {
+    // Header matches FIRE-snapshots.csv loosely; exact match is owned by DB Engineer.
+    // For v1, use a self-describing format the user can paste into a spreadsheet.
+    const header = ['date', 'account_id', 'owner', 'category', 'institution', 'last4', 'balance_usd', 'currency_native', 'fx_to_usd', 'country'];
+    const rows = [header.join(',')];
+    const date = new Date().toISOString().slice(0, 10);
+    (vault.accounts || []).forEach(a => {
+      rows.push([
+        date,
+        a.id,
+        a.owner,
+        a.category,
+        csvEscape(a.institution),
+        a.accountNumberLast4,
+        a.currentBalanceUSD,
+        a.currencyNative,
+        a.exchangeRateToUSD === null || a.exchangeRateToUSD === undefined ? '' : a.exchangeRateToUSD,
+        categoryToCountry(a.category),
+      ].join(','));
+    });
+    return rows.join('\n');
+  }
+
+  function exportSnapshotCsv() {
+    const csv = snapshotToCsv(state.vault);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'vault-snapshot-' + date + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function previousSnapshotTotal(vault) {
+    const hist = vault.snapshotHistory || [];
+    if (hist.length === 0) return null;
+    return hist[hist.length - 1].totalNetWorthUSD;
+  }
+
+  function pushSnapshot(vault) {
+    const snap = buildSnapshot(vault);
+    const hist = (vault.snapshotHistory || []).concat([snap]);
+    return Object.assign({}, vault, { snapshotHistory: hist });
+  }
+
+  function renderSnapshots() {
+    const container = document.getElementById('snapshots-content');
+    if (state.vault.accounts.length === 0) {
+      container.innerHTML = '<div class="placeholder-card">' + escapeHtml(t('vault.snapshots.empty')) + '</div>';
+      return;
+    }
+
+    const total = state.vault.accounts.reduce((s, a) => s + (a.currentBalanceUSD || 0), 0);
+    const prev = previousSnapshotTotal(state.vault);
+    const delta = prev === null ? null : (total - prev);
+    const stale = state.vault.accounts.filter(a => {
+      const d = daysSince(a.lastUpdated);
+      return d !== null && d > 60;
+    });
+
+    let html = '';
+    html += '<div class="card">';
+    html += '<h3 style="font-size: 15px; margin-bottom: 8px">' + escapeHtml(t('vault.snapshots.summaryTitle')) + '</h3>';
+    html += '<div class="summary-row" style="margin-bottom: 0">';
+    html += '<div class="summary-card"><div class="label">' + escapeHtml(t('vault.snapshots.totalNetWorth')) + '</div><div class="value">' + formatUSD(total) + '</div></div>';
+    if (delta !== null) {
+      const deltaColor = delta >= 0 ? 'var(--accent-success)' : 'var(--accent-error)';
+      const deltaPrefix = delta >= 0 ? '+' : '';
+      html += '<div class="summary-card"><div class="label">' + escapeHtml(t('vault.snapshots.changeFromLast')) + '</div><div class="value" style="color: ' + deltaColor + '">' + deltaPrefix + formatUSD(delta) + '</div></div>';
+    }
+    if (stale.length > 0) {
+      html += '<div class="summary-card"><div class="label">' + escapeHtml(t('vault.snapshots.staleAccounts')) + '</div><div class="value" style="color: var(--accent-warn)">' + stale.length + '</div></div>';
+    }
+    html += '</div>';
+    html += '<div style="margin-top: 12px; display: flex; gap: 8px">';
+    html += '<button class="primary" id="snap-save-btn">' + escapeHtml(t('vault.snapshots.refreshAll')) + '</button>';
+    html += '<button id="snap-export-btn">' + escapeHtml(t('vault.snapshots.exportCsv')) + '</button>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="card">';
+    html += '<div class="disclaimer" style="margin-bottom: 12px">' + escapeHtml(t('vault.snapshots.disclaimer')) + '</div>';
+    state.vault.accounts.forEach(a => {
+      const days = daysSince(a.lastUpdated);
+      const daysLabel = days === null ? t('vault.never')
+        : (days === 0 ? t('vault.daysAgo.0') : days === 1 ? t('vault.daysAgo.1') : t('vault.daysAgo', { n: days }));
+      const isStale = days !== null && days > 60;
+      const last4 = a.accountNumberLast4 ? '••••' + a.accountNumberLast4 : '';
+      html += (
+        '<div style="display: grid; grid-template-columns: minmax(180px, 2fr) minmax(100px, auto) minmax(140px, auto) minmax(160px, auto); gap: 10px; align-items: center; padding: 10px 12px; background: var(--card-2); border: 1px solid ' + (isStale ? 'var(--accent-warn)' : 'var(--border)') + '; border-radius: 6px; margin-bottom: 6px">' +
+          '<div>' +
+            '<div style="font-weight: 500; font-size: 13px">' + escapeHtml(a.institution || '—') + (last4 ? ' · ' + last4 : '') + '</div>' +
+            '<div style="color: var(--text-dim); font-size: 11px; margin-top: 2px">' + escapeHtml(t('vault.category.' + a.category)) + '</div>' +
+          '</div>' +
+          '<div><span class="badge owner-' + escapeAttr(a.owner) + '">' + escapeHtml(t('vault.owner.' + a.owner)) + '</span></div>' +
+          '<div style="font-size: 12px; color: ' + (isStale ? 'var(--accent-warn)' : 'var(--text-dim)') + '">' + escapeHtml(daysLabel) + '</div>' +
+          '<input type="number" step="0.01" min="0" data-snap-account-id="' + escapeAttr(a.id) + '" value="' + a.currentBalanceUSD + '" style="padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-variant-numeric: tabular-nums">' +
+        '</div>'
+      );
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Wire save & export
+    document.getElementById('snap-save-btn').addEventListener('click', () => {
+      // Read all balance inputs and update accounts
+      const inputs = container.querySelectorAll('input[data-snap-account-id]');
+      let nextAccounts = state.vault.accounts.slice();
+      inputs.forEach(inp => {
+        const id = inp.getAttribute('data-snap-account-id');
+        const newBal = Number(inp.value) || 0;
+        nextAccounts = nextAccounts.map(a => {
+          if (a.id !== id) return a;
+          if (Math.abs(a.currentBalanceUSD - newBal) < 0.01 && a.history && a.history.length > 0) return a;
+          return appendBalanceHistory(a, newBal, 'manual');
+        });
+      });
+      let nextVault = Object.assign({}, state.vault, { accounts: nextAccounts });
+      nextVault = pushSnapshot(nextVault);
+      state.vault = nextVault;
+      saveVault(state.vault);
+      renderSnapshots();
+      renderInventory();
+    });
+
+    document.getElementById('snap-export-btn').addEventListener('click', exportSnapshotCsv);
+  }
+
+  /* ============================================================
+     RECURRING_OBLIGATIONS — Tax / regulatory calendar (US4)
+     Source: 2025_Tax_Filing_Guide_FATCA_FBAR.md (research.md R5)
+     Each entry recurs annually; per-year done flags persist in
+     vault.obligations[year][id].
+     ============================================================ */
+  const RECURRING_OBLIGATIONS = [
+    {
+      id: 'fed-1040',
+      dueMonthDay: '04-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.fed-1040',
+      descKey: 'vault.obligations.fed-1040.desc',
+      externalLink: 'https://www.irs.gov/',
+    },
+    {
+      id: 'ma-form1',
+      dueMonthDay: '04-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.ma-form1',
+      descKey: 'vault.obligations.ma-form1.desc',
+      externalLink: null,
+    },
+    {
+      id: 'form-8938',
+      dueMonthDay: '04-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.form-8938',
+      descKey: 'vault.obligations.form-8938.desc',
+      externalLink: 'https://www.irs.gov/',
+    },
+    {
+      id: 'fbar-roger',
+      dueMonthDay: '04-15',
+      whoActs: 'roger',
+      labelKey: 'vault.obligations.fbar-roger',
+      descKey: 'vault.obligations.fbar-roger.desc',
+      externalLink: 'https://bsaefiling.fincen.gov/',
+    },
+    {
+      id: 'fbar-rebecca',
+      dueMonthDay: '04-15',
+      whoActs: 'rebecca',
+      labelKey: 'vault.obligations.fbar-rebecca',
+      descKey: 'vault.obligations.fbar-rebecca.desc',
+      externalLink: 'https://bsaefiling.fincen.gov/',
+    },
+    {
+      id: '1040es-q1',
+      dueMonthDay: '04-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.1040es-q1',
+      descKey: 'vault.obligations.1040es-q1.desc',
+      externalLink: 'https://www.irs.gov/',
+    },
+    {
+      id: '1040es-q2',
+      dueMonthDay: '06-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.1040es-q2',
+      descKey: 'vault.obligations.1040es-q2.desc',
+      externalLink: 'https://www.irs.gov/',
+    },
+    {
+      id: '1040es-q3',
+      dueMonthDay: '09-15',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.1040es-q3',
+      descKey: 'vault.obligations.1040es-q3.desc',
+      externalLink: 'https://www.irs.gov/',
+    },
+    {
+      id: '1040es-q4',
+      dueMonthDay: '01-15',  // due in following calendar year
+      whoActs: 'both',
+      labelKey: 'vault.obligations.1040es-q4',
+      descKey: 'vault.obligations.1040es-q4.desc',
+      externalLink: 'https://www.irs.gov/',
+      dueInFollowingYear: true,
+    },
+    {
+      id: 'charitable-receipts',
+      dueMonthDay: '12-31',
+      whoActs: 'both',
+      labelKey: 'vault.obligations.charitable-receipts',
+      descKey: 'vault.obligations.charitable-receipts.desc',
+      externalLink: null,
+    },
+  ];
+
+  function obligationDueDate(obligation, taxYear) {
+    // Most obligations relate to taxYear and are due in (taxYear + 1).
+    // 1040-ES quarters: Q1 due Apr 15 of taxYear, Q2 Jun 15 of taxYear,
+    //   Q3 Sep 15 of taxYear, Q4 Jan 15 of (taxYear + 1).
+    // FBAR / 1040 / Form 8938 / MA Form 1: due Apr 15 of (taxYear + 1).
+    // Charitable receipts: end of taxYear (Dec 31).
+    let yearOffset = 0;
+    if (obligation.id === 'fed-1040' || obligation.id === 'ma-form1' ||
+        obligation.id === 'form-8938' || obligation.id === 'fbar-roger' ||
+        obligation.id === 'fbar-rebecca') {
+      yearOffset = 1;
+    }
+    if (obligation.dueInFollowingYear) yearOffset = 1;
+    const [m, d] = obligation.dueMonthDay.split('-').map(Number);
+    return new Date(taxYear + yearOffset, m - 1, d);
+  }
+
+  function obligationStatus(obligation, taxYear, isDone, today) {
+    if (isDone) return 'done';
+    const due = obligationDueDate(obligation, taxYear);
+    const ms = due.getTime() - today.getTime();
+    const daysUntil = Math.floor(ms / (1000 * 60 * 60 * 24));
+    if (daysUntil < 0) return 'overdue';
+    if (daysUntil <= 30) return 'approaching';
+    if (daysUntil <= 90) return 'upcoming';
+    return 'future';
+  }
+
+  function obligationDoneFlag(taxYear, oblId) {
+    const yearObj = (state.vault.obligations || {})[String(taxYear)] || {};
+    return !!yearObj[oblId];
+  }
+
+  function setObligationDoneFlag(taxYear, oblId, done) {
+    const obligations = Object.assign({}, state.vault.obligations || {});
+    const yearObj = Object.assign({}, obligations[String(taxYear)] || {});
+    yearObj[oblId] = done;
+    obligations[String(taxYear)] = yearObj;
+    state.vault = Object.assign({}, state.vault, { obligations: obligations });
+    saveVault(state.vault);
+  }
+
+  function statusColor(status) {
+    if (status === 'done') return 'var(--accent-success)';
+    if (status === 'overdue') return 'var(--accent-error)';
+    if (status === 'approaching') return 'var(--accent-warn)';
+    if (status === 'upcoming') return 'var(--accent)';
+    return 'var(--text-faint)';
+  }
+
+  function renderObligations() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentYear = today.getFullYear();
+    // Show two tax-year tabs: previous (in case Apr 15 obligations of last tax year are still pending)
+    // and current. We render the current year as primary.
+    const taxYears = [currentYear - 1, currentYear];
+
+    let bannerHtml = '';
+    const overdueOrApproaching = [];
+    taxYears.forEach(ty => {
+      RECURRING_OBLIGATIONS.forEach(o => {
+        const done = obligationDoneFlag(ty, o.id);
+        const status = obligationStatus(o, ty, done, today);
+        if (status === 'overdue' || status === 'approaching') {
+          overdueOrApproaching.push({ obligation: o, status: status, taxYear: ty });
+        }
+      });
+    });
+    if (overdueOrApproaching.length > 0) {
+      bannerHtml = (
+        '<div style="background: rgba(239, 83, 80, 0.15); border: 1px solid var(--accent-error); color: var(--text); padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-weight: 500">' +
+          escapeHtml(t('vault.obligations.overdueBanner', { n: overdueOrApproaching.length })) +
+        '</div>'
+      );
+    }
+    document.getElementById('obligations-banner-container').innerHTML = bannerHtml;
+
+    // Render per-year cards
+    let html = '';
+    taxYears.forEach(ty => {
+      html += '<div class="card">';
+      html += '<h3 style="font-size: 15px; margin-bottom: 12px">' + escapeHtml(t('vault.obligations.year')) + ' ' + ty + '</h3>';
+      RECURRING_OBLIGATIONS.forEach(o => {
+        const done = obligationDoneFlag(ty, o.id);
+        const status = obligationStatus(o, ty, done, today);
+        const due = obligationDueDate(o, ty);
+        const dueLabel = due.toISOString().slice(0, 10);
+        const color = statusColor(status);
+        const statusLabel = t('vault.obligations.status.' + status);
+        const whoLabel = t('vault.obligations.who.' + o.whoActs);
+        html += (
+          '<div style="display: grid; grid-template-columns: minmax(180px, 2fr) minmax(110px, 1fr) minmax(80px, auto) minmax(110px, auto) auto; gap: 10px; align-items: center; padding: 10px 12px; background: var(--card-2); border: 1px solid ' + color + '; border-radius: 6px; margin-bottom: 6px">' +
+            '<div>' +
+              '<div style="font-weight: 600; font-size: 13px">' + escapeHtml(t(o.labelKey)) + '</div>' +
+              '<div style="color: var(--text-dim); font-size: 11px; margin-top: 2px">' + escapeHtml(t(o.descKey)) + '</div>' +
+            '</div>' +
+            '<div style="font-variant-numeric: tabular-nums; font-size: 12px">' + escapeHtml(dueLabel) + '</div>' +
+            '<div><span class="badge owner-' + escapeAttr(o.whoActs === 'both' ? 'joint' : o.whoActs) + '">' + escapeHtml(whoLabel) + '</span></div>' +
+            '<div style="color: ' + color + '; font-size: 12px; font-weight: 500">' + escapeHtml(statusLabel) + '</div>' +
+            '<div style="display: flex; gap: 6px">' +
+              (o.externalLink
+                ? '<a href="' + escapeAttr(o.externalLink) + '" target="_blank" rel="noopener" style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; text-decoration: none">' + escapeHtml(t('vault.obligations.openLink')) + '</a>'
+                : ''
+              ) +
+              '<label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer">' +
+                '<input type="checkbox" data-obl-id="' + escapeAttr(o.id) + '" data-tax-year="' + ty + '"' + (done ? ' checked' : '') + '>' +
+                escapeHtml(t('vault.obligations.done')) +
+              '</label>' +
+            '</div>' +
+          '</div>'
+        );
+      });
+      html += '</div>';
+    });
+    document.getElementById('obligations-content').innerHTML = html;
+
+    // Wire checkboxes
+    document.getElementById('obligations-content').querySelectorAll('input[type="checkbox"][data-obl-id]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-obl-id');
+        const ty = Number(cb.getAttribute('data-tax-year'));
+        setObligationDoneFlag(ty, id, cb.checked);
+        renderObligations();
+      });
+    });
+  }
+
+  /* ============================================================
+     Critical Family Info renderer (US7)
+     Card-per-subsection. Edit-in-place; auto-save on input blur.
+     ============================================================ */
+
+  function ensureCriticalShape(cfi) {
+    // Defensive: ensure all sub-objects exist for older saved vaults
+    return {
+      will: cfi.will || null,
+      poaFinancial: cfi.poaFinancial || null,
+      poaHealthcare: cfi.poaHealthcare || null,
+      healthcareDirective: cfi.healthcareDirective || null,
+      guardianship: cfi.guardianship || null,
+      lifeInsurance: Array.isArray(cfi.lifeInsurance) ? cfi.lifeInsurance : [],
+      passwordVault: cfi.passwordVault || null,
+      funeral: cfi.funeral || { notes: null },
+      contacts: Array.isArray(cfi.contacts) ? cfi.contacts : [],
+    };
+  }
+
+  function criticalCard(titleKey, contentHtml) {
+    return (
+      '<div class="card">' +
+        '<h3 style="font-size: 15px; margin-bottom: 12px">' + escapeHtml(t(titleKey)) + '</h3>' +
+        contentHtml +
+      '</div>'
+    );
+  }
+
+  function criticalField(path, labelKey, value, kind) {
+    const id = 'cfi-' + path.replace(/\./g, '-');
+    const safeValue = escapeAttr(value || '');
+    const tag = kind === 'textarea'
+      ? '<textarea id="' + id + '" data-cfi-path="' + escapeAttr(path) + '" rows="2" style="width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: 13px">' + escapeHtml(value || '') + '</textarea>'
+      : '<input id="' + id + '" data-cfi-path="' + escapeAttr(path) + '" type="text" value="' + safeValue + '" style="width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">';
+    return (
+      '<div style="margin-bottom: 10px">' +
+        '<label style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px">' + escapeHtml(t(labelKey)) + '</label>' +
+        tag +
+      '</div>'
+    );
+  }
+
+  function renderCriticalInfo() {
+    const cfi = ensureCriticalShape(state.vault.criticalFamilyInfo || {});
+    const will = cfi.will || {};
+    const poaF = cfi.poaFinancial || {};
+    const poaH = cfi.poaHealthcare || {};
+    const hd = cfi.healthcareDirective || {};
+    const g = cfi.guardianship || {};
+    const pw = cfi.passwordVault || {};
+    const fn = cfi.funeral || {};
+
+    let html = '';
+
+    // Will
+    html += criticalCard('vault.critical.will',
+      criticalField('will.location', 'vault.critical.will.location', will.location) +
+      criticalField('will.executorName', 'vault.critical.will.executor', will.executorName) +
+      criticalField('will.executorContact', 'vault.critical.will.executorContact', will.executorContact) +
+      criticalField('will.attorneyContact', 'vault.critical.will.attorney', will.attorneyContact) +
+      criticalField('will.notes', 'vault.critical.will.notes', will.notes, 'textarea')
+    );
+
+    // POA Financial
+    html += criticalCard('vault.critical.poaFinancial',
+      criticalField('poaFinancial.holder', 'vault.critical.poa.holder', poaF.holder) +
+      criticalField('poaFinancial.location', 'vault.critical.poa.location', poaF.location) +
+      criticalField('poaFinancial.notes', 'vault.critical.poa.notes', poaF.notes, 'textarea')
+    );
+
+    // POA Healthcare
+    html += criticalCard('vault.critical.poaHealthcare',
+      criticalField('poaHealthcare.holder', 'vault.critical.poa.holder', poaH.holder) +
+      criticalField('poaHealthcare.location', 'vault.critical.poa.location', poaH.location) +
+      criticalField('poaHealthcare.notes', 'vault.critical.poa.notes', poaH.notes, 'textarea')
+    );
+
+    // Healthcare Directive
+    html += criticalCard('vault.critical.healthcareDirective',
+      criticalField('healthcareDirective.location', 'vault.critical.healthcareDirective.location', hd.location) +
+      criticalField('healthcareDirective.notes', 'vault.critical.healthcareDirective.notes', hd.notes, 'textarea')
+    );
+
+    // Guardianship
+    html += criticalCard('vault.critical.guardianship',
+      criticalField('guardianship.primaryGuardian', 'vault.critical.guardianship.primary', g.primaryGuardian) +
+      criticalField('guardianship.alternateGuardian', 'vault.critical.guardianship.alternate', g.alternateGuardian) +
+      criticalField('guardianship.financialProvisionPlan', 'vault.critical.guardianship.financial', g.financialProvisionPlan, 'textarea') +
+      criticalField('guardianship.notes', 'vault.critical.guardianship.notes', g.notes, 'textarea')
+    );
+
+    // Life Insurance — array
+    let lifeBody = '';
+    cfi.lifeInsurance.forEach((policy, idx) => {
+      lifeBody += (
+        '<div style="border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; background: var(--card-2)">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px">' +
+            '<strong style="font-size: 13px">' + escapeHtml(policy.insurer || '—') + '</strong>' +
+            '<button data-action="cfi-remove-life" data-idx="' + idx + '" style="padding: 3px 8px; font-size: 11px">' + escapeHtml(t('vault.critical.removeBtn')) + '</button>' +
+          '</div>' +
+          criticalField('lifeInsurance.' + idx + '.insurer', 'vault.critical.lifeInsurance.insurer', policy.insurer) +
+          '<div style="margin-bottom: 10px">' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px">' + escapeHtml(t('vault.critical.lifeInsurance.policyType')) + '</label>' +
+            '<select data-cfi-path="lifeInsurance.' + idx + '.policyType" style="width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+              '<option value="group-term"' + (policy.policyType === 'group-term' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.lifeInsurance.type.group')) + '</option>' +
+              '<option value="individual-term"' + (policy.policyType === 'individual-term' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.lifeInsurance.type.indTerm')) + '</option>' +
+              '<option value="whole-life"' + (policy.policyType === 'whole-life' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.lifeInsurance.type.whole')) + '</option>' +
+              '<option value="universal-life"' + (policy.policyType === 'universal-life' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.lifeInsurance.type.universal')) + '</option>' +
+            '</select>' +
+          '</div>' +
+          criticalField('lifeInsurance.' + idx + '.faceAmount', 'vault.critical.lifeInsurance.faceAmount', policy.faceAmount) +
+          criticalField('lifeInsurance.' + idx + '.beneficiaryPrimary', 'vault.critical.lifeInsurance.beneficiaryPrimary', policy.beneficiaryPrimary) +
+          criticalField('lifeInsurance.' + idx + '.beneficiaryContingent', 'vault.critical.lifeInsurance.beneficiaryContingent', policy.beneficiaryContingent) +
+          criticalField('lifeInsurance.' + idx + '.policyNumber', 'vault.critical.lifeInsurance.policyNumber', policy.policyNumber) +
+          criticalField('lifeInsurance.' + idx + '.agentContact', 'vault.critical.lifeInsurance.agentContact', policy.agentContact) +
+          criticalField('lifeInsurance.' + idx + '.notes', 'vault.critical.lifeInsurance.notes', policy.notes, 'textarea') +
+        '</div>'
+      );
+    });
+    lifeBody += '<button data-action="cfi-add-life" class="primary" style="font-size: 12px">' + escapeHtml(t('vault.critical.lifeInsurance.add')) + '</button>';
+    html += criticalCard('vault.critical.lifeInsurance', lifeBody);
+
+    // Password Vault
+    html += criticalCard('vault.critical.passwordVault',
+      criticalField('passwordVault.manager', 'vault.critical.passwordVault.manager', pw.manager) +
+      criticalField('passwordVault.masterPasswordRecoveryLocation', 'vault.critical.passwordVault.recovery', pw.masterPasswordRecoveryLocation, 'textarea') +
+      criticalField('passwordVault.notes', 'vault.critical.passwordVault.notes', pw.notes, 'textarea')
+    );
+
+    // Funeral
+    html += criticalCard('vault.critical.funeral',
+      criticalField('funeral.notes', 'vault.critical.funeral.notes', fn.notes, 'textarea')
+    );
+
+    // Contacts — array
+    let contactsBody = '';
+    cfi.contacts.forEach((c, idx) => {
+      contactsBody += (
+        '<div style="border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; background: var(--card-2)">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px">' +
+            '<strong style="font-size: 13px">' + escapeHtml(c.name || '—') + '</strong>' +
+            '<button data-action="cfi-remove-contact" data-idx="' + idx + '" style="padding: 3px 8px; font-size: 11px">' + escapeHtml(t('vault.critical.removeBtn')) + '</button>' +
+          '</div>' +
+          '<div style="margin-bottom: 10px">' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px">' + escapeHtml(t('vault.critical.contacts.role')) + '</label>' +
+            '<select data-cfi-path="contacts.' + idx + '.role" style="width: 100%; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+              '<option value="cpa"' + (c.role === 'cpa' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.cpa')) + '</option>' +
+              '<option value="estate-attorney"' + (c.role === 'estate-attorney' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.estateAttorney')) + '</option>' +
+              '<option value="financial-advisor"' + (c.role === 'financial-advisor' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.financialAdvisor')) + '</option>' +
+              '<option value="doctor"' + (c.role === 'doctor' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.doctor')) + '</option>' +
+              '<option value="hr"' + (c.role === 'hr' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.hr')) + '</option>' +
+              '<option value="insurance-agent"' + (c.role === 'insurance-agent' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.insuranceAgent')) + '</option>' +
+              '<option value="other"' + (c.role === 'other' ? ' selected' : '') + '>' + escapeHtml(t('vault.critical.contacts.role.other')) + '</option>' +
+            '</select>' +
+          '</div>' +
+          criticalField('contacts.' + idx + '.name', 'vault.critical.contacts.name', c.name) +
+          criticalField('contacts.' + idx + '.phone', 'vault.critical.contacts.phone', c.phone) +
+          criticalField('contacts.' + idx + '.email', 'vault.critical.contacts.email', c.email) +
+          criticalField('contacts.' + idx + '.address', 'vault.critical.contacts.address', c.address) +
+          criticalField('contacts.' + idx + '.notes', 'vault.critical.contacts.notes', c.notes, 'textarea') +
+        '</div>'
+      );
+    });
+    contactsBody += '<button data-action="cfi-add-contact" class="primary" style="font-size: 12px">' + escapeHtml(t('vault.critical.contacts.add')) + '</button>';
+    html += criticalCard('vault.critical.contacts', contactsBody);
+
+    document.getElementById('critical-info-content').innerHTML = html;
+
+    // Wire input blur handlers
+    document.getElementById('critical-info-content').querySelectorAll('[data-cfi-path]').forEach(el => {
+      const handler = () => {
+        cfiUpdateField(el.getAttribute('data-cfi-path'), el.value);
+      };
+      el.addEventListener('blur', handler);
+      el.addEventListener('change', handler);
+    });
+
+    // Add/remove buttons
+    document.getElementById('critical-info-content').querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.getAttribute('data-action');
+        if (action === 'cfi-add-life') cfiAddLifeInsurance();
+        else if (action === 'cfi-remove-life') cfiRemoveLifeInsurance(Number(btn.getAttribute('data-idx')));
+        else if (action === 'cfi-add-contact') cfiAddContact();
+        else if (action === 'cfi-remove-contact') cfiRemoveContact(Number(btn.getAttribute('data-idx')));
+      });
+    });
+  }
+
+  // Update a CriticalFamilyInfo field at the given path. Path uses dot notation
+  // and supports array indexing (e.g., "lifeInsurance.0.insurer").
+  function cfiUpdateField(path, rawValue) {
+    const value = rawValue === '' ? null : rawValue;
+    const cfi = JSON.parse(JSON.stringify(ensureCriticalShape(state.vault.criticalFamilyInfo || {})));
+    const parts = path.split('.');
+    let cursor = cfi;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i];
+      const nextKey = parts[i + 1];
+      const isArrayIdx = /^\d+$/.test(nextKey);
+      if (cursor[key] === null || cursor[key] === undefined) {
+        cursor[key] = isArrayIdx ? [] : {};
+      }
+      cursor = cursor[key];
+    }
+    const lastKey = parts[parts.length - 1];
+    if (lastKey === 'faceAmount') {
+      cursor[lastKey] = value === null ? null : Number(value);
+    } else {
+      cursor[lastKey] = value;
+    }
+    state.vault = Object.assign({}, state.vault, { criticalFamilyInfo: cfi });
+    saveVault(state.vault);
+  }
+
+  function cfiAddLifeInsurance() {
+    const cfi = ensureCriticalShape(state.vault.criticalFamilyInfo || {});
+    const next = cfi.lifeInsurance.concat([{
+      insurer: '', policyType: 'group-term', faceAmount: 0,
+      beneficiaryPrimary: '', beneficiaryContingent: null,
+      policyNumber: null, agentContact: null, notes: null,
+    }]);
+    state.vault = Object.assign({}, state.vault, {
+      criticalFamilyInfo: Object.assign({}, cfi, { lifeInsurance: next }),
+    });
+    saveVault(state.vault);
+    renderCriticalInfo();
+  }
+
+  function cfiRemoveLifeInsurance(idx) {
+    const cfi = ensureCriticalShape(state.vault.criticalFamilyInfo || {});
+    const next = cfi.lifeInsurance.filter((_, i) => i !== idx);
+    state.vault = Object.assign({}, state.vault, {
+      criticalFamilyInfo: Object.assign({}, cfi, { lifeInsurance: next }),
+    });
+    saveVault(state.vault);
+    renderCriticalInfo();
+  }
+
+  function cfiAddContact() {
+    const cfi = ensureCriticalShape(state.vault.criticalFamilyInfo || {});
+    const next = cfi.contacts.concat([{
+      role: 'other', name: '', phone: null, email: null, address: null, notes: null,
+    }]);
+    state.vault = Object.assign({}, state.vault, {
+      criticalFamilyInfo: Object.assign({}, cfi, { contacts: next }),
+    });
+    saveVault(state.vault);
+    renderCriticalInfo();
+  }
+
+  function cfiRemoveContact(idx) {
+    const cfi = ensureCriticalShape(state.vault.criticalFamilyInfo || {});
+    const next = cfi.contacts.filter((_, i) => i !== idx);
+    state.vault = Object.assign({}, state.vault, {
+      criticalFamilyInfo: Object.assign({}, cfi, { contacts: next }),
+    });
+    saveVault(state.vault);
+    renderCriticalInfo();
+  }
+
+  /* ============================================================
+     Procedure modal renderer
+     ============================================================ */
+  function renderBulletList(items) {
+    return '<ul style="margin: 6px 0 0 18px; padding: 0">' +
+      items.map(it => '<li style="margin-bottom: 4px">' + escapeHtml(it) + '</li>').join('') +
+      '</ul>';
+  }
+
+  function renderProcedureSection(label, content, kind) {
+    let body = '';
+    if (kind === 'list' && Array.isArray(content)) {
+      body = renderBulletList(content);
+    } else {
+      body = '<div style="margin-top: 4px; line-height: 1.6">' + escapeHtml(content) + '</div>';
+    }
+    return (
+      '<div style="margin-bottom: 14px">' +
+        '<div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 4px">' +
+          escapeHtml(label) +
+        '</div>' +
+        body +
+      '</div>'
+    );
+  }
+
+  function openProcedureModal(accountId) {
+    const acct = state.vault.accounts.find(a => a.id === accountId);
+    if (!acct) return;
+    state.procedureAccountId = accountId;
+    const block = getProcedureBlock(acct.category, state.vault.locale);
+    const categoryLabel = t('vault.category.' + acct.category);
+    document.getElementById('procedure-modal-title').textContent =
+      t('vault.procedure.title') + ' — ' + categoryLabel;
+    const last4 = acct.accountNumberLast4 ? '••••' + acct.accountNumberLast4 : '';
+    document.getElementById('procedure-account-summary').textContent =
+      (acct.institution || '—') + (last4 ? ' · ' + last4 : '') + ' · ' + t('vault.owner.' + acct.owner);
+    document.getElementById('procedure-disclaimer').textContent = t('vault.procedure.disclaimer');
+
+    let content = '';
+    if (!block) {
+      content = '<div class="placeholder-card">' + escapeHtml(t('vault.procedure.notFound')) + '</div>';
+    } else {
+      content += renderProcedureSection(t('vault.procedure.whoToContact'), block.whoToContact, 'paragraph');
+      content += renderProcedureSection(t('vault.procedure.expectedTimeline'), block.expectedTimeline, 'paragraph');
+      content += renderProcedureSection(t('vault.procedure.paperworkChecklist'), block.paperworkChecklist, 'list');
+      content += renderProcedureSection(t('vault.procedure.taxStrategyNotes'), block.taxStrategyNotes, 'paragraph');
+      content += renderProcedureSection(t('vault.procedure.commonMistakes'), block.commonMistakes, 'list');
+
+      // HR contact section for retirement-account categories
+      if (acct.category === 'employer-401k-roth' || acct.category === 'employer-401k-trad') {
+        const hrName = block.hrContactName || t('vault.procedure.hrContactPlaceholder');
+        const hrPhone = block.hrContactPhone || '—';
+        const hrEmail = block.hrContactEmail || '—';
+        content += (
+          '<div style="margin-bottom: 14px; background: var(--card-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px">' +
+            '<div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 4px">' +
+              escapeHtml(t('vault.procedure.hrContact')) +
+            '</div>' +
+            '<div>' + escapeHtml(hrName) + ' · ' + escapeHtml(hrPhone) + ' · ' + escapeHtml(hrEmail) + '</div>' +
+          '</div>'
+        );
+      }
+
+      // Withdrawal calculator for retirement categories
+      const isRetirementCategory = (
+        acct.category === 'employer-401k-roth' ||
+        acct.category === 'employer-401k-trad' ||
+        acct.category === 'traditional-ira' ||
+        acct.category === 'roth-ira'
+      );
+      if (isRetirementCategory) {
+        content += renderCalculatorContainer();
+      }
+    }
+
+    document.getElementById('procedure-content').innerHTML = content;
+    showModal('procedure-modal');
+
+    // After insert, wire calculator buttons if present
+    if (document.getElementById('calc-recompute-btn')) {
+      document.getElementById('calc-recompute-btn').addEventListener('click', recomputeCalculator);
+      // Run an initial computation with sensible defaults so the user sees numbers immediately
+      recomputeCalculator();
+    }
+  }
+
+  function renderCalculatorContainer() {
+    return (
+      '<div style="margin-bottom: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--card-2)">' +
+        '<div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 10px">' +
+          escapeHtml(t('vault.procedure.calculator')) +
+        '</div>' +
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px">' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.rebeccaAge')) + '</label>' +
+            '<input id="calc-rebecca-age" type="number" min="0" max="120" value="50" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.otherIncome')) + '</label>' +
+            '<input id="calc-other-income" type="number" min="0" value="60000" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.filingStatus')) + '</label>' +
+            '<select id="calc-filing" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+              '<option value="single">' + escapeHtml(t('vault.calc.single')) + '</option>' +
+              '<option value="qss">' + escapeHtml(t('vault.calc.qss')) + '</option>' +
+              '<option value="mfj">' + escapeHtml(t('vault.calc.mfj')) + '</option>' +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.householdSize')) + '</label>' +
+            '<select id="calc-household-size" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+              '<option value="2">2</option>' +
+              '<option value="4" selected>4</option>' +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.growthRate')) + '</label>' +
+            '<input id="calc-growth-rate" type="number" step="0.01" min="0" max="0.20" value="0.05" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size: 11px; color: var(--text-dim); display: block">' + escapeHtml(t('vault.calc.targetBracket')) + '</label>' +
+            '<select id="calc-target-bracket" style="width: 100%; padding: 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-size: 13px">' +
+              '<option value="0.12">12%</option>' +
+              '<option value="0.22" selected>22%</option>' +
+              '<option value="0.24">24%</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<button id="calc-recompute-btn" class="primary" style="margin-bottom: 12px">' + escapeHtml(t('vault.calc.recompute')) + '</button>' +
+        '<div id="calc-result"></div>' +
+      '</div>'
+    );
+  }
+
+  function recomputeCalculator() {
+    const acctId = state.procedureAccountId;
+    if (!acctId) return;
+    const acct = state.vault.accounts.find(a => a.id === acctId);
+    if (!acct) return;
+    const isRoth = acct.category === 'employer-401k-roth' || acct.category === 'roth-ira';
+
+    const input = {
+      account: acct,
+      rebeccaOtherIncome: Number(document.getElementById('calc-other-income').value) || 0,
+      filingStatus: document.getElementById('calc-filing').value,
+      householdSize: Number(document.getElementById('calc-household-size').value) || 4,
+      growthRateAnnual: Number(document.getElementById('calc-growth-rate').value) || 0.05,
+      targetBracketPct: Number(document.getElementById('calc-target-bracket').value) || 0.22,
+      isRoth: isRoth,
+    };
+    const results = runAllStrategies(input);
+
+    // Determine the lowest-tax strategy to highlight as "Recommended"
+    const totalTax = (s) => s.totalFederalTax + s.totalStateTax;
+    const lump = totalTax(results.lumpSum);
+    const even = totalTax(results.evenTenths);
+    const fill = totalTax(results.bracketFill);
+    const minTax = Math.min(lump, even, fill);
+
+    const renderCliffBadges = (sched) => {
+      const badges = [];
+      if (sched.triggeredCliffs.irmaa) badges.push('<span style="display:inline-block; padding: 1px 6px; background: rgba(245,179,66,0.2); color: var(--accent-warn); border-radius: 8px; font-size: 11px; margin-right: 4px">IRMAA</span>');
+      if (sched.triggeredCliffs.acaCliff) badges.push('<span style="display:inline-block; padding: 1px 6px; background: rgba(239,83,80,0.2); color: var(--accent-error); border-radius: 8px; font-size: 11px; margin-right: 4px">ACA</span>');
+      if (sched.triggeredCliffs.amt) badges.push('<span style="display:inline-block; padding: 1px 6px; background: rgba(176,125,255,0.2); color: var(--accent-purple); border-radius: 8px; font-size: 11px; margin-right: 4px">AMT</span>');
+      if (badges.length === 0) return '<span style="color: var(--accent-success); font-size: 11px">' + escapeHtml(t('vault.calc.noCliffs')) + '</span>';
+      return badges.join('');
+    };
+
+    const isWinner = (totalTax_) => totalTax_ === minTax;
+    const rowStyle = (winner) => winner
+      ? 'background: rgba(102,187,106,0.08); border: 1px solid var(--accent-success);'
+      : 'background: var(--bg); border: 1px solid var(--border);';
+    const winnerBadge = (winner) => winner
+      ? ' <span style="color: var(--accent-success); font-size: 11px">★ ' + escapeHtml(t('vault.calc.recommended')) + '</span>'
+      : '';
+
+    const fmtTax = (s) => '$' + Math.round(s.totalFederalTax + s.totalStateTax).toLocaleString('en-US');
+    const fmtFed = (s) => '$' + Math.round(s.totalFederalTax).toLocaleString('en-US');
+    const fmtState = (s) => '$' + Math.round(s.totalStateTax).toLocaleString('en-US');
+
+    const card = (titleKey, sched, totalTax_) => (
+      '<div style="padding: 12px; border-radius: 6px; margin-bottom: 8px; ' + rowStyle(isWinner(totalTax_)) + '">' +
+        '<div style="font-weight: 600; margin-bottom: 6px">' + escapeHtml(t(titleKey)) + winnerBadge(isWinner(totalTax_)) + '</div>' +
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font-size: 12px">' +
+          '<div><div style="color: var(--text-dim)">' + escapeHtml(t('vault.calc.totalTax')) + '</div><div style="font-weight: 600; font-variant-numeric: tabular-nums">' + fmtTax(sched) + '</div></div>' +
+          '<div><div style="color: var(--text-dim)">' + escapeHtml(t('vault.calc.federalTax')) + '</div><div style="font-variant-numeric: tabular-nums">' + fmtFed(sched) + '</div></div>' +
+          '<div><div style="color: var(--text-dim)">' + escapeHtml(t('vault.calc.stateTax')) + '</div><div style="font-variant-numeric: tabular-nums">' + fmtState(sched) + '</div></div>' +
+          '<div><div style="color: var(--text-dim)">' + escapeHtml(t('vault.calc.cliffs')) + '</div><div>' + renderCliffBadges(sched) + '</div></div>' +
+        '</div>' +
+      '</div>'
+    );
+
+    let html = '';
+    if (isRoth) {
+      html += '<div class="disclaimer" style="margin-bottom: 8px">' + escapeHtml(t('vault.calc.rothNote')) + '</div>';
+    }
+    html += card('vault.calc.lumpSum', results.lumpSum, lump);
+    html += card('vault.calc.evenTenths', results.evenTenths, even);
+    html += card('vault.calc.bracketFill', results.bracketFill, fill);
+
+    // Year-by-year drilldown for the bracket-fill (recommended) strategy
+    html += '<div style="margin-top: 12px"><div style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px">' + escapeHtml(t('vault.calc.yearByYearBracket')) + '</div>';
+    html += '<div style="overflow-x: auto"><table style="width: 100%; border-collapse: collapse; font-size: 12px">';
+    html += '<thead><tr style="border-bottom: 1px solid var(--border)">';
+    html += '<th style="text-align: left; padding: 6px">' + escapeHtml(t('vault.calc.year')) + '</th>';
+    html += '<th style="text-align: right; padding: 6px">' + escapeHtml(t('vault.calc.withdrawal')) + '</th>';
+    html += '<th style="text-align: right; padding: 6px">' + escapeHtml(t('vault.calc.totalIncome')) + '</th>';
+    html += '<th style="text-align: right; padding: 6px">' + escapeHtml(t('vault.calc.fed')) + '</th>';
+    html += '<th style="text-align: right; padding: 6px">' + escapeHtml(t('vault.calc.state')) + '</th>';
+    html += '<th style="text-align: right; padding: 6px">' + escapeHtml(t('vault.calc.remaining')) + '</th>';
+    html += '<th style="text-align: center; padding: 6px">' + escapeHtml(t('vault.calc.cliffs')) + '</th>';
+    html += '</tr></thead><tbody>';
+    results.bracketFill.yearByYear.forEach(yr => {
+      const cliffs = [];
+      if (yr.irmaa) cliffs.push('IRMAA');
+      if (yr.acaCliff) cliffs.push('ACA');
+      if (yr.amt) cliffs.push('AMT');
+      html += '<tr style="border-bottom: 1px solid var(--border)">';
+      html += '<td style="padding: 4px 6px">' + yr.year + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + formatUSD(yr.withdrawal) + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + formatUSD(yr.totalIncome) + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + formatUSD(yr.federalTax) + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + formatUSD(yr.stateTax) + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums">' + formatUSD(yr.remainingBalance) + '</td>';
+      html += '<td style="padding: 4px 6px; text-align: center; color: var(--accent-warn); font-size: 11px">' + escapeHtml(cliffs.join(' ')) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+
+    document.getElementById('calc-result').innerHTML = html;
+  }
+
+  /* ============================================================
+     Modals — Add/Edit, Delete, Settings
+     ============================================================ */
+  function showModal(id) {
+    document.getElementById(id).classList.add('show');
+  }
+  function hideModal(id) {
+    document.getElementById(id).classList.remove('show');
+  }
+
+  function populateCategoryDropdown() {
+    const sel = document.getElementById('acct-category');
+    sel.innerHTML = ACCOUNT_CATEGORIES.map(c =>
+      '<option value="' + c + '">' + escapeHtml(t('vault.category.' + c)) + '</option>'
+    ).join('');
+  }
+
+  function openAddAccountModal() {
+    state.editingAccountId = null;
+    document.getElementById('account-modal-title').textContent = t('vault.modal.addAccount');
+    populateCategoryDropdown();
+    document.getElementById('acct-owner').value = 'roger';
+    document.getElementById('acct-category').value = 'us-bank-joint';
+    document.getElementById('acct-institution').value = '';
+    document.getElementById('acct-last4').value = '';
+    document.getElementById('acct-balance').value = '';
+    document.getElementById('acct-currency').value = 'USD';
+    document.getElementById('acct-fx-rate').value = '';
+    document.getElementById('acct-login-url').value = '';
+    document.getElementById('acct-phone').value = '';
+    document.getElementById('acct-email').value = '';
+    document.getElementById('acct-beneficiary').value = '';
+    document.getElementById('acct-notes').value = '';
+    clearAccountFormErrors();
+    showModal('account-modal');
+  }
+
+  function openEditAccountModal(id) {
+    const acct = state.vault.accounts.find(a => a.id === id);
+    if (!acct) return;
+    state.editingAccountId = id;
+    document.getElementById('account-modal-title').textContent = t('vault.modal.editAccount');
+    populateCategoryDropdown();
+    document.getElementById('acct-owner').value = acct.owner;
+    document.getElementById('acct-category').value = acct.category;
+    document.getElementById('acct-institution').value = acct.institution || '';
+    document.getElementById('acct-last4').value = acct.accountNumberLast4 || '';
+    document.getElementById('acct-balance').value = acct.currentBalanceUSD;
+    document.getElementById('acct-currency').value = acct.currencyNative || 'USD';
+    document.getElementById('acct-fx-rate').value = acct.exchangeRateToUSD || '';
+    document.getElementById('acct-login-url').value = acct.loginUrl || '';
+    document.getElementById('acct-phone').value = acct.contactPhone || '';
+    document.getElementById('acct-email').value = acct.contactEmail || '';
+    document.getElementById('acct-beneficiary').value = acct.beneficiary || '';
+    document.getElementById('acct-notes').value = acct.notes || '';
+    clearAccountFormErrors();
+    showModal('account-modal');
+  }
+
+  function clearAccountFormErrors() {
+    const e = document.getElementById('acct-institution-error');
+    if (e) { e.style.display = 'none'; e.textContent = ''; }
+  }
+
+  function readAccountFormPatch() {
+    const institution = document.getElementById('acct-institution').value.trim();
+    const last4 = document.getElementById('acct-last4').value.trim();
+    const balanceRaw = document.getElementById('acct-balance').value.trim();
+    const balance = balanceRaw === '' ? 0 : Number(balanceRaw);
+    const currency = document.getElementById('acct-currency').value;
+    const fxRateRaw = document.getElementById('acct-fx-rate').value.trim();
+    const fxRate = fxRateRaw === '' ? null : Number(fxRateRaw);
+    const loginUrl = document.getElementById('acct-login-url').value.trim() || null;
+    const phone = document.getElementById('acct-phone').value.trim() || null;
+    const email = document.getElementById('acct-email').value.trim() || null;
+    const beneficiary = document.getElementById('acct-beneficiary').value.trim() || null;
+    const notes = document.getElementById('acct-notes').value.trim() || null;
+    return {
+      owner: document.getElementById('acct-owner').value,
+      category: document.getElementById('acct-category').value,
+      institution: institution,
+      accountNumberLast4: last4,
+      currentBalanceUSD: balance,
+      currencyNative: currency,
+      exchangeRateToUSD: fxRate,
+      loginUrl: loginUrl,
+      contactPhone: phone,
+      contactEmail: email,
+      beneficiary: beneficiary,
+      notes: notes,
+    };
+  }
+
+  function validateAccountFormPatch(patch) {
+    const errs = {};
+    if (!patch.institution) errs.institution = t('vault.error.required');
+    if (patch.accountNumberLast4 && !/^\d{1,4}$/.test(patch.accountNumberLast4)) errs.last4 = t('vault.error.invalidLast4');
+    if (typeof patch.currentBalanceUSD !== 'number' || !isFinite(patch.currentBalanceUSD) || patch.currentBalanceUSD < 0) errs.balance = t('vault.error.invalidNumber');
+    if (patch.exchangeRateToUSD !== null && (typeof patch.exchangeRateToUSD !== 'number' || patch.exchangeRateToUSD <= 0 || !isFinite(patch.exchangeRateToUSD))) errs.fxRate = t('vault.error.invalidFx');
+    if (patch.loginUrl && !/^https?:\/\//.test(patch.loginUrl)) errs.loginUrl = t('vault.error.invalidUrl');
+    return errs;
+  }
+
+  function saveAccount() {
+    const patch = readAccountFormPatch();
+    const errs = validateAccountFormPatch(patch);
+    if (Object.keys(errs).length) {
+      // Show first error inline; for now display on institution as a generic
+      const e = document.getElementById('acct-institution-error');
+      if (e) {
+        e.textContent = errs.institution || errs.last4 || errs.balance || errs.fxRate || errs.loginUrl || 'Validation error';
+        e.style.display = 'block';
+      }
+      return;
+    }
+    if (state.editingAccountId) {
+      state.vault = Object.assign({}, state.vault, {
+        accounts: state.vault.accounts.map(a => a.id === state.editingAccountId ? updateAccount(a, patch) : a),
+      });
+    } else {
+      state.vault = Object.assign({}, state.vault, {
+        accounts: state.vault.accounts.concat([newAccount(patch)]),
+      });
+    }
+    saveVault(state.vault);
+    hideModal('account-modal');
+    state.editingAccountId = null;
+    renderInventory();
+  }
+
+  function openDeleteAccountModal(id) {
+    const acct = state.vault.accounts.find(a => a.id === id);
+    if (!acct) return;
+    state.deletingAccountId = id;
+    const detail = t('vault.modal.deleteDetail', {
+      institution: acct.institution || '—',
+      last4: acct.accountNumberLast4 || '—',
+    });
+    document.getElementById('delete-modal-detail').textContent = detail;
+    document.getElementById('delete-confirm').value = '';
+    document.getElementById('delete-confirm-btn').disabled = true;
+    showModal('delete-modal');
+  }
+
+  function confirmDeleteAccount() {
+    const id = state.deletingAccountId;
+    if (!id) return;
+    state.vault = Object.assign({}, state.vault, {
+      accounts: state.vault.accounts.filter(a => a.id !== id),
+    });
+    saveVault(state.vault);
+    hideModal('delete-modal');
+    state.deletingAccountId = null;
+    renderInventory();
+  }
+
+  /* ============================================================
+     Settings — wipe / export / encryption toggle (Phase 10)
+     ============================================================ */
+  function openSettings() {
+    document.getElementById('settings-encryption-toggle').value =
+      (state.vault.encryption && state.vault.encryption.enabled) ? 'on' : 'off';
+    showModal('settings-modal');
+  }
+
+  function exportVaultJson() {
+    const blob = new Blob([JSON.stringify(state.vault, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'vault-rr-' + date + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /* ============================================================
+     Import vault from JSON (file or paste) — replaces ALL vault data
+     ============================================================ */
+  function importVaultFromText(jsonText) {
+    const status = document.getElementById('settings-import-status');
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      status.innerHTML = '<div style="color: var(--accent-error); font-size: 12px">' + escapeHtml(t('vault.settings.importParseError') + e.message) + '</div>';
+      return;
+    }
+    // Strip _meta and any unknown top-level keys silently before validation
+    const candidate = {
+      version: parsed.version || 'v1',
+      locale: parsed.locale || 'en',
+      apiKey: parsed.apiKey || null,
+      chatboxEnabled: !!parsed.chatboxEnabled,
+      chatboxModel: parsed.chatboxModel || 'claude-opus-4-7',
+      redactAccountNumbersInAI: parsed.redactAccountNumbersInAI !== false,
+      encryption: parsed.encryption || null,
+      accounts: Array.isArray(parsed.accounts) ? parsed.accounts.map(a => Object.assign({}, a, {
+        accountNumberFull: a.accountNumberFull === undefined ? null : a.accountNumberFull,
+        loginUrl: a.loginUrl === undefined ? null : a.loginUrl,
+        contactPhone: a.contactPhone === undefined ? null : a.contactPhone,
+        contactEmail: a.contactEmail === undefined ? null : a.contactEmail,
+        contactAddress: a.contactAddress === undefined ? null : a.contactAddress,
+        beneficiary: a.beneficiary === undefined ? null : a.beneficiary,
+        notes: a.notes === undefined ? null : a.notes,
+        history: Array.isArray(a.history) ? a.history : [],
+        deceasedFlag: a.deceasedFlag || null,
+        accountNumberLast4: a.accountNumberLast4 || '',
+      })) : [],
+      criticalFamilyInfo: parsed.criticalFamilyInfo || {
+        will: null, poaFinancial: null, poaHealthcare: null,
+        healthcareDirective: null, guardianship: null,
+        lifeInsurance: [], passwordVault: null,
+        funeral: { notes: null }, contacts: [],
+      },
+      obligations: parsed.obligations || {},
+      snapshotHistory: Array.isArray(parsed.snapshotHistory) ? parsed.snapshotHistory : [],
+    };
+    const errors = validateVault(candidate);
+    if (errors.length) {
+      status.innerHTML = '<div style="color: var(--accent-error); font-size: 12px; max-height: 100px; overflow-y: auto">' + escapeHtml(t('vault.settings.importSchemaError')) + '<br>' + errors.map(escapeHtml).join('<br>') + '</div>';
+      return;
+    }
+    const cfi = ensureCriticalShape(candidate.criticalFamilyInfo);
+    const previewMsg = t('vault.settings.importPreview', {
+      accounts: candidate.accounts.length,
+      lifeIns: cfi.lifeInsurance.length,
+      contacts: cfi.contacts.length,
+    });
+    if (!window.confirm(previewMsg)) return;
+    state.vault = candidate;
+    saveVault(state.vault);
+    applyLocale();
+    renderInventory();
+    if (state.activeTab === 'critical-info') renderCriticalInfo();
+    if (state.activeTab === 'obligations') renderObligations();
+    if (state.activeTab === 'snapshots') renderSnapshots();
+    status.innerHTML = '<div style="color: var(--accent-success); font-size: 12px">' + escapeHtml(t('vault.settings.importDone', { accounts: candidate.accounts.length })) + '</div>';
+  }
+
+  function importVaultFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      importVaultFromText(String(ev.target.result || ''));
+    };
+    reader.onerror = () => {
+      document.getElementById('settings-import-status').innerHTML =
+        '<div style="color: var(--accent-error); font-size: 12px">File read error</div>';
+    };
+    reader.readAsText(file);
+  }
+
+  function wipeVaultWithConfirm() {
+    const confirmText = prompt(t('vault.settings.wipeConfirm'));
+    if (confirmText === 'WIPE') {
+      wipeVault();
+      state.vault = emptyVault();
+      hideModal('settings-modal');
+      applyLocale();
+      renderInventory();
+    }
+  }
+
+  /* ============================================================
+     Tabs
+     ============================================================ */
+  function switchTab(tabId) {
+    state.activeTab = tabId;
+    document.querySelectorAll('.tab').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-tab') === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(el => {
+      el.classList.toggle('active', el.id === 'tab-' + tabId);
+    });
+    // Lazy-render tab content
+    if (tabId === 'critical-info') renderCriticalInfo();
+    else if (tabId === 'obligations') renderObligations();
+    else if (tabId === 'snapshots') renderSnapshots();
+  }
+
+  /* ============================================================
+     XSS helpers
+     ============================================================ */
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  function escapeAttr(s) {
+    return escapeHtml(s);
+  }
+
+  /* ============================================================
+     Boot
+     ============================================================ */
+  function boot() {
+    state.vault = loadVault();
+    populateCategoryDropdown();
+    applyLocale();
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(el => {
+      el.addEventListener('click', () => switchTab(el.getAttribute('data-tab')));
+    });
+
+    // Topbar actions
+    document.getElementById('locale-toggle-btn').addEventListener('click', toggleLocale);
+    document.getElementById('settings-btn').addEventListener('click', openSettings);
+
+    // Critical CTA
+    document.getElementById('critical-cta').addEventListener('click', () => {
+      // Phase 5 will scroll to + expand Critical Family Info; for now switch tab
+      switchTab('critical-info');
+    });
+
+    // Add Account
+    document.getElementById('add-account-btn').addEventListener('click', openAddAccountModal);
+
+    // Account modal buttons
+    document.getElementById('acct-cancel-btn').addEventListener('click', () => hideModal('account-modal'));
+    document.getElementById('acct-save-btn').addEventListener('click', saveAccount);
+
+    // Delete modal
+    document.getElementById('delete-cancel-btn').addEventListener('click', () => hideModal('delete-modal'));
+    document.getElementById('delete-confirm-btn').addEventListener('click', confirmDeleteAccount);
+    document.getElementById('delete-confirm').addEventListener('input', (ev) => {
+      document.getElementById('delete-confirm-btn').disabled = ev.target.value !== 'DELETE';
+    });
+
+    // Settings modal
+    document.getElementById('settings-close-btn').addEventListener('click', () => hideModal('settings-modal'));
+    document.getElementById('settings-export-btn').addEventListener('click', exportVaultJson);
+    document.getElementById('settings-wipe-btn').addEventListener('click', wipeVaultWithConfirm);
+    const fireImportBtn = document.getElementById('settings-fire-import-btn');
+    if (fireImportBtn) fireImportBtn.addEventListener('click', inspectFireDashboard);
+
+    // JSON Import — file picker
+    const importFileInput = document.getElementById('settings-import-file');
+    const importFileBtn = document.getElementById('settings-import-file-btn');
+    if (importFileBtn && importFileInput) {
+      importFileBtn.addEventListener('click', () => importFileInput.click());
+      importFileInput.addEventListener('change', (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        if (f) importVaultFromFile(f);
+        ev.target.value = '';  // reset so re-selecting same file fires change again
+      });
+    }
+
+    // JSON Import — paste flow
+    const importPasteBtn = document.getElementById('settings-import-paste-btn');
+    const importTextarea = document.getElementById('settings-import-textarea');
+    const importPasteConfirm = document.getElementById('settings-import-paste-confirm');
+    if (importPasteBtn && importTextarea && importPasteConfirm) {
+      importPasteBtn.addEventListener('click', () => {
+        const showing = importTextarea.style.display !== 'none';
+        importTextarea.style.display = showing ? 'none' : 'block';
+        importPasteConfirm.style.display = showing ? 'none' : 'block';
+        if (!showing) {
+          importTextarea.placeholder = t('vault.settings.importPasteHint');
+          importTextarea.focus();
+        }
+      });
+      importPasteConfirm.addEventListener('click', () => {
+        const text = importTextarea.value.trim();
+        if (!text) return;
+        importVaultFromText(text);
+      });
+    }
+
+    // Procedure modal
+    document.getElementById('procedure-close-btn').addEventListener('click', () => hideModal('procedure-modal'));
+    document.getElementById('procedure-print-btn').addEventListener('click', () => window.print());
+
+    // Chatbox
+    document.getElementById('chatbox-toggle-btn').addEventListener('click', chatboxOpen);
+    document.getElementById('chatbox-close-btn').addEventListener('click', chatboxClose);
+    document.getElementById('chatbox-send-btn').addEventListener('click', chatboxSend);
+    document.getElementById('chatbox-input').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        chatboxSend();
+      }
+    });
+    document.getElementById('chatbox-model-select').addEventListener('change', (ev) => {
+      state.vault = Object.assign({}, state.vault, { chatboxModel: ev.target.value });
+      saveVault(state.vault);
+    });
+    document.getElementById('chatbox-reset-btn').addEventListener('click', chatboxResetKey);
+    document.getElementById('chatbox-show-prompt-btn').addEventListener('click', chatboxShowPrompt);
+
+    // Click backdrop to close modals
+    document.querySelectorAll('.modal-backdrop').forEach(bd => {
+      bd.addEventListener('click', (ev) => {
+        if (ev.target === bd) bd.classList.remove('show');
+      });
+    });
+
+    // ESC key closes modals
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        document.querySelectorAll('.modal-backdrop.show').forEach(bd => bd.classList.remove('show'));
+      }
+    });
+
+    renderInventory();
+  }
+
+  // Expose pure helpers for Node testing (when this file is imported with vm.runInNewContext or similar)
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__vaultApi = {
+      emptyVault,
+      validateAccount,
+      validateVault,
+      newAccount,
+      newId,
+      updateAccount,
+      categoryToCountry,
+      ACCOUNT_CATEGORIES,
+      OWNERS,
+      TRANSLATIONS,
+      VAULT_PROCEDURES,
+      lookupProcedure,
+      getProcedureBlock,
+      computeFederalTax,
+      detectCliffs,
+      calculateLumpSumStrategy,
+      calculateEvenTenthsStrategy,
+      calculateBracketFillStrategy,
+      runAllStrategies,
+      BRACKETS_SINGLE_2024,
+      BRACKETS_MFJ_2024,
+      STD_DEDUCTION_SINGLE_2024,
+      STD_DEDUCTION_MFJ_2024,
+      IRMAA_THRESHOLD_SINGLE_2024,
+      IRMAA_THRESHOLD_MFJ_2024,
+      RECURRING_OBLIGATIONS,
+      obligationDueDate,
+      obligationStatus,
+      buildSnapshot,
+      snapshotToCsv,
+      appendBalanceHistory,
+      pushSnapshot,
+      buildLockedSystemPrompt,
+    };
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+  </script>
+</body>
+</html>
