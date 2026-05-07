@@ -529,6 +529,46 @@ Remaining manual gate: open both files in a real browser, run the 8-step browser
 
 ---
 
+## New backlog items from feature 026 review (2026-05-07)
+
+### B-026-1. Aggressive bracket-fill strategy variant (HIGH PRIORITY — RECOMMENDATION REVISED)
+
+**REVISED 2026-05-07 after re-running with reinvestment of after-tax surplus.** The earlier analytical estimate concluded `keep` for "Leave more behind" but DID NOT model the case where the user explicitly withdraws beyond spending need and reinvests the after-tax residual into Taxable. With reinvestment, the math flips decisively in favor of aggressive bracket-fill:
+
+```
+                  Lifetime Tax (real-$)  |  Terminal BV at 95 (real-$)
+SMOOTHED         $165,920                |  $627,918      (current dashboard)
+AGGRESSIVE       $116,507                |  $1,129,821    (user's proposed strategy)
+Δ                −$49,413 saves tax     |  +$501,903 more estate
+```
+
+Verified by `tests/diagnostics/us2-aggressive-vs-smoothed.js`. The aggressive strategy fills the 12% bracket every year ages 60-69 ($118K/yr cap), pays ~10% effective tax NOW on the surplus, reinvests the after-tax residual into Taxable. By age 67-68 Trad is fully drained; ages 70-95 have only $50K SS taxable income → 3% effective rate vs 7-8% for the smoothed path (which still has Trad to draw from at age 70+). The compounding inside Taxable for the early-withdrawn surplus offsets the LTCG drag because:
+
+1. Pulling Trad early at 8.6% effective beats letting it compound + drawing later at 7-8% effective (when it stacks with SS taxable income).
+2. The $30K standard deduction shields the first $30K of Trad each year — but only if you USE it. Smoothing $20K/yr leaves $10K of "deduction headroom" unused per year. Aggressive fills it.
+3. Once Trad is fully depleted by age 68, ages 70-95 have nothing to compound into the higher-bracket / SS-stacking late years. Smoothed keeps Trad alive into the 80s, where it gets pulled at higher effective rate due to SS stacking.
+
+**Action:** add an "Aggressive Bracket-Fill" strategy variant to the strategy registry that fills the full bracket headroom (no `pTrad/yearsRemaining` cap) ages 60-69, with explicit reinvestment of after-tax surplus into Taxable. Should pass Safe gate for typical scenarios because the tax-deferred compounding savings buys back the per-phase floor margin. Open a new spec (027 or later) to ship the strategy.
+
+**Implication for current dashboard users:** the existing "Pay less lifetime tax" objective with "Bracket-Fill (Smoothed)" winner is **NOT** lifetime-tax-minimal for users with modest Trad balances and long retirements. The user must currently either accept the sub-optimal tax outcome OR manually intervene (e.g., withdraw outside the dashboard's recommended schedule). A short-term documentation update should warn users of this case until the new strategy ships.
+
+The earlier `keep` recommendation in `specs/026-withdrawal-tax-and-ui-fixes/research.md` Section 2 was based on a counterfactual that did NOT include reinvestment of the early-withdrawn surplus — that omission was load-bearing.
+
+### B-026-2. RR responsive-header lockstep gap
+
+During US3 audit, found that `FIRE-Dashboard-Generic.html` has Feature 011 responsive overrides (`@media (max-width: 1023px)` and `(max-width: 767px)`) but the equivalent never landed in `FIRE-Dashboard.html`. Pre-existing lockstep gap (Constitution I) carried forward from feature 011. The 026 zoom-resilience fix uses viewport-relative `clamp()` typography that doesn't depend on the media-query overrides, so the gap doesn't block 026. Future feature should mirror Generic's responsive blocks into RR.
+
+---
+
+## Done in feature 026 — Verdict-Pill Month Fix + Tax Investigation + Header Zoom Resilience (2026-05-07)
+
+- **US1 (P1) — Verdict-pill "always 1 months" bug FIXED**: Root cause was `calc/fireAgeResolver.js` Stage 2 semantic — "earliest feasible m of 12 probes" produced m=1 for almost any input because the simulator's pro-rate response is step-function shaped. Replaced with **linear interpolation across the feasibility-margin slack** (mode-specific: DWZ → endBalance, Exact → endBalance − terminalBuffer × annualSpend, Safe → min over per-phase floors with endBalance fallback). Now produces continuously varying month values across input changes: 11 distinct months across a 25-step monthly-savings sweep (vs 1 distinct pre-fix). Verdict-pill integer-year branch tightened in both HTMLs to source years/age from the resolver result (Constitution III). New regression test `tests/unit/fireAgeResolverSweep.test.js` (7 cases). Diagnostic harness `tests/diagnostics/us1-sweep.js`. Existing 11 month-precision tests adjusted to new contract — all pass.
+- **US2 (P1) — Withdrawal-strategy tax-cliff investigation: RECOMMENDATION = `keep`**. Counterfactual saves $66K nominal lifetime tax at 5% real but costs $54K nominal terminal Book Value. The "leave-more-behind" objective optimises for terminal estate — current behavior IS correct. Constitution IX makes this rigorous. See `specs/026-withdrawal-tax-and-ui-fixes/research.md` Section 2 + `tests/diagnostics/us2-counterfactual.js`.
+- **US3 (P2) — Header zoom resilience FIXED**: Replaced the fixed-grid `1fr auto auto` layout with `flex-wrap: wrap` + `clamp()` typography on title and pill. 100%-zoom layout preserved within ±2px (SC-008). Header degrades gracefully across 75/100/125/150% zoom. Both EN and zh-TW. Both HTML files in lockstep. New Playwright spec `tests/e2e/header-zoom-matrix.spec.ts`.
+- Spec / Plan / Tasks / Research / Contracts / CLOSEOUT: see [`specs/026-withdrawal-tax-and-ui-fixes/`](./specs/026-withdrawal-tax-and-ui-fixes/) — awaiting user browser-smoke before merge to `main`.
+
+---
+
 ## Done in feature 021 — Tax Expense Category + Audit-Harness Carry-Forward (2026-05-01)
 
 - **US3 (P1 / MVP-prerequisite) — Progressive bracket calc refactor**: `calc/accumulateToFire.js` v2 → v3. New `_computeYearTax` helper computes federal tax via IRS 2024 progressive brackets (10/12/22/24/32/35/37%) and FICA via SSA 2024 constants (SS 6.2% to wage base $168,600, Medicare 1.45%, additional Medicare 0.9% over $200k single / $250k MFJ). New per-row outputs: `ficaTax`, `federalTaxBreakdown`, `ficaBreakdown`. Flat-rate `taxRate` override path preserved for backwards-compat. New pure-data module `calc/taxBrackets.js` ships the 2024 bracket constants.

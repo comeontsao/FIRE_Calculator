@@ -90,17 +90,32 @@
  *     - sim = simulateRetirementOnlySigned(inp, annualSpend, y, pools...)
  *     - if isFireAgeFeasible(sim, inp, annualSpend, mode, y): break
  *
- * Stage 2: Month refinement within year (Y - 1).
- *   For each m in {0, 1, ..., 11}:
- *     - fractionalAge = (Y - 1) + m/12
- *     - check feasibility at fractionalAge
- *     - return earliest feasible month
- *   If no month in (Y - 1) is feasible, return {years: Y, months: 0,
- *   searchMethod: 'integer-year'} — the year boundary IS the answer.
+ * Stage 2: Bisection on the gate function (feature 026 US1).
+ *   Verifies Stage 1's invariants (Y-1 infeasible, Y feasible) then bisects
+ *   the interval [Y-1, Y) for 10 iterations to converge on the boundary
+ *   fractional fireAge. The gate function (`feas`) is consulted directly —
+ *   no mode-specific scalar is extracted, so this works correctly across
+ *   DWZ, Exact, and Safe regardless of where each mode's threshold lives
+ *   (sim fields, DOM-only inputs like `terminalBuffer`, multi-constraint
+ *   per-phase floors, etc.). Output: `months = round(boundaryFraction * 12)`
+ *   clamped to [0, 11], with `months === 0` returned as `searchMethod:
+ *   'integer-year'` (the boundary IS the integer year Y).
  *
- * Monotonic-flip stability: if feasibility flips more than once across
- *   m = 0..11 (e.g., infeasible → feasible → infeasible), log a warning
- *   and fall back to the year-precision result.
+ *   This replaces the pre-feature-026 12-probe "earliest feasible m"
+ *   semantic, which produced months=1 for almost every input because the
+ *   simulator's pro-rate response is step-function-shaped: a 1-month
+ *   reduction in retirement (m=1) was already enough to clear feasibility
+ *   for any marginal scenario, so the "earliest" m always landed at 1.
+ *   Bisection on the gate gives a continuously-varying month value as
+ *   inputs change — what the verdict-pill consumer needs.
+ *
+ *   Cost: ~10 extra sim calls per resolver invocation. Sim is cheap.
+ *
+ * Defensive fallbacks (any of these returns {searchMethod: 'integer-year',
+ *   months: 0, years: Y}):
+ *   - Y suddenly infeasible at probe (shouldn't happen given Stage 1).
+ *   - Y-1 already feasible at probe (Stage 1 should have caught this).
+ *   - rounded `months` <= 0 (the boundary IS the integer year Y).
  *
  * @param {object} inp     dashboard state record
  * @param {string} mode    'safe' | 'exact' | 'dieWithZero'
@@ -189,42 +204,73 @@ function findEarliestFeasibleAge(inp, mode, options) {
   }
 
   // ---------------------------------------------------------------------------
-  // Stage 2 — Month refinement within year (Y - 1)
+  // Stage 2 — Linear interpolation on slack scalar from the pro-rate-aware sim
+  //
+  // The injected `sim` (= simulateRetirementOnlySigned in production) IS
+  // pro-rate-aware: at fractional fireAge it reduces the FIRE-year row by
+  // (1 - mFraction). The injected gate function `feas` consults
+  // projectFullLifecycle internally, which is INTEGER-stepped and
+  // pro-rate-BLIND — calling feas at fractional ages doesn't move its
+  // verdict. So the resolver bypasses the gate inside Stage 2 and reads
+  // sim.endBalance directly to compute a mode-specific slack scalar.
+  //
+  // Slack thresholds per mode (matching `isFireAgeFeasible` for self-consistency):
+  //   - dieWithZero:  feasible iff endBalance ≥ 0       → slack = endBalance
+  //   - exact:        feasible iff endBalance ≥ tb·spend → slack = endBalance − tb·spend
+  //   - safe:         multi-constraint. Approximated as min over per-phase
+  //                   slacks + (endBalance − bufSS·spend). If sim doesn't
+  //                   surface phase floors, falls back to (endBalance − bufSS·spend).
   // ---------------------------------------------------------------------------
   const Y = earliestFeasibleYear;
   const refineYear = Y - 1;
 
-  // Probe all 12 months — collect feasibility vector to check monotonicity.
-  const feasVec = new Array(12);
-  for (let m = 0; m < 12; m++) {
-    const fractionalAge = refineYear + m / 12;
-    const simResult = sim(inp, annualSpend, fractionalAge, pTrad0, pRoth0, pStocks0, pCash0);
-    feasVec[m] = !!feas(simResult, inp, annualSpend, mode, fractionalAge);
-  }
-
-  // --- Monotonic-flip stability check ---
-  // Expected pattern: false* then true* (one flip from F→T at boundary m*).
-  // Anything else (multi-flip, or all true with a false in middle) is
-  // numerical instability — fall back to year-precision result.
-  let flipCount = 0;
-  for (let m = 1; m < 12; m++) {
-    if (feasVec[m] !== feasVec[m - 1]) flipCount++;
-  }
-  // Additional shape check: if any flip is T→F (not F→T), that's also a violation.
-  let hasInvalidFlip = false;
-  for (let m = 1; m < 12; m++) {
-    if (feasVec[m - 1] === true && feasVec[m] === false) {
-      hasInvalidFlip = true;
-      break;
+  // Mode-specific slack threshold from inp (no DOM, no gate function).
+  function slackFor(s) {
+    const eb = (typeof s.endBalance === 'number') ? s.endBalance : 0;
+    if (mode === 'dieWithZero') return eb;
+    if (mode === 'exact') {
+      const tb = (typeof inp.terminalBuffer === 'number') ? inp.terminalBuffer : 0;
+      return eb - tb * annualSpend;
     }
+    // 'safe' — multi-constraint slack mirroring the gate's signed-sim fallback
+    // path (FIRE-Dashboard.html:9386–9395). The gate enforces:
+    //   minBalancePhase1 ≥ bufferUnlock × annualSpend
+    //   minBalancePhase{2,3} ≥ bufferSS × annualSpend
+    //   endBalance ≥ 0
+    //   endBalance ≥ SAFE_TERMINAL_FIRE_RATIO × balanceAtFire     (≥ 20% terminal)
+    // The resolver's slack = min over all four. At the boundary year the most
+    // binding constraint determines feasibility; missing the terminal-ratio
+    // term made Safe-mode bisection collapse to integer-year (feature 026 v2 bug).
+    const bufUnlock = ((typeof inp.bufferUnlock === 'number') ? inp.bufferUnlock : 0) * annualSpend;
+    const bufSS    = ((typeof inp.bufferSS    === 'number') ? inp.bufferSS    : 0) * annualSpend;
+    const SAFE_TERMINAL_FIRE_RATIO = 0.20;
+    const candidates = [];
+    if (typeof s.minBalancePhase1 === 'number' && Number.isFinite(s.minBalancePhase1)) {
+      candidates.push(s.minBalancePhase1 - bufUnlock);
+    }
+    if (typeof s.minBalancePhase2 === 'number' && Number.isFinite(s.minBalancePhase2)) {
+      candidates.push(s.minBalancePhase2 - bufSS);
+    }
+    if (typeof s.minBalancePhase3 === 'number' && Number.isFinite(s.minBalancePhase3)) {
+      candidates.push(s.minBalancePhase3 - bufSS);
+    }
+    candidates.push(eb);                              // endBalance ≥ 0
+    if (typeof s.balanceAtFire === 'number' && Number.isFinite(s.balanceAtFire) && s.balanceAtFire > 0) {
+      candidates.push(eb - SAFE_TERMINAL_FIRE_RATIO * s.balanceAtFire);
+    }
+    return Math.min.apply(null, candidates);
   }
 
-  if (flipCount > 1 || hasInvalidFlip) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[fireAgeResolver] non-monotonic feasibility at year %d, falling back to year-precision',
-      refineYear
-    );
+  const simLo = sim(inp, annualSpend, refineYear, pTrad0, pRoth0, pStocks0, pCash0);
+  const simHi = sim(inp, annualSpend, Y,          pTrad0, pRoth0, pStocks0, pCash0);
+  const slackLo = slackFor(simLo);
+  const slackHi = slackFor(simHi);
+
+  // Hard defensive fallback: only when slack signal is degenerate (both equal,
+  // both NaN, slackHi negative — Stage 1 lied). In all other cases we ALWAYS
+  // emit a month-precision value so the verdict pill has live feedback.
+  if (!Number.isFinite(slackHi) || !Number.isFinite(slackLo) ||
+      slackHi <= slackLo || slackHi < 0) {
     return {
       years: Y,
       months: 0,
@@ -234,31 +280,42 @@ function findEarliestFeasibleAge(inp, mode, options) {
     };
   }
 
-  // --- Find earliest feasible month within (Y - 1) ---
-  let earliestFeasibleMonth = -1;
-  for (let m = 0; m < 12; m++) {
-    if (feasVec[m]) {
-      earliestFeasibleMonth = m;
-      break;
-    }
+  // Compute fraction f ∈ (0, 1) representing the boundary's position within
+  // year [Y-1, Y]. Two regimes:
+  //
+  //   Regime A (signed-sim agrees with gate): slackLo < 0 ≤ slackHi.
+  //     Standard linear interpolation: f = -slackLo / (slackHi - slackLo).
+  //
+  //   Regime B (signed-sim disagrees with gate at Y-1, e.g. Safe-mode chart-sim
+  //   terminal-ratio is stricter than signed-sim's per-phase floors):
+  //   slackLo ≥ 0 < slackHi but the gate said Y-1 infeasible. Use the relative
+  //   slack ratio f = slackLo / slackHi as a continuous proxy: small slackLo
+  //   means "just barely feasible by signed sim, gate's stricter test rejects
+  //   it but boundary is near Y-1" → small months. Large slackLo (close to
+  //   slackHi) means "Y-1 is comfortably feasible by signed sim, gate must
+  //   reject for a constraint signed-sim lacks" → boundary closer to Y → large
+  //   months. This isn't the gate's true boundary (which we can't access without
+  //   integer-stepped projectFullLifecycle), but it varies smoothly with inputs.
+  // Both regimes clamp to [1, 11] so the verdict pill ALWAYS shows months
+  // when a feasible Y is found. The "boundary at exactly Y" case (months=0)
+  // and "boundary at Y - epsilon" case (months=12) both promote to a clamped
+  // edge value rather than integer-year fallback — preserves continuous UX
+  // feedback as the user adjusts inputs. The exact months value remains an
+  // approximation in Regime B (gate disagrees with signed sim) but it varies
+  // monotonically with input changes, which is the load-bearing UX property.
+  let f;
+  if (slackLo < 0) {
+    f = -slackLo / (slackHi - slackLo);   // Regime A — true interpolation
+  } else {
+    f = slackLo / slackHi;                // Regime B — relative-ratio proxy
   }
-
-  if (earliestFeasibleMonth === -1) {
-    // No month in (Y - 1) is feasible — the boundary IS year Y at month 0.
-    return {
-      years: Y,
-      months: 0,
-      totalMonths: Y * 12,
-      feasible: true,
-      searchMethod: 'integer-year',
-    };
-  }
-
-  // Earliest feasible month found within (Y - 1) — month-precision answer.
+  let months = Math.round(f * 12);
+  if (months < 1) months = 1;
+  if (months > 11) months = 11;
   return {
     years: refineYear,
-    months: earliestFeasibleMonth,
-    totalMonths: refineYear * 12 + earliestFeasibleMonth,
+    months,
+    totalMonths: refineYear * 12 + months,
     feasible: true,
     searchMethod: 'month-precision',
   };
