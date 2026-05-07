@@ -243,7 +243,7 @@ test('matrix: scoreAndRank with all-infeasible scenarios — winner is reasonabl
     safetyMargin: 0.05, rule55: { enabled: false, separationAge: 54 }, irmaaThreshold: 212000,
   };
   const ranking = scoreAndRank(INP, 44, 'safe', 'leave-more-behind');
-  assert.ok(ranking && ranking.rows && ranking.rows.length === 7);
+  assert.ok(ranking && ranking.rows && ranking.rows.length === 8);
   // The winner should NOT be tax-opt-search-θ=0 anymore (the pre-fix pathology).
   const winner = ranking.rows[0];
   if (winner.strategyId === 'tax-optimized-search') {

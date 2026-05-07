@@ -114,10 +114,10 @@ test('strategies module is present in Generic HTML', () => {
   assert.ok(HTML.includes('const STRATEGIES = Object.freeze('), 'STRATEGIES frozen array missing');
 });
 
-test('scoreAndRank yields 7 results with per-year pool snapshots', () => {
+test('scoreAndRank yields 8 results with per-year pool snapshots', () => {
   const api = buildApi();
   const ranking = api.scoreAndRank(INP, FIRE_AGE, 'safe', 'leave-more-behind');
-  assert.strictEqual(ranking.rows.length, 7, 'expected 7 strategy results');
+  assert.strictEqual(ranking.rows.length, 8, 'expected 8 strategy results (feature 027 added aggressive-bracket-fill)');
 
   for (const r of ranking.rows) {
     assert.ok(Array.isArray(r.perYearRows) && r.perYearRows.length > 0,
