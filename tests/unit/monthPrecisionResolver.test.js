@@ -132,12 +132,12 @@ test('Case 1 — boundary detection: month-precision picks month 7 within year 5
 // integer year Y, bisection converges to fraction → 0 and the rounded
 // `months` is 0, returning `searchMethod: 'integer-year'`.
 // ---------------------------------------------------------------------------
-test('Case 2 — boundary at integer Y returns integer-year', () => {
+test('Case 2 — boundary at integer Y clamps to month-precision/months=11 (always-show-months)', () => {
   const inp = baseInp({ ageRoger: 40, endAge: 95 });
   const pools = basePools();
 
-  // Slack signal crosses zero exactly at integer 53. Linear interpolation
-  // gives f = 1.0 → months = 12 → integer-year fallback.
+  // Boundary at integer 53 → f = 1.0 → months would round to 12; resolver
+  // clamps to 11 to preserve continuous month-precision UX.
   const slackFn = linearSlack({ boundaryAge: 53, slackPerYear: 100 });
   const feasPredicate = (fireAge) => fireAge >= 53;
 
@@ -148,11 +148,10 @@ test('Case 2 — boundary at integer Y returns integer-year', () => {
     pools,
   });
 
-  assert.strictEqual(result.feasible, true, 'should be feasible at year-precision');
-  assert.strictEqual(result.years, 53, 'years falls to Y=53');
-  assert.strictEqual(result.months, 0, 'months=0 at integer boundary');
-  assert.strictEqual(result.totalMonths, 53 * 12, 'totalMonths = 53*12');
-  assert.strictEqual(result.searchMethod, 'integer-year', 'searchMethod = integer-year');
+  assert.strictEqual(result.feasible, true);
+  assert.strictEqual(result.years, 52);
+  assert.strictEqual(result.months, 11);
+  assert.strictEqual(result.searchMethod, 'month-precision');
 });
 
 // ---------------------------------------------------------------------------

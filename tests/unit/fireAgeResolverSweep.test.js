@@ -165,10 +165,12 @@ test('SWEEP-3 (Safe) — months varies in approximate-fallback mode', () => {
 // EDGE-1 — boundary at exactly Y (integer year): rounded months = 0,
 // resolver returns searchMethod: 'integer-year', months: 0.
 // ---------------------------------------------------------------------------
-test('EDGE-1 — boundary at integer Y → integer-year, months: 0', () => {
+test('EDGE-1 — boundary at integer Y clamps to months=11 in month-precision (always-show-months policy)', () => {
   const Y = 53;
-  // Slack signal crosses zero exactly at integer Y → f = 1.0 →
-  // months = 12 → integer-year fallback.
+  // Slack signal crosses zero exactly at integer Y → f = 1.0 → months would
+  // round to 12; resolver clamps to 11 to preserve continuous month-precision
+  // UX (no integer-year fallback when feasible). The verdict pill shows
+  // "FIRE in N years 11 months at Y-1" rather than year-only at Y.
   const result = findEarliestFeasibleAge(baseInp(), 'dieWithZero', {
     annualSpend: 50000,
     simulateRetirementOnlySigned: makeSlackSim(Y, 100),
@@ -176,18 +178,18 @@ test('EDGE-1 — boundary at integer Y → integer-year, months: 0', () => {
     pools: basePools(),
   });
   assert.ok(result.feasible);
-  assert.strictEqual(result.searchMethod, 'integer-year');
-  assert.strictEqual(result.months, 0);
-  assert.strictEqual(result.years, Y);
+  assert.strictEqual(result.searchMethod, 'month-precision');
+  assert.strictEqual(result.months, 11);
+  assert.strictEqual(result.years, Y - 1);
 });
 
 // ---------------------------------------------------------------------------
 // EDGE-2 — slack crossing very close to Y (boundary = Y - 0.5/12):
 // f ≈ 11.5/12 → rounds to 12 → clamped to 11.
 // ---------------------------------------------------------------------------
-test('EDGE-2 — boundary very close to Y (would round to 12) promotes to integer-year', () => {
+test('EDGE-2 — boundary very close to Y clamps to months=11 (always-show-months)', () => {
   const Y = 53;
-  const boundaryAge = Y - 0.5 / 12;  // f → 11.5/12, round = 12 → integer-year
+  const boundaryAge = Y - 0.5 / 12;
   const result = findEarliestFeasibleAge(baseInp(), 'dieWithZero', {
     annualSpend: 50000,
     simulateRetirementOnlySigned: makeSlackSim(boundaryAge, 100),
@@ -195,19 +197,16 @@ test('EDGE-2 — boundary very close to Y (would round to 12) promotes to intege
     pools: basePools(),
   });
   assert.ok(result.feasible);
-  // Boundary effectively at Y → cleaner UX is "FIRE in N years at Y" than
-  // "FIRE in N years 11 months at Y-1". Both express ~same calendar moment.
-  assert.strictEqual(result.searchMethod, 'integer-year');
-  assert.strictEqual(result.years, Y);
-  assert.strictEqual(result.months, 0);
+  assert.strictEqual(result.searchMethod, 'month-precision');
+  assert.strictEqual(result.months, 11);
+  assert.strictEqual(result.years, Y - 1);
 });
 
 // ---------------------------------------------------------------------------
 // EDGE-3 — slack crossing very close to Y-1 (boundary = Y-1 + 0.4/12):
 // f ≈ 0.4/12 → rounds to 0 → returns integer-year at Y.
 // ---------------------------------------------------------------------------
-test('EDGE-3 — boundary near Y-1 (months would round to 0) returns integer-year', () => {
-  // Slack zero-crossing just above Y-1: f ≈ 0.4/12 → round = 0 → integer-year.
+test('EDGE-3 — boundary near Y-1 clamps to months=1 (always-show-months)', () => {
   const Y = 53;
   const boundaryAge = (Y - 1) + 0.4 / 12;
   const result = findEarliestFeasibleAge(baseInp(), 'dieWithZero', {
@@ -217,9 +216,9 @@ test('EDGE-3 — boundary near Y-1 (months would round to 0) returns integer-yea
     pools: basePools(),
   });
   assert.ok(result.feasible);
-  assert.strictEqual(result.months, 0);
-  assert.strictEqual(result.years, Y);
-  assert.strictEqual(result.searchMethod, 'integer-year');
+  assert.strictEqual(result.searchMethod, 'month-precision');
+  assert.strictEqual(result.months, 1);
+  assert.strictEqual(result.years, Y - 1);
 });
 
 // ---------------------------------------------------------------------------

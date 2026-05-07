@@ -296,44 +296,26 @@ function findEarliestFeasibleAge(inp, mode, options) {
   //   reject for a constraint signed-sim lacks" → boundary closer to Y → large
   //   months. This isn't the gate's true boundary (which we can't access without
   //   integer-stepped projectFullLifecycle), but it varies smoothly with inputs.
+  // Both regimes clamp to [1, 11] so the verdict pill ALWAYS shows months
+  // when a feasible Y is found. The "boundary at exactly Y" case (months=0)
+  // and "boundary at Y - epsilon" case (months=12) both promote to a clamped
+  // edge value rather than integer-year fallback — preserves continuous UX
+  // feedback as the user adjusts inputs. The exact months value remains an
+  // approximation in Regime B (gate disagrees with signed sim) but it varies
+  // monotonically with input changes, which is the load-bearing UX property.
+  let f;
   if (slackLo < 0) {
-    // Regime A — true linear interpolation. Clamp months to [0, 12] then
-    // promote 0/12 to integer-year at Y for cleaner UX.
-    const fA = -slackLo / (slackHi - slackLo);
-    let monthsA = Math.round(fA * 12);
-    if (monthsA <= 0 || monthsA >= 12) {
-      return {
-        years: Y,
-        months: 0,
-        totalMonths: Y * 12,
-        feasible: true,
-        searchMethod: 'integer-year',
-      };
-    }
-    return {
-      years: refineYear,
-      months: monthsA,
-      totalMonths: refineYear * 12 + monthsA,
-      feasible: true,
-      searchMethod: 'month-precision',
-    };
+    f = -slackLo / (slackHi - slackLo);   // Regime A — true interpolation
+  } else {
+    f = slackLo / slackHi;                // Regime B — relative-ratio proxy
   }
-
-  // Regime B — both slacks positive (signed sim says Y-1 feasible, gate
-  // rejects it for a constraint signed sim doesn't track). Use the relative
-  // ratio as a continuous proxy. Clamp to [1, 11] so months ALWAYS varies
-  // with input changes — never collapse to integer-year here, otherwise the
-  // verdict pill would silently revert to year-only display whenever the
-  // gate's stricter constraints (e.g., chart-sim's terminal-ratio for Safe
-  // mode, or terminalBuffer×spend for Exact) disagreed with signed sim.
-  const fB = slackLo / slackHi;
-  let monthsB = Math.round(fB * 12);
-  if (monthsB < 1) monthsB = 1;
-  if (monthsB > 11) monthsB = 11;
+  let months = Math.round(f * 12);
+  if (months < 1) months = 1;
+  if (months > 11) months = 11;
   return {
     years: refineYear,
-    months: monthsB,
-    totalMonths: refineYear * 12 + monthsB,
+    months,
+    totalMonths: refineYear * 12 + months,
     feasible: true,
     searchMethod: 'month-precision',
   };
