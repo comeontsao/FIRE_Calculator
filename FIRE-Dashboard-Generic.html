@@ -160,20 +160,23 @@
      scroll path stays JS-free. See contracts/sticky-header.contract.md. */
   #headerSentinel { height: 1px; width: 1px; }
 
+  /* Feature 026 US3 — header zoom resilience: flex-wrap + clamp() typography.
+     See specs/026-withdrawal-tax-and-ui-fixes/contracts/header-layout.contract.md.
+     Replaces the prior fixed grid (1fr auto auto) which broke at zoom > 100%
+     because 1536/1280 CSS-px viewports squeezed the brand column. Flex-wrap
+     lets controls wrap below at narrow viewports. Clamps preserve the 100%
+     layout (SC-008 ±2px) while shrinking proportionally at higher zoom. */
   .header {
     position: sticky;
     top: 0;
     z-index: 100;
-    display: grid;
-    grid-template-columns: 1fr auto auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 20px;
+    gap: clamp(0.75rem, 1.04vw, 1.25rem);
     padding: 24px 32px 20px;
     transition: padding 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
                 background 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
-    /* Opaque background matching the page bg. Invisible at top-of-page; hides
-       content that scrolls up underneath during the pre-threshold window where
-       the sentinel is still intersecting but the page has shifted. */
     background: var(--bg);
     border-bottom: 1px solid transparent;
   }
@@ -227,15 +230,17 @@
     font-size: 1.1em;
   }
 
-  /* Header sub-regions (Feature 006). */
-  .header__brand { min-width: 0; text-align: left; }
+  /* Header sub-regions (Feature 006; flex sizing tightened in feature 026 US3). */
+  .header__brand { flex: 1 1 auto; min-width: 0; text-align: left; }
   .header__status {
+    flex: 0 1 auto;
     display: flex;
     align-items: center;
     gap: 16px;
     justify-content: flex-end;
   }
   .header__controls {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1530,10 +1535,13 @@
   }
 
   /* ---------- HEADER ---------- */
+  /* Feature 026 US3 — clamp() padding lets the header shrink proportionally
+     at zoom > 100% without overflowing on 1536/1280 CSS-px viewports.
+     At 1920 CSS-px (100% zoom), evaluates to 32px / 28px / 24px (preserved). */
   .header {
     background: var(--bg-deep);
     border-bottom: 1px solid transparent;
-    padding: 32px 28px 24px;
+    padding: clamp(1.25rem, 1.67vw, 2rem) clamp(0.875rem, 1.46vw, 1.75rem) clamp(1rem, 1.25vw, 1.5rem);
   }
   .header--compact {
     background: color-mix(in oklch, var(--bg-deep) 88%, transparent);
@@ -1542,7 +1550,10 @@
   .header h1 {
     font-family: var(--font-display);
     font-weight: 500;
-    font-size: clamp(1.8rem, 2.4vw + 0.5rem, 2.35rem);
+    /* Feature 026 US3 — looser min so 125%/150% zoom shrink the title gracefully.
+       At 1920 CSS-px (100% zoom): clamps to 1.96vw = 37.6px (matches pre-fix max).
+       At 1536 CSS-px (125% zoom): 30.1px. At 1280 CSS-px (150% zoom): 25.1px. */
+    font-size: clamp(1.4rem, 1.96vw, 2.35rem);
     letter-spacing: -0.02em;
     color: var(--text);
     background: none !important;
@@ -1565,12 +1576,12 @@
     letter-spacing: 0.005em;
   }
 
-  /* FIRE status pill — quieter */
+  /* FIRE status pill — quieter (zoom-resilient via clamp; feature 026 US3) */
   .fire-status {
     font-family: var(--font-sans);
     font-weight: 500;
-    font-size: 0.88rem !important;
-    padding: 8px 16px !important;
+    font-size: clamp(0.78rem, 0.74vw, 0.94rem) !important;
+    padding: clamp(0.4rem, 0.42vw, 0.6rem) clamp(0.75rem, 0.84vw, 1.1rem) !important;
     border-radius: 999px;
     letter-spacing: 0.02em;
   }
@@ -8163,6 +8174,13 @@ function getInputs() {
     ssSpouseOwn: parseFloat(document.getElementById('ssSpouseOwn').value),
     bufferUnlock: parseInt(document.getElementById('bufferUnlock').value),
     bufferSS: parseInt(document.getElementById('bufferSS').value),
+    // Feature 026 US1 — surface terminalBuffer on inp so calc/fireAgeResolver.js
+    // can compute Exact-mode slack without DOM access (Constitution II purity).
+    terminalBuffer: (function() {
+      const _el = document.getElementById('terminalBuffer');
+      const _v = _el ? parseInt(_el.value) : NaN;
+      return Number.isFinite(_v) ? _v : 0;
+    })(),
     endAge: parseInt(document.getElementById('endAge').value),
     ssClaimAge: ssClaimAge,
   };
@@ -13326,7 +13344,16 @@ function recalcAll() {
       // "N years M months" duration. See RR HTML for full context.
       statusEl.textContent = t('verdict.fireInYearsMonths', _vYears, _vMonths, _vFireRes.years, progressPctRounded);
     } else {
-      statusEl.textContent = t('dyn.fireInYears', yrsToFire, fireAge, progressPctRounded);
+      // Feature 026 US1 — Constitution III: when the resolver returned a
+      // feasible answer (searchMethod = 'integer-year'), source the displayed
+      // years/age from the resolver so the integer-year branch agrees with
+      // the month-precision branch above. Falls through to the legacy
+      // yrsToFire/fireAge only when the resolver result is null/infeasible.
+      const _ivYears = (_vFireRes && _vFireRes.feasible)
+        ? Math.max(0, _vFireRes.years - inp.agePerson1) : yrsToFire;
+      const _ivAge = (_vFireRes && _vFireRes.feasible)
+        ? _vFireRes.years : fireAge;
+      statusEl.textContent = t('dyn.fireInYears', _ivYears, _ivAge, progressPctRounded);
     }
   } else if (yrsToFire <= 18) {
     statusEl.className = 'fire-status warning';

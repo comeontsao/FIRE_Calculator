@@ -48,10 +48,18 @@ function basePools() {
   return { pTrad: 0, pRoth: 0, pStocks: 0, pCash: 0 };
 }
 
-/** Sim mock: identity passthrough — sim object just carries fireAge for the
- * feasibility mock to inspect. */
-function makeSimMock() {
+/** Sim mock: identity passthrough — sim object carries fireAge for the
+ * feasibility mock to inspect. Optional `slackFn(fireAge) → number` is
+ * folded into `sim.endBalance` so feature-026's linear-interpolation
+ * Stage 2 has a slack signal to integrate against. When `slackFn` is
+ * omitted, `endBalance` is left undefined (the resolver's defensive
+ * guards then fall back to integer-year for non-already-feasible
+ * scenarios — exercising those guard paths). */
+function makeSimMock(slackFn) {
   return function simMock(_inp, _annualSpend, fireAge /*, ...pools */) {
+    if (typeof slackFn === 'function') {
+      return { fireAge, endBalance: slackFn(fireAge) };
+    }
     return { fireAge };
   };
 }
@@ -64,6 +72,21 @@ function makeFeasMock(predicate) {
   };
 }
 
+/** Linear-margin slack helper for feature-026 Stage 2.
+ * Returns a function fireAge → endBalance such that the zero-crossing
+ * lands at `boundaryAge` and the slope is fixed (slackPerYear). The
+ * resolver's interpolation then yields months = round((boundaryAge − Y-1) × 12).
+ *
+ * Use with `makeSimMock(linearSlack({boundaryAge: 52.583, slackPerYear: 100}))`
+ * to test that a boundary at 52 + 7/12 produces months=7. */
+function linearSlack(opts) {
+  const boundary = opts.boundaryAge;
+  const slope = (typeof opts.slackPerYear === 'number') ? opts.slackPerYear : 100;
+  return function (fireAge) {
+    return (fireAge - boundary) * slope;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Case 1 — boundary detection
 // Earliest feasible YEAR is 53 (currentAge=40, so Stage 1 stops at y=53).
@@ -71,27 +94,25 @@ function makeFeasMock(predicate) {
 // Expected: {years: 52, months: 7, totalMonths: 52*12+7 = 631, feasible:true,
 //            searchMethod: 'month-precision'}.
 // ---------------------------------------------------------------------------
+// Feature 026 US1 — Stage 2 was rewritten from "earliest feasible m of 12 probes"
+// to "bisection on the gate function". The mock pattern for this case sets
+// the feasibility predicate to flip at the desired fractional boundary
+// (52 + 7/12 ≈ 52.583). Stage 1 finds Y=53; Stage 2 bisects [52, 53) and
+// converges on the boundary. months = round(0.583 * 12) = 7.
+// ---------------------------------------------------------------------------
 test('Case 1 — boundary detection: month-precision picks month 7 within year 52', () => {
   const inp = baseInp({ ageRoger: 40, endAge: 95 });
   const pools = basePools();
 
-  // Year-level: integer ages < 53 are infeasible; >= 53 feasible.
-  // Month-level: fractional ages in [52, 52 + 7/12) are infeasible;
-  //              [52 + 7/12, 53) are feasible.
-  const feasPredicate = (fireAge) => {
-    if (Number.isInteger(fireAge)) return fireAge >= 53;
-    // fireAge = 52 + m/12 (m in 0..11)
-    const fractional = fireAge - Math.floor(fireAge);
-    const m = Math.round(fractional * 12);
-    if (Math.floor(fireAge) === 52) return m >= 7;
-    // Other fractional ages — fall back to year-level rule (m treated as if
-    // floor(fireAge) >= 53 means feasible).
-    return Math.floor(fireAge) >= 53;
-  };
+  // Feature 026: resolver Stage 2 uses linear interpolation on sim.endBalance
+  // (the pro-rate-aware sim's slack signal). Boundary at 52+7/12 produces
+  // f = 7/12 ≈ 0.583 → months = round(0.583 * 12) = 7.
+  const slackFn = linearSlack({ boundaryAge: 52 + 7 / 12, slackPerYear: 100 });
+  const feasPredicate = (fireAge) => fireAge >= 53;
 
-  const result = findEarliestFeasibleAge(inp, 'safe', {
+  const result = findEarliestFeasibleAge(inp, 'dieWithZero', {
     annualSpend: 50000,
-    simulateRetirementOnlySigned: makeSimMock(),
+    simulateRetirementOnlySigned: makeSimMock(slackFn),
     isFireAgeFeasible: makeFeasMock(feasPredicate),
     pools,
   });
@@ -104,63 +125,34 @@ test('Case 1 — boundary detection: month-precision picks month 7 within year 5
 });
 
 // ---------------------------------------------------------------------------
-// Case 2 — monotonic stability fallback
-// Earliest feasible YEAR is 53; within Y-1=52 feasibility flips multiple times:
-//   m=0..3 false, m=4..6 true, m=7..9 false, m=10..11 true.
-// The resolver must detect the multi-flip, log a warning, and fall back to
-// year-precision (integer-year).
-// Expected: {years: 53, months: 0, totalMonths: 636, feasible:true,
-//            searchMethod: 'integer-year'}.
+// Case 2 — boundary at exactly integer Y returns integer-year
+// Feature 026 US1 rewrote Stage 2 from a 12-probe scan to bisection on the
+// gate function. The "multi-flip" failure mode no longer applies. The
+// corresponding integer-year path: when the boundary lies exactly at the
+// integer year Y, bisection converges to fraction → 0 and the rounded
+// `months` is 0, returning `searchMethod: 'integer-year'`.
 // ---------------------------------------------------------------------------
-test('Case 2 — monotonic stability fallback: multi-flip falls back to integer-year + warn', () => {
+test('Case 2 — boundary at integer Y returns integer-year', () => {
   const inp = baseInp({ ageRoger: 40, endAge: 95 });
   const pools = basePools();
 
-  const feasPredicate = (fireAge) => {
-    if (Number.isInteger(fireAge)) return fireAge >= 53;
-    const fractional = fireAge - Math.floor(fireAge);
-    const m = Math.round(fractional * 12);
-    if (Math.floor(fireAge) === 52) {
-      // Multi-flip pattern: F F F F T T T F F F T T
-      return (m >= 4 && m <= 6) || m >= 10;
-    }
-    return Math.floor(fireAge) >= 53;
-  };
+  // Slack signal crosses zero exactly at integer 53. Linear interpolation
+  // gives f = 1.0 → months = 12 → integer-year fallback.
+  const slackFn = linearSlack({ boundaryAge: 53, slackPerYear: 100 });
+  const feasPredicate = (fireAge) => fireAge >= 53;
 
-  // Capture console.warn calls.
-  const originalWarn = console.warn;
-  const warnCalls = [];
-  console.warn = (...args) => warnCalls.push(args);
-
-  let result;
-  try {
-    result = findEarliestFeasibleAge(inp, 'safe', {
-      annualSpend: 50000,
-      simulateRetirementOnlySigned: makeSimMock(),
-      isFireAgeFeasible: makeFeasMock(feasPredicate),
-      pools,
-    });
-  } finally {
-    console.warn = originalWarn;
-  }
+  const result = findEarliestFeasibleAge(inp, 'dieWithZero', {
+    annualSpend: 50000,
+    simulateRetirementOnlySigned: makeSimMock(slackFn),
+    isFireAgeFeasible: makeFeasMock(feasPredicate),
+    pools,
+  });
 
   assert.strictEqual(result.feasible, true, 'should be feasible at year-precision');
-  assert.strictEqual(result.years, 53, 'years falls back to Y=53');
-  assert.strictEqual(result.months, 0, 'months=0 on fallback');
+  assert.strictEqual(result.years, 53, 'years falls to Y=53');
+  assert.strictEqual(result.months, 0, 'months=0 at integer boundary');
   assert.strictEqual(result.totalMonths, 53 * 12, 'totalMonths = 53*12');
   assert.strictEqual(result.searchMethod, 'integer-year', 'searchMethod = integer-year');
-
-  // Verify warning was logged with expected prefix.
-  assert.ok(warnCalls.length >= 1, 'at least one console.warn call expected');
-  const firstWarn = warnCalls[0].join(' ');
-  assert.ok(
-    firstWarn.includes('[fireAgeResolver]'),
-    'warn message must include [fireAgeResolver] prefix; got: ' + firstWarn
-  );
-  assert.ok(
-    firstWarn.includes('non-monotonic'),
-    'warn message must mention non-monotonic; got: ' + firstWarn
-  );
 });
 
 // ---------------------------------------------------------------------------
@@ -230,17 +222,14 @@ test('Case 5 — single-person + couple parity: shape and value consistency', ()
   const inpSingle = baseInp({ ageRoger: 45, endAge: 95, adultCount: 1 });
   const pools = basePools();
 
-  // Year 50 is the earliest feasible; within year 49, month 6 is the boundary.
-  const feasPredicate = (fireAge) => {
-    if (Number.isInteger(fireAge)) return fireAge >= 50;
-    const m = Math.round((fireAge - Math.floor(fireAge)) * 12);
-    if (Math.floor(fireAge) === 49) return m >= 6;
-    return Math.floor(fireAge) >= 50;
-  };
+  // Year 50 is the earliest integer-feasible year; slack zero-crossing at
+  // fireAge 49 + 6/12 = 49.5 → f = 0.5 → months = 6.
+  const feasPredicate = (fireAge) => fireAge >= 50;
+  const slackFn = linearSlack({ boundaryAge: 49.5, slackPerYear: 100 });
 
   const opts = {
     annualSpend: 60000,
-    simulateRetirementOnlySigned: makeSimMock(),
+    simulateRetirementOnlySigned: makeSimMock(slackFn),
     isFireAgeFeasible: makeFeasMock(feasPredicate),
     pools,
   };
