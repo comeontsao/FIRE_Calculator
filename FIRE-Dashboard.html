@@ -6018,6 +6018,10 @@ const TRANSLATIONS = {
     'strategy.bracketFillSmoothed.name': 'Bracket-Fill (Smoothed)',
     'strategy.bracketFillSmoothed.desc': 'Fills the 12% bracket each year, capped by Trad balance ÷ remaining years.',
     'strategy.bracketFillSmoothed.narrative': 'Strategy: bracket-fill at (stdDed + top12) × (1 − safetyMargin), smoothed by pTrad ÷ yearsRemaining so Trad drains evenly across retirement.',
+    'strategy.aggressiveBracketFill.name': 'Aggressive Bracket-Fill',
+    'strategy.aggressiveBracketFill.desc': 'Quadruples the per-year smoothing cap so MORE Trad flows each year while still spreading evenly across retirement. Steps your effective tax rate up by ~1 bracket from Smoothed but stays inside the 12% bracket — never jumps to 22%. After-tax surplus reinvests into Taxable stocks. Lower lifetime tax + bigger estate than Smoothed for modest-Trad households.',
+    'strategy.aggressiveBracketFill.narrative': 'Strategy: aggressive bracket-fill — every accessible pre-SS year uses 4 × pTrad ÷ yearsRemaining as the per-year cap (still bounded by (stdDed + top12) × (1 − safetyMargin) so 22% bracket is never breached); after-tax surplus routes into stocks via synthetic conversion. Reverts to unscaled smoothed cap age 70+ when SS becomes ordinary income.',
+    'strategy.aggressiveBracketFill.tooltip': 'Pick this when your Trad 401k balance is modest relative to retirement length and you want to use more of your 12% bracket headroom in years 60-69 (before SS taxable income stacks with Trad pulls). The Smoothed variant uses 1× cap and may leave deduction headroom unused; this variant uses 2× cap. Trad still spreads evenly across all retirement years — no concentration in 60-63.',
     'strategy.conventional.name': 'Conventional (Taxable → Trad → Roth)',
     'strategy.conventional.desc': 'Textbook order: drain taxable stocks first, then Traditional, Roth last.',
     'strategy.conventional.narrative': 'Strategy: drain taxable stocks (LTCG) first, then Traditional at ordinary rates, preserve Roth for last — classic Fidelity / Vanguard default.',
@@ -7095,6 +7099,10 @@ const TRANSLATIONS = {
     'strategy.bracketFillSmoothed.name': '級距填平（平滑版）',
     'strategy.bracketFillSmoothed.desc': '每年填平 12% 級距，並以 Trad 餘額 ÷ 剩餘年數為上限。',
     'strategy.bracketFillSmoothed.narrative': '策略：以 (stdDed + top12) × (1 − 安全邊際) 填平 12% 級距，以 pTrad ÷ 剩餘年數平滑，使 Trad 於退休期間平均提領。',
+    'strategy.aggressiveBracketFill.name': '主動填滿稅階',
+    'strategy.aggressiveBracketFill.desc': '把每年的平滑上限調為 4 倍，讓退休每年提領更多 Trad，但仍然平均分配到整個退休期。實際稅率比「平滑填平」高約 1 個級距，但仍停留在 12% 級距內 — 不會跳到 22%。扣稅後的剩餘投回應稅股票。對於 401(k) 餘額不大的家庭：終身稅更低、遺產更多。',
+    'strategy.aggressiveBracketFill.narrative': '策略：主動填滿稅階 — 每個可動用且尚未領取社安的退休年使用 4 × pTrad ÷ 剩餘年數 作為每年上限（仍受 (stdDed + top12) × (1 − 安全邊際) 限制，確保不會踩進 22% 級距）；扣稅後的剩餘透過合成轉換流入股票。社安開始（70 歲後）轉回未放大的平滑上限。',
+    'strategy.aggressiveBracketFill.tooltip': '當你的 Trad 401(k) 相對於退休年數偏低、且想在 60–69 歲（社安開始前）善用 12% 級距空間時選擇這個策略。「平滑填平」用 1 倍上限可能讓扣除額空間沒有被用滿；本策略用 4 倍上限。Trad 仍然平均分散在所有退休年份 — 不會集中在 60–63 歲那幾年。',
     'strategy.conventional.name': '傳統順序（應稅 → Trad → Roth）',
     'strategy.conventional.desc': '教科書式順序：先提領應稅股票，再 Traditional，最後 Roth。',
     'strategy.conventional.narrative': '策略：先提領應稅股票（LTCG），再以一般稅率提領 Traditional，Roth 留到最後 — 經典 Fidelity／Vanguard 預設順序。',
@@ -10830,14 +10838,26 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
   const bracketHeadroom = Math.max(0, targetBracketCap - taxableSS - rmd);
 
   let wTrad = rmd;
+  let aggressiveActive = false;
   if (canAccess401k) {
     const yearsRemaining = Math.max(1, endAgeOpt - age);
     const smoothedTarget = Math.max(0, pTrad - rmd) / yearsRemaining;
+    // Feature 027 — Aggressive Bracket-Fill variant. When opts.aggressiveSmoothingMultiplier
+    // > 1 AND no SS income yet, multiply the per-year smoothing cap so MORE Trad
+    // flows each year while STILL spreading evenly across the retirement horizon.
+    // The bracketHeadroom (top of 12% × 0.95) still bounds the result, so we never
+    // step into the 22% bracket. SS-active years revert to the unscaled smoothed
+    // cap (multiplier ignored) because Trad stacks with taxable SS there.
+    const aggressiveMult = (typeof opts.aggressiveSmoothingMultiplier === 'number' && opts.aggressiveSmoothingMultiplier > 1)
+      ? opts.aggressiveSmoothingMultiplier : 1;
+    const useAggressive = aggressiveMult > 1 && ssIncome === 0;
+    const effectiveSmoothedTarget = useAggressive ? smoothedTarget * aggressiveMult : smoothedTarget;
     const additionalTrad = Math.min(
       Math.max(0, pTrad - rmd),
       bracketHeadroom,
-      smoothedTarget
+      effectiveSmoothedTarget
     );
+    if (useAggressive && additionalTrad > smoothedTarget + 0.01) aggressiveActive = true;
     wTrad += additionalTrad;
   }
 
@@ -10925,6 +10945,7 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
       roth5YearWarning: false,
       magi: magiPre,
       bracketHeadroom,
+      aggressiveActive: false,
     };
   }
 
@@ -11038,6 +11059,7 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     roth5YearWarning,
     magi,
     bracketHeadroom,
+    aggressiveActive,
   };
 }
 
@@ -11206,6 +11228,49 @@ const BRACKET_FILL_SMOOTHED = Object.freeze({
         rule55Active: !!mix.rule55Active,
         roth5YearWarning: !!mix.roth5YearWarning,
         bracketFillActive: true,
+      },
+    };
+  }
+});
+
+// Feature 027 — Aggressive Bracket-Fill: doubles the per-year smoothing cap
+// (2 × pTrad/yearsRemaining) while canAccess401k && ssIncome === 0. Result:
+// MORE Trad each year than smoothed-default, but still spread evenly across
+// the retirement horizon — no 60-69 cliff. After-tax surplus reinvests into
+// Taxable via existing syntheticConversion. Reverts to plain smoothed cap age
+// 70+ when SS becomes ordinary income (Trad stacking would exceed 12%).
+const AGGRESSIVE_BRACKET_FILL = Object.freeze({
+  id: 'aggressive-bracket-fill',
+  nameKey: 'strategy.aggressiveBracketFill.name',
+  descKey: 'strategy.aggressiveBracketFill.desc',
+  narrativeKey: 'strategy.aggressiveBracketFill.narrative',
+  color: '#fb923c',
+  eligibility: {},
+  computePerYearMix(ctx) {
+    const aggressiveOpts = Object.assign({}, ctx.bfOpts, { aggressiveSmoothingMultiplier: 4 });
+    const mix = taxOptimizedWithdrawal(
+      ctx.grossSpend, ctx.ssIncome,
+      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pStocks, ctx.pools.pCash,
+      ctx.age, ctx.brackets, ctx.stockGainPct, aggressiveOpts
+    );
+    return {
+      wTrad: mix.wTrad, wRoth: mix.wRoth, wStocks: mix.wStocks, wCash: mix.wCash,
+      syntheticConversion: mix.syntheticConversion || 0,
+      rmd: mix.rmd,
+      taxOwed: mix.taxOwed,
+      ordIncome: mix.ordIncome,
+      ltcgTax: mix.ltcgTax,
+      effRate: mix.effRate,
+      magi: mix.magi,
+      shortfall: mix.shortfall,
+      caveats: {
+        ssReducedFill: !!mix.ssReducedFill,
+        irmaaCapped: !!mix.irmaaCapped,
+        irmaaBreached: !!mix.irmaaBreached,
+        rule55Active: !!mix.rule55Active,
+        roth5YearWarning: !!mix.roth5YearWarning,
+        bracketFillActive: true,
+        aggressiveActive: !!mix.aggressiveActive,
       },
     };
   }
@@ -11405,6 +11470,7 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
 // header list it for Principle VI graph-walkers.
 Object.defineProperty(window, '__STRATEGIES_V008__', {
   value: Object.freeze([
+    AGGRESSIVE_BRACKET_FILL,
     BRACKET_FILL_SMOOTHED,
     CONVENTIONAL,
     PROPORTIONAL,
@@ -12720,6 +12786,20 @@ function recalcAll() {
   if (typeof renderWithdrawalPreviewBanner === 'function') {
     try { renderWithdrawalPreviewBanner(); } catch (_e) {}
   }
+  // Feature 027 follow-up — re-render the Lifetime Withdrawal Strategy chart
+  // AFTER scoreAndRank has populated _lastStrategyResults. The chartState
+  // onChange listener fires earlier (during _setCalculatedFire above) when
+  // _lastStrategyResults is still null, so the chart's swap path falls
+  // through to the bracket-fill-smoothed default. Without this second pass,
+  // cold-load shows Smoothed shape until the user clicks any objective button.
+  if (typeof renderRothLadder === 'function' && typeof getInputs === 'function') {
+    try { renderRothLadder(getInputs()); } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[strategies] post-rank renderRothLadder threw:',
+          _e && _e.stack ? _e.stack : _e);
+      }
+    }
+  }
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
   // Feature 023 follow-up — FIRE NUMBER now displays the projected portfolio
@@ -12965,9 +13045,14 @@ function recalcAll() {
   // produced a month-precision answer; otherwise stay with the integer-year
   // fallback so existing modes/copy never regress.
   const _vFireRes = (_lastKpiSnapshot && _lastKpiSnapshot.fireAgeResult) || null;
+  // Feature 027 follow-up — accept both 'month-precision' (true interpolation)
+  // and 'month-precision-fallback' (heuristic mid-year when slack signal is
+  // degenerate) so the verdict pill ALWAYS displays months when a feasible age
+  // is found. User-visible UX requirement.
   const _useMonthVerdict = !!(_vFireRes
     && _vFireRes.feasible
-    && _vFireRes.searchMethod === 'month-precision'
+    && (_vFireRes.searchMethod === 'month-precision'
+        || _vFireRes.searchMethod === 'month-precision-fallback')
     && Number.isFinite(inp.ageRoger));
   if (yrsToFire <= 12) {
     statusEl.className = 'fire-status on-track';

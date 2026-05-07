@@ -172,7 +172,7 @@ test('US2: 3-pass refactor preserves existing strategies.test.js semantics', () 
     safetyMargin: 0.03, rule55: { enabled: false, separationAge: 54 }, irmaaThreshold: 212000,
   };
   const ranking = api.scoreAndRank(INP, 54, 'safe', 'leave-more-behind');
-  assert.strictEqual(ranking.rows.length, 7, 'expected 7 strategy results');
+  assert.strictEqual(ranking.rows.length, 8, 'expected 8 strategy results (feature 027 added aggressive-bracket-fill)');
   const tos = ranking.rows.find(r => r.strategyId === 'tax-optimized-search');
   assert.ok(tos, 'tax-optimized-search must be in ranking');
   assert.ok(typeof tos.chosenTheta === 'number');

@@ -255,9 +255,11 @@ test('REGIME-B — signed-sim disagrees with gate (both slacks positive) returns
 // ---------------------------------------------------------------------------
 // EDGE-4 — non-monotone slack falls back to integer-year defensively.
 // ---------------------------------------------------------------------------
-test('EDGE-4 — non-monotone slack falls back to integer-year', () => {
+test('EDGE-4 — non-monotone slack falls back to month-precision-fallback (heuristic)', () => {
   const Y = 53;
-  // Both Y-1 and Y produce slack=0 → not monotone → integer-year fallback.
+  // Both Y-1 and Y produce slack=0 → not monotone → month-precision-fallback
+  // emits months=6 at refineYear (Y-1) so the verdict pill always shows months
+  // (feature 027 follow-up — was 'integer-year' / months=0 before).
   const flatSim = function (_inp, _annualSpend, fireAge) {
     return { fireAge, endBalance: 0 };
   };
@@ -268,7 +270,7 @@ test('EDGE-4 — non-monotone slack falls back to integer-year', () => {
     pools: basePools(),
   });
   assert.ok(result.feasible);
-  assert.strictEqual(result.searchMethod, 'integer-year');
-  assert.strictEqual(result.years, Y);
-  assert.strictEqual(result.months, 0);
+  assert.strictEqual(result.searchMethod, 'month-precision-fallback');
+  assert.strictEqual(result.years, Y - 1);
+  assert.strictEqual(result.months, 6);
 });

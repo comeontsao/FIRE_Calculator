@@ -529,30 +529,17 @@ Remaining manual gate: open both files in a real browser, run the 8-step browser
 
 ---
 
+## Done in feature 027 — Aggressive Bracket-Fill withdrawal strategy variant (2026-05-07)
+
+- **B-026-1 shipped.** New strategy `aggressive-bracket-fill` registered in both HTMLs (`STRATEGIES` array, color `#fb923c` orange-amber). Calc-layer extension: ONE new option `disableSmoothingCap` on `taxOptimizedWithdrawal` — when true AND `canAccess401k && ssIncome === 0`, Step 2 skips the per-year smoothed cap and fills full 12% bracket headroom. After-tax surplus reinvests into Taxable via existing `syntheticConversion` mechanic. SS-active years revert to smoothed cap.
+- **Backwards compat preserved.** Option absent ⇔ option false ⇔ legacy behaviour byte-identical (verified by `tests/unit/aggressiveBracketFill.test.js` case 1).
+- **SC-026-A pin verified.** Lifetime tax $116,507 ± 5%, terminal BV $1,129,821 ± 5% (real-$).
+- **Bilingual ready.** 4 i18n keys (`name`, `desc`, `narrative`, `tooltip`) × 2 languages × 2 HTMLs + Translation Catalog updated.
+- **Test deltas.** `tests/unit/aggressiveBracketFill.test.js` (NEW, 7 cases) + `tests/unit/aggressiveBracketFillRanker.test.js` (NEW, 5 cases) + `tests/e2e/aggressive-bracket-fill.spec.ts` (NEW, 4 tests × 2 dashboards) + count assertion bumps in `strategies.test.js`, `strategyMatrix.test.js`, `thetaSweepFeasibility.test.js` (7→8). Final: 493/493 unit pass, 8/8 e2e pass.
+
+---
+
 ## New backlog items from feature 026 review (2026-05-07)
-
-### B-026-1. Aggressive bracket-fill strategy variant (HIGH PRIORITY — RECOMMENDATION REVISED)
-
-**REVISED 2026-05-07 after re-running with reinvestment of after-tax surplus.** The earlier analytical estimate concluded `keep` for "Leave more behind" but DID NOT model the case where the user explicitly withdraws beyond spending need and reinvests the after-tax residual into Taxable. With reinvestment, the math flips decisively in favor of aggressive bracket-fill:
-
-```
-                  Lifetime Tax (real-$)  |  Terminal BV at 95 (real-$)
-SMOOTHED         $165,920                |  $627,918      (current dashboard)
-AGGRESSIVE       $116,507                |  $1,129,821    (user's proposed strategy)
-Δ                −$49,413 saves tax     |  +$501,903 more estate
-```
-
-Verified by `tests/diagnostics/us2-aggressive-vs-smoothed.js`. The aggressive strategy fills the 12% bracket every year ages 60-69 ($118K/yr cap), pays ~10% effective tax NOW on the surplus, reinvests the after-tax residual into Taxable. By age 67-68 Trad is fully drained; ages 70-95 have only $50K SS taxable income → 3% effective rate vs 7-8% for the smoothed path (which still has Trad to draw from at age 70+). The compounding inside Taxable for the early-withdrawn surplus offsets the LTCG drag because:
-
-1. Pulling Trad early at 8.6% effective beats letting it compound + drawing later at 7-8% effective (when it stacks with SS taxable income).
-2. The $30K standard deduction shields the first $30K of Trad each year — but only if you USE it. Smoothing $20K/yr leaves $10K of "deduction headroom" unused per year. Aggressive fills it.
-3. Once Trad is fully depleted by age 68, ages 70-95 have nothing to compound into the higher-bracket / SS-stacking late years. Smoothed keeps Trad alive into the 80s, where it gets pulled at higher effective rate due to SS stacking.
-
-**Action:** add an "Aggressive Bracket-Fill" strategy variant to the strategy registry that fills the full bracket headroom (no `pTrad/yearsRemaining` cap) ages 60-69, with explicit reinvestment of after-tax surplus into Taxable. Should pass Safe gate for typical scenarios because the tax-deferred compounding savings buys back the per-phase floor margin. Open a new spec (027 or later) to ship the strategy.
-
-**Implication for current dashboard users:** the existing "Pay less lifetime tax" objective with "Bracket-Fill (Smoothed)" winner is **NOT** lifetime-tax-minimal for users with modest Trad balances and long retirements. The user must currently either accept the sub-optimal tax outcome OR manually intervene (e.g., withdraw outside the dashboard's recommended schedule). A short-term documentation update should warn users of this case until the new strategy ships.
-
-The earlier `keep` recommendation in `specs/026-withdrawal-tax-and-ui-fixes/research.md` Section 2 was based on a counterfactual that did NOT include reinvestment of the early-withdrawn surplus — that omission was load-bearing.
 
 ### B-026-2. RR responsive-header lockstep gap
 

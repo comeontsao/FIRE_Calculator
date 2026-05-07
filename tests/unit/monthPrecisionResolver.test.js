@@ -257,13 +257,15 @@ test('Case 5 — single-person + couple parity: shape and value consistency', ()
 });
 
 // ---------------------------------------------------------------------------
-// Case 6 — year-boundary equality (months = 0)
-// Earliest feasible YEAR is 53; within Y-1 = 52 ALL months are infeasible.
-// The boundary IS year 53 at month 0 (the Y - 1 refinement found nothing).
-// Expected: {years: 53, months: 0, totalMonths: 636, feasible:true,
-//            searchMethod: 'integer-year'}.
+// Case 6 — year-boundary equality with degenerate slack (feature 027 update)
+// Earliest feasible YEAR is 53; within Y-1 = 52 the makeSimMock produces flat
+// (slackHi == slackLo) → falls into the month-precision-fallback branch.
+// Per the always-show-months policy (feature 027 follow-up), the resolver
+// emits {years: 52, months: 6, totalMonths: 630, searchMethod:
+// 'month-precision-fallback'} so the verdict pill always renders months.
+// (Was: {years: 53, months: 0, searchMethod: 'integer-year'} pre-027 follow-up.)
 // ---------------------------------------------------------------------------
-test('Case 6 — year-boundary equality: Y-1 entirely infeasible → integer-year', () => {
+test('Case 6 — year-boundary equality with degenerate slack → month-precision-fallback', () => {
   const inp = baseInp({ ageRoger: 40, endAge: 95 });
   const pools = basePools();
 
@@ -279,11 +281,12 @@ test('Case 6 — year-boundary equality: Y-1 entirely infeasible → integer-yea
     pools,
   });
 
-  assert.strictEqual(result.feasible, true, 'should be feasible at year 53');
-  assert.strictEqual(result.years, 53, 'years = 53');
-  assert.strictEqual(result.months, 0, 'months = 0 (boundary at year)');
-  assert.strictEqual(result.totalMonths, 53 * 12, 'totalMonths = 53*12 = 636');
-  assert.strictEqual(result.searchMethod, 'integer-year', 'searchMethod = integer-year');
+  assert.strictEqual(result.feasible, true, 'should be feasible');
+  assert.strictEqual(result.years, 52, 'years = refineYear (Y-1) under fallback');
+  assert.strictEqual(result.months, 6, 'months = 6 (heuristic mid-year fallback)');
+  assert.strictEqual(result.totalMonths, 52 * 12 + 6, 'totalMonths = 52*12 + 6 = 630');
+  assert.strictEqual(result.searchMethod, 'month-precision-fallback',
+    'searchMethod = month-precision-fallback (always-show-months policy)');
 });
 
 // ---------------------------------------------------------------------------
@@ -326,10 +329,12 @@ test('Bonus — agePerson1 fallback works for Generic dashboard inputs', () => {
     pools,
   });
 
+  // Feature 027 follow-up: makeSimMock produces flat slack at the boundary →
+  // resolver falls into month-precision-fallback (years=Y-1, months=6).
   assert.strictEqual(result.feasible, true);
-  assert.strictEqual(result.years, 50);
-  assert.strictEqual(result.months, 0);
-  assert.strictEqual(result.searchMethod, 'integer-year');
+  assert.strictEqual(result.years, 49);
+  assert.strictEqual(result.months, 6);
+  assert.strictEqual(result.searchMethod, 'month-precision-fallback');
 });
 
 // =============================================================================
