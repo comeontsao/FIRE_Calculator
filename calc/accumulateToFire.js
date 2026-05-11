@@ -143,6 +143,15 @@ const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
 const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
 
+// Feature 030 — Cash-sweep helper. Pattern matches `_taxBrackets` above:
+// Node `require` in tests; globalThis attachment in browser via UMD wrapper.
+// Local underscored name avoids global-scope collision in browser classic-script load.
+const _cashSweepMod = (typeof require !== 'undefined')
+  ? (() => { try { return require('./cashSweep.js'); } catch (_e) { return null; } })()
+  : null;
+const _applyCashSweep = (_cashSweepMod && _cashSweepMod._applyCashSweep)
+  || (typeof globalThis !== 'undefined' ? globalThis._applyCashSweep : null);
+
 /**
  * v3 tax computation helper (feature 021). Pure: no I/O.
  *
@@ -709,6 +718,21 @@ function accumulateToFire(inp, fireAge, options) {
     // Note: pTrad/pRoth/pStocks growth is already applied in step 8 (multiply before add).
     // pCash grows at 0.5%/yr nominal (FR-016 — hardcoded, locked).
     pCash *= 1.005;
+    // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+    {
+      const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+        ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+            age, currentAge, !!inp.cashSweepEnabled)
+        : { pCash, pStocks, swept: 0 };
+      pCash = _f030_sweep_.pCash;
+      pStocks = _f030_sweep_.pStocks;
+      if (options && Array.isArray(options.cashSweepTraces)) {
+        options.cashSweepTraces.push({
+          age, simulatorId: 'accumulateToFire',
+          pCash, pStocks, swept: _f030_sweep_.swept,
+        });
+      }
+    }
   }
 
   // --- End state — post-loop pools entering the FIRE year ---

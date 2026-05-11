@@ -20,6 +20,7 @@
 <script src="calc/accumulateToFire.js"></script>
 <script src="calc/taxExpenseRow.js"></script>
 <script src="calc/fireAgeResolver.js"></script>
+<script src="calc/cashSweep.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -3153,6 +3154,20 @@
         <span data-i18n="plan.cashflowWarning">Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0.</span>
       </div>
     </div>
+    <!-- Feature 030 — Cash-sweep to stocks -->
+    <div class="control-group" style="border-top:1px dashed var(--border);padding-top:12px;margin-top:8px">
+      <label class="pvi-toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="cashSweepEnabled"
+               onchange="_cashSweepUpdateVisibility();recalcAll()">
+        <span data-i18n="plan.cashSweepToggle">Sweep excess cash into stocks each year</span>
+        <span class="info-tip" data-i18n-tip="plan.cashSweepTooltip" data-tip="Excess cash above the floor is invested in stocks at year-end, compounding at the stock return rate. Year-0 starting cash is preserved.">?</span>
+      </label>
+      <div id="cashSweepThresholdInput" hidden style="margin-top:8px">
+        <label><span data-i18n="plan.cashSweepThreshold">Cash floor to keep ($)</span> <span class="val" id="cashSweepThresholdVal">$10,000</span> <span class="info-tip" data-i18n-tip="plan.cashSweepThresholdHelp" data-tip="Minimum cash balance to maintain (real-$). Default $10,000.">?</span></label>
+        <input type="number" id="cashSweepThreshold" min="0" max="10000000" step="500" value="10000"
+               oninput="document.getElementById('cashSweepThresholdVal').textContent='$'+Number(this.value).toLocaleString();recalcAll()">
+      </div>
+    </div>
   </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
@@ -5782,6 +5797,11 @@ const TRANSLATIONS = {
     'plan.cashflowTooltip': 'Annual cash that flows to your savings buffer after taxes, spending, 401k, and stock contributions are deducted from gross income.',
     'plan.cashflowOverrideToggle': 'Override computed cash flow',
     'plan.cashflowWarning': 'Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0.',
+    // Feature 030 — Cash-sweep to stocks
+    'plan.cashSweepToggle': 'Sweep excess cash into stocks each year',
+    'plan.cashSweepThreshold': 'Cash floor to keep ($)',
+    'plan.cashSweepTooltip': 'Excess cash above the floor is invested in stocks at year-end, compounding at the stock return rate. Year-0 starting cash is preserved.',
+    'plan.cashSweepThresholdHelp': 'Minimum cash balance to maintain (real-$). Default $10,000.',
     // Mortgage
     'mtg.homeLocation': 'Home Location',
     'mtg.capGainsTreatment': 'Capital Gains Treatment (on sale)',
@@ -6879,6 +6899,11 @@ const TRANSLATIONS = {
     'plan.cashflowTooltip': '從毛收入扣除稅金、支出、401k 提撥與股票投入後，實際流入儲蓄緩衝的年度現金。',
     'plan.cashflowOverrideToggle': '覆寫自動計算的現金流',
     'plan.cashflowWarning': '部分 FIRE 前年度的現金流為負——支出超過收入扣除儲蓄後的金額；緩衝成長已被限制在 $0。',
+    // Feature 030 — Cash-sweep to stocks
+    'plan.cashSweepToggle': '每年將多餘現金掃入股票市場',
+    'plan.cashSweepThreshold': '保留現金底線 ($)',
+    'plan.cashSweepTooltip': '高於底線的多餘現金於年末投入股票，按股票回報率複利成長。起始年現金保持不變。',
+    'plan.cashSweepThresholdHelp': '要保留的最低現金餘額（今日購買力）。預設 $10,000。',
     // Mortgage
     'mtg.homeLocation': '房屋地點',
     'mtg.capGainsTreatment': '資本利得稅處理（售屋時）',
@@ -8234,6 +8259,13 @@ function getInputs() {
   const _cfRaw = _cfValEl ? parseFloat(_cfValEl.value) : NaN;
   inp.pviCashflowOverride = Number.isFinite(_cfRaw) ? _cfRaw : 0;
 
+  // Feature 030 — Cash-sweep configuration (FR-001, FR-002, FR-007)
+  const _csEnEl = document.getElementById('cashSweepEnabled');
+  inp.cashSweepEnabled = !!(_csEnEl && _csEnEl.checked);
+  const _csThEl = document.getElementById('cashSweepThreshold');
+  const _csThRaw = _csThEl ? parseFloat(_csThEl.value) : NaN;
+  inp.cashSweepThreshold = Number.isFinite(_csThRaw) ? Math.max(0, _csThRaw) : 10000;
+
   // ==================== Feature 007 — Bracket-Fill Tax Smoothing ====================
   // Read the four new DOM controls defensively. Missing/blank values fall back
   // to spec defaults so early-boot or partial-DOM callers do not throw.
@@ -9549,6 +9581,22 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       const effAnnualSavings = Math.max(0, inp.monthlySavings * 12 - mtgAdjust - collegeCostThisYear - h2Carry);
       pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
       pCash *= 1.005;
+      // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      {
+        const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+          ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+              age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+              !!inp.cashSweepEnabled)
+          : { pCash, pStocks, swept: 0 };
+        pCash = _f030_sweep_.pCash;
+        pStocks = _f030_sweep_.pStocks;
+        if (options && Array.isArray(options.cashSweepTraces)) {
+          options.cashSweepTraces.push({
+            age, simulatorId: 'signedLifecycleEndBalance',
+            pCash, pStocks, swept: _f030_sweep_.swept,
+          });
+        }
+      }
     } else {
       // Retirement — use the SAME tax-optimized withdrawal algorithm as
       // `projectFullLifecycle` (the chart renderer). Feature-006 fix: the
@@ -9631,6 +9679,22 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pRoth *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
+      // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      {
+        const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+          ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+              age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+              !!inp.cashSweepEnabled)
+          : { pCash, pStocks, swept: 0 };
+        pCash = _f030_sweep_.pCash;
+        pStocks = _f030_sweep_.pStocks;
+        if (options && Array.isArray(options.cashSweepTraces)) {
+          options.cashSweepTraces.push({
+            age, simulatorId: 'signedLifecycleEndBalance',
+            pCash, pStocks, swept: _f030_sweep_.swept,
+          });
+        }
+      }
     }
   }
   // Signed total: RAW pre-tax sum (matches chart's `total` field). Each
@@ -10203,6 +10267,22 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     pRoth *= (1 + realReturn401k * scale);
     pStocks *= (1 + realReturnStocks * scale);
     pCash *= (1 + 0.005 * scale);
+    // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+    {
+      const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+        ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+            age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+            !!inp.cashSweepEnabled)
+        : { pCash, pStocks, swept: 0 };
+      pCash = _f030_sweep_.pCash;
+      pStocks = _f030_sweep_.pStocks;
+      if (options && Array.isArray(options.cashSweepTraces)) {
+        options.cashSweepTraces.push({
+          age, simulatorId: 'simulateRetirementOnlySigned',
+          pCash, pStocks, swept: _f030_sweep_.swept,
+        });
+      }
+    }
 
     rows.push({
       age,
@@ -12227,6 +12307,17 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       pRoth *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
+      // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      // No `options` param in this closure; trace push omitted (helper call only).
+      {
+        const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+          ? _applyCashSweep(pCash, pStocks, _qInp.cashSweepThreshold,
+              age, (_qInp.agePerson1 !== undefined ? _qInp.agePerson1 : _qInp.ageRoger),
+              !!_qInp.cashSweepEnabled)
+          : { pCash, pStocks, swept: 0 };
+        pCash = _f030_sweep_.pCash;
+        pStocks = _f030_sweep_.pStocks;
+      }
       // End-of-year pool snapshot — consumed by renderGrowthChart to show the
       // winning strategy's portfolio trajectory during retirement years.
       rowToPush.pTradEnd = pTrad;
@@ -12747,7 +12838,19 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     pTrad   = Math.max(0, postTrad)   * (1 + realReturn401k);
     pRoth   = Math.max(0, postRoth)   * (1 + realReturn401k);
     pStocks = Math.max(0, postStocks) * (1 + realReturnStocks);
-    pCash   = Math.max(0, postCash)   * 1.005;
+    pCash   = Math.max(0, postCash);
+    pCash *= 1.005;
+    // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+    // No `options` param in this function; trace push omitted (helper call only).
+    {
+      const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+        ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+            age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+            !!inp.cashSweepEnabled)
+        : { pCash, pStocks, swept: 0 };
+      pCash = _f030_sweep_.pCash;
+      pStocks = _f030_sweep_.pStocks;
+    }
   }
 
   const avgEffRate = strategy.length > 0
@@ -12846,6 +12949,18 @@ function computeRothLadder(inp, retireSpend, fireAge) {
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
     pStocks = pStocks * (1 + realReturnStocks) + inp.monthlySavings * 12;
     pCash *= 1.005;
+    // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+    // No `options` param in this function; trace push omitted (helper call only).
+    {
+      const _f030_age_ = (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger) + y + 1;
+      const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+        ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+            _f030_age_, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+            !!inp.cashSweepEnabled)
+        : { pCash, pStocks, swept: 0 };
+      pCash = _f030_sweep_.pCash;
+      pStocks = _f030_sweep_.pStocks;
+    }
   }
   const tradAtFire = pTrad;
   const rothAtFire = pRoth;
@@ -16300,6 +16415,12 @@ function _cashflowUpdateOverrideVisibility() {
     valLbl.textContent = '$' + (Number.isFinite(_n) ? _n.toLocaleString() : '0');
   }
 }
+function _cashSweepUpdateVisibility() {
+  const cb = document.getElementById('cashSweepEnabled');
+  const wrapper = document.getElementById('cashSweepThresholdInput');
+  if (!cb || !wrapper) return;
+  wrapper.hidden = !cb.checked;
+}
 
 // Show/hide the negative-residual warning callout near the cash-flow input.
 // Auto-clears when no pre-FIRE row carries `cashFlowWarning === 'NEGATIVE_RESIDUAL'`.
@@ -17585,6 +17706,8 @@ const PERSIST_IDS = [
   'taxRateAutoMode',
   // Feature 021 — Other tax manual entry (US2 / FR-007)
   'exp_tax_other',
+  // Feature 030 — Cash-sweep to stocks (US1/US2 / FR-007)
+  'cashSweepEnabled', 'cashSweepThreshold',
 ];
 
 // Slider label IDs that need updating when values are restored
@@ -17970,6 +18093,8 @@ function restoreState() {
     }
     // Feature 020 — sync cash-flow override panel visibility on restore.
     try { if (typeof _cashflowUpdateOverrideVisibility === 'function') _cashflowUpdateOverrideVisibility(); } catch (_e) {}
+    // Feature 030 — sync cash-sweep panel visibility on restore.
+    try { if (typeof _cashSweepUpdateVisibility === 'function') _cashSweepUpdateVisibility(); } catch (_e) {}
     return true;
   } catch (e) {
     console.warn('Failed to restore state:', e);
