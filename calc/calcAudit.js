@@ -654,8 +654,19 @@ function _invariantA(options, ctx) {
   const out = [];
   let A;
   let B;
+  // Feature 028 (US2/US3) — pass active strategy options into the signed sim
+  // so it evaluates the same strategy the chart renders. Post-fix, this
+  // invariant should NOT fire for the SC-027 reproducer because both sims
+  // produce identical end balances under the active strategy.
+  const _signedOpts = (ctx.activeStrategyId && ctx.activeStrategyId !== BRACKET_FILL_STRATEGY_ID)
+    ? {
+        strategyOverride: ctx.activeStrategyId,
+        thetaOverride: (ctx.activeStrategyRow && typeof ctx.activeStrategyRow.chosenTheta === 'number')
+          ? ctx.activeStrategyRow.chosenTheta : null,
+      }
+    : undefined;
   try {
-    const r = options.signedLifecycleEndBalance(options.inputs, options.annualSpend, options.fireAge);
+    const r = options.signedLifecycleEndBalance(options.inputs, options.annualSpend, options.fireAge, _signedOpts);
     A = r && typeof r.endBalance === 'number' ? r.endBalance : null;
   } catch (_e) {
     return out; // Treated separately by degraded path elsewhere
@@ -675,7 +686,12 @@ function _invariantA(options, ctx) {
     // while chart sim clamps pools to ≥0 via spending-floor pass. When BOTH
     // sims agree on feasibility (both ≥ 0) but differ on the dollar amount,
     // the divergence is a clamping artifact, not a genuine bug.
-    //   - Strategy mismatch (was the only case): expected = true.
+    //
+    // Feature 028 (US3) — strategyMismatch should rarely fire post-US2
+    // because the signed sim is now strategy-aware. If it does fire under a
+    // non-default strategy it indicates the strategy options threading broke;
+    // the warning still surfaces with the new diagnostic fields.
+    //   - Strategy mismatch (rare post-028): expected = true.
     //   - Both positive (both feasible): expected = true (clamping noise).
     //   - Chart positive but signed negative: expected = false (signed sim
     //     correctly catches what chart's clamping hides — keep as warning).
@@ -686,7 +702,7 @@ function _invariantA(options, ctx) {
     const expected = strategyMismatch || bothFeasible;
     let reason;
     if (strategyMismatch) {
-      reason = `signedLifecycleEndBalance is bracket-fill-only — active strategy is ${ctx.activeStrategyId}.`;
+      reason = `signedLifecycleEndBalance threaded with active strategy ${ctx.activeStrategyId} but still diverges from chart-sim — investigate strategy options propagation.`;
     } else if (bothFeasible) {
       reason = 'signed-sim ≠ chart-sim end balance, but both ≥ 0 — clamping artifact (Feature 015 design intent: signed sim preserves negative shortfall while chart sim clamps to ≥ 0). Verdict agreement intact.';
     } else {
@@ -704,6 +720,12 @@ function _invariantA(options, ctx) {
         labels: ['signed-sim', 'chart-sim'],
         data: [_round(A), _round(B)],
       },
+      // Feature 028 (US3 / FR-010) — diagnostic fields for the audit panel.
+      // Semantic aliases for valueA/valueB so future consumers can self-document.
+      activeStrategyId: ctx.activeStrategyId || null,
+      mode: options.fireMode || null,
+      chartEndBalance: _round(B),
+      signedEndBalance: _round(A),
     });
   }
   return out;

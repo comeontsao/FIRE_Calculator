@@ -1549,14 +1549,22 @@
   }
 
   /* FIRE status pill — primary focal point now that the KPI cards were
-     removed. Slightly larger than the title and given more padding. */
+     removed. Slightly larger than the title and given more padding. Long
+     verdict copy ("Distant target — FIRE in N+ years · X% to target.
+     Consider increasing savings...") wraps onto a second line at narrow
+     widths instead of consuming the full header row, keeping the language
+     and theme controls anchored to the right. */
   .fire-status {
     font-family: var(--font-sans);
     font-weight: 600;
     font-size: clamp(0.95rem, 1vw, 1.2rem) !important;
     padding: clamp(0.55rem, 0.6vw, 0.8rem) clamp(0.95rem, 1.05vw, 1.4rem) !important;
-    border-radius: 999px;
+    border-radius: 18px;
     letter-spacing: 0.02em;
+    max-width: min(640px, 50vw);
+    white-space: normal;
+    text-align: left;
+    line-height: 1.35;
   }
   .fire-status.on-track { background: color-mix(in oklch, var(--accent2) 14%, transparent); color: var(--accent2); border: 1px solid color-mix(in oklch, var(--accent2) 35%, transparent); }
   .fire-status.warning  { background: color-mix(in oklch, var(--warning) 14%, transparent); color: var(--warning); border: 1px solid color-mix(in oklch, var(--warning) 35%, transparent); }
@@ -8965,7 +8973,16 @@ function yearsToFIRE(inp, annualSpend) {
 //     drawdown). Mortgage/college/H2 carry deductions also real-$.
 //   Frame-conversion sites: NONE inside this function — annualSpend received
 //     in real-$ from caller; no Math.pow(1+inflation,...) inside.
-function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
+// Feature 028 (US2) — strategy-aware retirement loop. The optional 4th
+// `options` parameter accepts `strategyOverride` and `thetaOverride` mirroring
+// projectFullLifecycle. When set to a non-default registered strategy, the
+// per-year withdrawal step dispatches via getStrategies()[id].computePerYearMix
+// instead of the bracket-fill default. Back-compat: omitting `options` (or
+// passing undefined) preserves byte-identical pre-028 behavior.
+function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
+  const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
+    ? options.strategyOverride : null;
+  const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
   // FRAME: real-$ — stocks real return (nominal − inflation)
   const realReturnStocks = inp.returnRate - inp.inflationRate;
   // FRAME: real-$ — 401k real return (nominal − inflation)
@@ -9198,10 +9215,40 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge) {
         irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
         endAge: inp.endAge || 100,
       };
-      const mix = taxOptimizedWithdrawal(
-        grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
-        age, brackets, inp.stockGainPct, bfOpts
-      );
+      // Feature 028 (US2) — strategy dispatch. Mirrors projectFullLifecycle
+      // (RR :10589) so the signed sim produces the same per-year mix the
+      // chart does under the active strategy. Falls back to taxOptimizedWithdrawal
+      // (bracket-fill default) when no override is set.
+      let mix;
+      if (_strategyOverride && typeof getStrategies === 'function') {
+        const _policies = getStrategies();
+        const _picked = _policies && _policies.find(s => s.id === _strategyOverride);
+        if (_picked && typeof _picked.computePerYearMix === 'function') {
+          const _bfOptsForPicked = _thetaOverride != null ? Object.assign({}, bfOpts, { _theta: _thetaOverride }) : bfOpts;
+          const _taxableSS = ssThisYear * 0.85;
+          const _rmd = (age >= 73 && pTrad > 0)
+            ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
+          const _targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - (bfOpts.safetyMargin || 0));
+          const _headroom = Math.max(0, _targetBracketCap - _taxableSS - _rmd);
+          mix = _picked.computePerYearMix({
+            age,
+            grossSpend,
+            ssIncome: ssThisYear,
+            pools: { pTrad, pRoth, pStocks, pCash },
+            brackets,
+            stockGainPct: inp.stockGainPct,
+            rmdThisYear: _rmd,
+            bracketHeadroom: _headroom,
+            bfOpts: _bfOptsForPicked,
+          });
+        }
+      }
+      if (!mix) {
+        mix = taxOptimizedWithdrawal(
+          grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
+          age, brackets, inp.stockGainPct, bfOpts
+        );
+      }
       // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
       // pool-operation ordering (NON-NEGOTIABLE). All three primary consumers
       // MUST run these four steps in this exact order so signed intermediate
@@ -9282,6 +9329,41 @@ function getActiveChartStrategyOptions() {
   } catch (_e) {
     return undefined;
   }
+}
+
+// Feature 028 (US1) — verdict-pill stop-gap. Pure decision function.
+// Returns true iff the FIRE status pill should be forced to an infeasible
+// state because the chart trajectory under the active strategy is failing
+// while the resolver (which currently uses bracket-fill-only signedLifecycle)
+// is still reporting "on track". This closes the misleading verdict that
+// arises when feature 027's aggressive-bracket-fill (or any future non-default
+// strategy) is the winner.
+//
+// Inputs (all required):
+//   winnerId:                string | null  — `_lastStrategyResults.winnerId`
+//   chartEndBalance:         number          — last lifecycle row's `total`
+//   chartHasViolation:       boolean         — any retirement-year buffer-floor breach
+//   currentVerdictIsOnTrack: boolean         — would the inline verdict logic
+//                                              have written `fire-status on-track`?
+//
+// Returns: boolean — true means override pill text + class to infeasible.
+//
+// Once feature 028 US2 lands and the resolver is strategy-aware, the chart
+// and resolver agree by construction and this guard becomes inert in normal
+// operation. Kept in place as a safety net for future strategy additions.
+function _shouldOverrideStatusToInfeasible(signals) {
+  if (!signals || typeof signals !== 'object') return false;
+  const winnerId = signals.winnerId;
+  const chartEndBalance = signals.chartEndBalance;
+  const chartHasViolation = signals.chartHasViolation === true;
+  const currentVerdictIsOnTrack = signals.currentVerdictIsOnTrack === true;
+  if (!winnerId || winnerId === 'bracket-fill-smoothed') return false;
+  if (!currentVerdictIsOnTrack) return false;
+  const endBalanceFails = (typeof chartEndBalance === 'number') && chartEndBalance < 0;
+  return endBalanceFails || chartHasViolation;
+}
+if (typeof window !== 'undefined') {
+  window._shouldOverrideStatusToInfeasible = _shouldOverrideStatusToInfeasible;
 }
 
 // v3 (feature 018, T017): resolve the active mortgage strategy from the
@@ -9603,7 +9685,15 @@ function findDWZFireAge(inp, annualSpend) {
 //   only crosses 59.5 mid-iteration. Sub-iteration splits at threshold
 //   boundaries are deferred to a future feature (see `audit-report.md` Phase 9
 //   spec hook 2).
-function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p401kRoth0, pStocks0, pCash0) {
+// Feature 028 (US2) — strategy-aware retirement loop. Optional 8th `options`
+// parameter accepts `strategyOverride` and `thetaOverride` (same shape as
+// projectFullLifecycle). When set to a non-default registered strategy, the
+// per-year withdrawal step dispatches via getStrategies()[id].computePerYearMix.
+// Back-compat: omitting `options` preserves byte-identical pre-028 behavior.
+function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p401kRoth0, pStocks0, pCash0, options) {
+  const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
+    ? options.strategyOverride : null;
+  const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
   // FRAME: real-$ — stocks real return
   const realReturnStocks = inp.returnRate - inp.inflationRate;
   // FRAME: real-$ — 401k real return
@@ -9711,10 +9801,46 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
 
     // Tax-optimized withdrawal (matches Lifetime Strategy chart)
     const bracketsSim = getTaxBrackets(true); // R&R = MFJ
-    const mixSim = taxOptimizedWithdrawal(
-      grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
-      age, bracketsSim, inp.stockGainPct
-    );
+    // Feature 028 (US2) — strategy dispatch. When the active strategy is a
+    // non-default registered policy, dispatch via getStrategies's
+    // computePerYearMix. Mirrors projectFullLifecycle (RR :10589) and
+    // signedLifecycleEndBalance.
+    const _bfOptsSim = {
+      safetyMargin: (typeof inp.safetyMargin === 'number') ? inp.safetyMargin : 0.05,
+      rule55: inp.rule55 || { enabled: false, separationAge: 54 },
+      irmaaThreshold: (typeof inp.irmaaThreshold === 'number') ? inp.irmaaThreshold : 212000,
+      endAge: inp.endAge || 100,
+    };
+    let mixSim;
+    if (_strategyOverride && typeof getStrategies === 'function') {
+      const _policies = getStrategies();
+      const _picked = _policies && _policies.find(s => s.id === _strategyOverride);
+      if (_picked && typeof _picked.computePerYearMix === 'function') {
+        const _bfOptsForPicked = _thetaOverride != null ? Object.assign({}, _bfOptsSim, { _theta: _thetaOverride }) : _bfOptsSim;
+        const _taxableSS = ssThisYear * 0.85;
+        const _rmd = (age >= 73 && pTrad > 0)
+          ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
+        const _targetBracketCap = (bracketsSim.stdDed + bracketsSim.top12) * (1 - (_bfOptsSim.safetyMargin || 0));
+        const _headroom = Math.max(0, _targetBracketCap - _taxableSS - _rmd);
+        mixSim = _picked.computePerYearMix({
+          age,
+          grossSpend,
+          ssIncome: ssThisYear,
+          pools: { pTrad, pRoth, pStocks, pCash },
+          brackets: bracketsSim,
+          stockGainPct: inp.stockGainPct,
+          rmdThisYear: _rmd,
+          bracketHeadroom: _headroom,
+          bfOpts: _bfOptsForPicked,
+        });
+      }
+    }
+    if (!mixSim) {
+      mixSim = taxOptimizedWithdrawal(
+        grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
+        age, bracketsSim, inp.stockGainPct
+      );
+    }
     pTrad   -= mixSim.wTrad;
     pRoth   -= mixSim.wRoth;
     pStocks -= mixSim.wStocks;
@@ -12930,9 +13056,23 @@ function recalcAll() {
           && _accumResult.perYearRows.length > 0) {
         _firstAccumRow = _accumResult.perYearRows[0];
       }
+      // Feature 028 (US2) — wrap injected sim/feas helpers with closures that
+      // bind the active strategy options. After this, the resolver's Stage 1
+      // linear scan and the gate function evaluate the SAME strategy the
+      // chart renders. Without this, the resolver was bracket-fill-only and
+      // produced misleading "feasible" verdicts when the active winner was
+      // a non-default strategy (feature 027's aggressive-bracket-fill).
+      const _resolverStrategyOpts = (typeof getActiveChartStrategyOptions === 'function')
+        ? getActiveChartStrategyOptions() : undefined;
+      const _wrappedSim = function (inpA, spendA, faA, p1, p2, p3, p4) {
+        return simulateRetirementOnlySigned(inpA, spendA, faA, p1, p2, p3, p4, _resolverStrategyOpts);
+      };
+      // isFireAgeFeasible already consults getActiveChartStrategyOptions()
+      // internally for its chart-consistent gate (lines 9407 / 9445 / 9487),
+      // so it's already strategy-aware. Pass through unchanged.
       _fireAgeResult = findEarliestFeasibleAge(inp, fireMode, {
         annualSpend: effectiveSpend,
-        simulateRetirementOnlySigned: simulateRetirementOnlySigned,
+        simulateRetirementOnlySigned: _wrappedSim,
         isFireAgeFeasible: isFireAgeFeasible,
         pools: {
           pTrad: _accumResult.end.pTrad,
@@ -13129,6 +13269,60 @@ function recalcAll() {
   } else {
     statusEl.className = 'fire-status behind';
     statusEl.textContent = t('dyn.statusBehindSched', yrsToFire, progressPctRounded);
+  }
+
+  // Feature 028 (US1) — verdict-pill stop-gap.
+  // The resolver and verdict above evaluate signedLifecycleEndBalance, which
+  // is bracket-fill-only. When the active winner is a non-default strategy
+  // (e.g. feature 027's aggressive-bracket-fill) and the chart's actual
+  // trajectory under that strategy fails (negative end balance OR any
+  // retirement-year buffer-floor breach), the green "On Track" pill misleads
+  // the user. Probe projectFullLifecycle with the active strategy options and
+  // override the pill class+text to the "behind" state when divergence is
+  // detected. Becomes inert in normal operation once US2 lands the
+  // strategy-aware resolver; kept as a safety net for future strategies.
+  try {
+    const _stopGapWinnerId = (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults)
+      ? _lastStrategyResults.winnerId : null;
+    const _stopGapOnTrack = statusEl.classList.contains('on-track');
+    if (_stopGapOnTrack && _stopGapWinnerId
+        && _stopGapWinnerId !== 'bracket-fill-smoothed'
+        && typeof getActiveChartStrategyOptions === 'function'
+        && typeof projectFullLifecycle === 'function') {
+      const _stratOpts = getActiveChartStrategyOptions();
+      if (_stratOpts) {
+        const _mortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+          ? getActiveMortgageStrategyOptions() : {};
+        const _probeChart = projectFullLifecycle(inp, effectiveSpend, fireAge, true,
+          Object.assign({}, _stratOpts, _mortOpts));
+        if (Array.isArray(_probeChart) && _probeChart.length > 0) {
+          const _bufUnlock = (typeof inp.bufferUnlock === 'number') ? inp.bufferUnlock : 1;
+          const _bufSS = (typeof inp.bufferSS === 'number') ? inp.bufferSS : 1;
+          const _hasViolation = _probeChart.some(r =>
+            typeof r.age === 'number' && r.age >= fireAge &&
+            r.total < (r.age < 59.5 ? _bufUnlock : _bufSS) * effectiveSpend);
+          const _lastRow = _probeChart[_probeChart.length - 1];
+          const _endBal = (_lastRow && typeof _lastRow.total === 'number') ? _lastRow.total : 0;
+          const _override = _shouldOverrideStatusToInfeasible({
+            winnerId: _stopGapWinnerId,
+            chartEndBalance: _endBal,
+            chartHasViolation: _hasViolation,
+            currentVerdictIsOnTrack: true,
+          });
+          if (_override) {
+            statusEl.className = 'fire-status behind';
+            statusEl.textContent = t('dyn.statusBehindSched', yrsToFire, progressPctRounded);
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[stop-gap] forcing pill infeasible — winner=' + _stopGapWinnerId
+                + ' endBalance=' + Math.round(_endBal)
+                + ' hasViolation=' + _hasViolation);
+            }
+          }
+        }
+      }
+    }
+  } catch (_e) {
+    // Stop-gap is best-effort. Pill always renders even if probe throws.
   }
 
   // Net worth display — split accessible vs locked
