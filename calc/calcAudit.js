@@ -700,6 +700,24 @@ function _invariantA(options, ctx) {
       && ctx.activeStrategyId !== BRACKET_FILL_STRATEGY_ID);
     const bothFeasible = A >= 0 && B >= 0;
     const expected = strategyMismatch || bothFeasible;
+    // Feature 029 (US3 / Bug B) — suppress the audit warning when both sims
+    // agree on feasibility verdict (A ≥ 0 AND B ≥ 0) AND no strategy-axis
+    // mismatch is suspected. The dollar-amount difference under these
+    // conditions is the documented clamping-vs-signed-debt design intent
+    // (Feature 015 invariant: signed sim preserves negative pool balances
+    // post-shortfall while chart sim clamps to ≥ 0). Surfacing this every
+    // recalc clutters the Audit panel without revealing a real bug.
+    //
+    // The warning STILL fires when:
+    //   - strategyMismatch (a non-bracket-fill winner is active) — feature
+    //     028 expects this as a diagnostic surface for the residual signed-
+    //     sim trajectory drift, which feature 029 documents as out-of-scope.
+    //   - verdictA !== verdictB (one sim crosses zero while the other
+    //     doesn't) — the genuine class of bug this invariant exists to
+    //     catch (chart clamping hides signed-sim's depletion signal).
+    if (bothFeasible && !strategyMismatch) {
+      return out;
+    }
     let reason;
     if (strategyMismatch) {
       reason = `signedLifecycleEndBalance threaded with active strategy ${ctx.activeStrategyId} but still diverges from chart-sim — investigate strategy options propagation.`;
@@ -835,6 +853,72 @@ function _invariantD(options, ctx) {
   return out;
 }
 
+/**
+ * Invariant E (Feature 029 — US4): simulator-grossSpend-parity.
+ *
+ * Compares the per-age `grossSpend` value each production simulator consumed
+ * for the same retirement age. When two simulators disagree by more than $1
+ * (real-$), emits a `simulator-grossSpend-parity` warning identifying the
+ * offending age, the participating simulators, and the diff.
+ *
+ * Inputs (via ctx):
+ *   - ctx.simulatorTraces: Array<{ age, simulatorId, grossSpend }> — opt-in
+ *     trace pushed by simulators when options.simulatorTraces is provided
+ *     by the audit pipeline. Empty / undefined → invariant returns no
+ *     warnings (silent no-op when traces aren't captured).
+ *
+ * See: specs/029-withdrawal-spend-parity/contracts/grossSpend-parity.contract.md
+ *
+ * @param {object} options — audit options (unused; kept for signature symmetry)
+ * @param {object} ctx — { simulatorTraces?: Array }
+ * @returns {Array<CrossValidationWarning>}
+ */
+function _invariantE(options, ctx) {
+  const out = [];
+  if (!ctx || !Array.isArray(ctx.simulatorTraces) || ctx.simulatorTraces.length === 0) {
+    return out;
+  }
+  // Group rows by age.
+  const byAge = new Map();
+  for (const row of ctx.simulatorTraces) {
+    if (!row || typeof row.age !== 'number' || typeof row.grossSpend !== 'number') continue;
+    const arr = byAge.get(row.age) || [];
+    arr.push(row);
+    byAge.set(row.age, arr);
+  }
+  // For each age, compute max - min across simulator entries.
+  for (const [age, rows] of byAge) {
+    if (rows.length < 2) continue;
+    let min = Infinity;
+    let max = -Infinity;
+    const simMap = {};
+    for (const r of rows) {
+      if (r.grossSpend < min) min = r.grossSpend;
+      if (r.grossSpend > max) max = r.grossSpend;
+      simMap[r.simulatorId || 'unknown'] = _round(r.grossSpend);
+    }
+    const diff = max - min;
+    if (diff > 1.0) {
+      out.push({
+        kind: 'simulator-grossSpend-parity',
+        valueA: _round(min),
+        valueB: _round(max),
+        delta: _round(diff),
+        deltaPct: _pct(diff, Math.max(max, 1)),
+        expected: false,
+        reason: `Simulators disagree on grossSpend at age ${age} by $${_round(diff)}. Check that all simulators consume the canonical formula (retireSpend + hcDelta + collegeCostThisYear) per contracts/grossSpend-parity.contract.md.`,
+        age,
+        simulators: simMap,
+        dualBarSeries: {
+          labels: Object.keys(simMap),
+          data: Object.values(simMap),
+        },
+      });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -937,6 +1021,7 @@ function assembleAuditSnapshot(options) {
     crossValidationWarnings.push(..._invariantA(options, ctx));
     crossValidationWarnings.push(..._invariantB(options, ctx));
     crossValidationWarnings.push(..._invariantD(options, ctx));
+    crossValidationWarnings.push(..._invariantE(options, ctx));
   }
   crossValidationWarnings.push(..._invariantC(options));
 
@@ -979,7 +1064,10 @@ function assembleAuditSnapshot(options) {
 // silently fails on file:// — so we use this hybrid pattern instead.
 // ---------------------------------------------------------------------------
 
-const _api = { assembleAuditSnapshot: assembleAuditSnapshot };
+// Feature 029 (US4 / FR-005) — expose _invariantE so its behavior can be
+// unit-tested directly with synthetic simulatorTraces input. Internal helper;
+// dashboard code consumes assembleAuditSnapshot only.
+const _api = { assembleAuditSnapshot: assembleAuditSnapshot, _invariantE_test_only_: _invariantE };
 if (typeof module !== 'undefined' && module && module.exports) {
   module.exports = _api;
 }
