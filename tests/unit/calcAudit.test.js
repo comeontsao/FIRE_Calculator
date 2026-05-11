@@ -270,9 +270,18 @@ test('T6: exactly one gate has isActiveMode: true matching fireMode', () => {
 // T7 — Cross-val A planted (endBalance mismatch)
 // ----------------------------------------------------------------------------
 
-test('T7: planted endBalance mismatch produces endBalance-mismatch warning, delta $100K', () => {
+test('T7 (UPDATED Feature 029 / Bug B): bothFeasible + no strategyMismatch → endBalance-mismatch warning SUPPRESSED', () => {
+  // Feature 029 (US3) — suppress the audit warning when both sims agree on
+  // feasibility verdict (A ≥ 0 AND B ≥ 0) AND no strategy-axis mismatch.
+  // The dollar-amount difference under these conditions is the documented
+  // clamping-vs-signed-debt design intent (Feature 015 invariant). Surfacing
+  // this every recalc clutters the Audit panel without revealing a real bug.
+  //
+  // Pre-029 behavior (T7 original): warning fires with `expected: true`.
+  // Post-029 behavior (this test): warning is suppressed entirely.
+  // The warning still fires under (a) strategyMismatch path (T8) and
+  // (b) signed<0 + chart>0 verdict disagreement (T7b).
   const fakeChart = makeStockChart();
-  // Stuff $200K into the last row.
   fakeChart[fakeChart.length - 1].total = 200000;
 
   const snap = assembleAuditSnapshot(buildOptions({
@@ -281,15 +290,8 @@ test('T7: planted endBalance mismatch produces endBalance-mismatch warning, delt
   }));
 
   const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
-  assert.ok(warn, 'expected endBalance-mismatch warning');
-  assert.equal(Math.round(warn.delta), 100000);
-  // Feature 024 (B-023-6) — `expected` semantics extended: when BOTH sims
-  // produce non-negative end balances (both feasible), the divergence is a
-  // clamping artifact (Feature 015 design intent). T7's signed=$100k +
-  // chart=$200k both ≥ 0 → expected = true under the new rule.
-  // The strategy-mismatch path (T8) and signed<0 path (T9-equivalent) still
-  // distinguish true bugs from clamping noise.
-  assert.equal(warn.expected, true);
+  assert.strictEqual(warn, undefined,
+    'Feature 029: when both sims feasible and no strategyMismatch, endBalance-mismatch warning must be suppressed (clamping-artifact noise filter)');
 });
 
 test('T7b (NEW Feature 024 / B-023-6): signed-sim negative + chart-sim positive remains a non-expected warning', () => {

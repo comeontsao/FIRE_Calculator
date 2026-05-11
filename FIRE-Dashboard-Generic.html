@@ -12173,9 +12173,22 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
         if (_totalStart < _minTotalPostUnlock) _minTotalPostUnlock = _totalStart;
       }
 
+      // Feature 029 (US1+US2 / FR-001) — overlay-inclusive grossSpend so the
+      // per-strategy simulator matches computeWithdrawalStrategy / projectFullLifecycle.
+      // Pre-029 bug: passed `retireSpend` only, omitting healthcare delta + kid
+      // college tuition. Caused Withdrawal Strategy chart bars to under-report
+      // annual drawdown by ~$52K nominal during overlay-spend years (kid college
+      // ages, pre-65 healthcare). Strategy ranker also scored under understated
+      // spending. h2Carry intentionally omitted here to match computeWithdrawalStrategy's
+      // current behavior; full canonical parity (including h2Carry) is tracked in
+      // BACKLOG as a follow-up. See contracts/grossSpend-parity.contract.md.
+      const _f029_yearsFromNow_ = age - (_qInp.agePerson1 !== undefined ? _qInp.agePerson1 : _qInp.ageRoger);
+      const _f029_hcDelta_ = (typeof getHealthcareDeltaAnnual === 'function' && typeof selectedScenario !== 'undefined') ? getHealthcareDeltaAnnual(selectedScenario, age) : 0;
+      const _f029_college_ = (typeof getTotalCollegeCostForYear === 'function') ? getTotalCollegeCostForYear(_qInp, _f029_yearsFromNow_) : 0;
+      const _f029_grossSpend_ = Math.max(0, retireSpend + _f029_hcDelta_ + _f029_college_);
       const ctx = {
         age,
-        grossSpend: retireSpend,
+        grossSpend: _f029_grossSpend_,
         ssIncome: ssThisYear,
         pools: { pTrad, pRoth, pStocks, pCash },
         brackets,
