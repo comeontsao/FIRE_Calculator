@@ -314,27 +314,57 @@ test('T7b (NEW Feature 024 / B-023-6): signed-sim negative + chart-sim positive 
 });
 
 // ----------------------------------------------------------------------------
-// T8 — Cross-val A expected divergence
+// T8 — Cross-val A divergence under a non-bracket-fill winner
+//
+// UPDATED Feature 031 (US3 / T014, T016): the signed sim is now strategy-aware
+// (it is threaded with the active winner's options, calcAudit.js:669-685) AND
+// the live verdict re-evaluates on the displayed winner (HTML US3 change). Both
+// surfaces therefore consume the SAME winner, so a genuine end-balance
+// divergence under a non-bracket-fill winner is NO LONGER auto-expected via the
+// old `strategyMismatch → expected = true` suppression — it is a genuine signal
+// that the strategy-options threading or the two sims' math have drifted. It
+// must flag (expected: false), per contract C3:
+//   "_invariantA MUST NOT mark a lifecycle-vs-signed end-balance divergence as
+//    `expected` once both consume the winner; genuine divergence MUST flag."
 // ----------------------------------------------------------------------------
 
-test('T8: same endBalance mismatch with tax-optimized-search winner is expected: true', () => {
+test('T8 (UPDATED Feature 031): genuine endBalance divergence under tax-optimized-search winner FLAGS (expected: false)', () => {
   const fakeChart = makeStockChart();
-  fakeChart[fakeChart.length - 1].total = 200000;
+  fakeChart[fakeChart.length - 1].total = 200000; // chart sim under winner
 
   const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
   // Mark the winning row as the actual winner.
   lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
 
   const snap = assembleAuditSnapshot(buildOptions({
-    signedLifecycleEndBalance: () => ({ endBalance: 100000 }),
+    signedLifecycleEndBalance: () => ({ endBalance: 100000 }), // signed sim under winner
     projectFullLifecycle: () => fakeChart,
     lastStrategyResults: lsr,
   }));
 
   const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
-  assert.ok(warn, 'expected endBalance-mismatch warning');
-  assert.equal(warn.expected, true,
-    'when active strategy != bracket-fill-smoothed, signed-sim mismatch is expected');
+  assert.ok(warn, 'expected endBalance-mismatch warning (genuine $100K divergence)');
+  assert.equal(warn.expected, false,
+    'Feature 031: once both sims consume the winner, a non-bracket-fill divergence is a genuine signal, not auto-expected');
+});
+
+test('T8b (NEW Feature 031): genuine AGREEMENT under a non-bracket-fill winner emits NO endBalance-mismatch warning', () => {
+  // Both sims consume the winner and agree within tolerance → no warning at all.
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 200000;
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    signedLifecycleEndBalance: () => ({ endBalance: 200000 }), // agrees with chart sim
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.strictEqual(warn, undefined,
+    'Feature 031: genuine agreement under the winner must NOT emit an endBalance-mismatch warning');
 });
 
 // ----------------------------------------------------------------------------

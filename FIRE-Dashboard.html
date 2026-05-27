@@ -13158,6 +13158,39 @@ function recalcAll() {
       }
     }
   }
+  // Feature 031 (US3 / FR-004 / contract C3) — post-rank verdict re-evaluation.
+  // The FIRE-age SEARCH (yearsToFIRE → findFireAgeNumerical) and the FIRST
+  // feasibility verdict (_evaluateFeasibilityAtAge → _setCalculatedFire at the
+  // top of recalcAll) both ran while _lastStrategyResults was still null, so
+  // getActiveChartStrategyOptions() returned undefined and the verdict was
+  // judged on the default bracket-fill trajectory — NOT the strategy the chart
+  // actually draws. That is the "gates MUST evaluate the displayed strategy"
+  // hazard from CLAUDE.md / research.md "Safe/Exact/DWZ gate exposure".
+  //
+  // Design (Option ii — re-evaluate post-rank, mirroring calcAudit.js:262):
+  // keep the age SEARCH pinned to bracket-fill so it stays deterministic and
+  // free of the winner-is-age-dependent circularity documented at the
+  // _lastStrategyResults = null comment above. AFTER scoreAndRank resolves THIS
+  // run's winner, RE-EVALUATE the displayed feasibility verdict under that
+  // winner — _evaluateFeasibilityAtAge → isFireAgeFeasible now reads the winner
+  // via getActiveChartStrategyOptions() (Safe/Exact/DWZ each thread it into
+  // projectFullLifecycle) — and push it back into chartState via a second
+  // _setCalculatedFire so the verdict pill the user sees matches the chart the
+  // user sees. Mode semantics unchanged (Safe = floor + endBalance≥0; Exact =
+  // endBalance≥terminalBuffer; DWZ = floor + endBalance≥0); Objective stays the
+  // sort key (Constitution IX). When bracket-fill IS the winner this is
+  // idempotent (getActiveChartStrategyOptions() returns undefined → identical
+  // to the pre-rank evaluation; contract C6 regression guard).
+  try {
+    const _winnerFeasible = _evaluateFeasibilityAtAge(inp, effectiveSpend, fireAge, fireMode);
+    _lastDeficitReal = _winnerFeasible ? 0 : _computeDeficitReal(inp, effectiveSpend, fireAge, fireMode);
+    _setCalculatedFire(fireAge, _winnerFeasible);
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[strategies] post-rank verdict re-evaluation threw:',
+        _e && _e.stack ? _e.stack : _e);
+    }
+  }
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
   // Feature 023 follow-up — FIRE NUMBER now displays the projected portfolio
