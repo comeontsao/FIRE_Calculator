@@ -21,6 +21,7 @@
 <script src="calc/taxExpenseRow.js"></script>
 <script src="calc/fireAgeResolver.js"></script>
 <script src="calc/cashSweep.js"></script>
+<script src="calc/withdrawalTooltipFrame.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -6329,6 +6330,7 @@ const TRANSLATIONS = {
     'tw.legend.cash': 'Cash',
     'tw.legend.effTax': 'Effective tax rate (%)',
     'tw.tooltip.totalDrawn': 'Total drawn: ${0}K',
+    'tw.tooltip.purchasingPower': '≈ ${0}K in today’s spending power',
     'tw.tooltip.taxOwed': 'Tax owed: ${0}K ({1}%)',
     'tw.tooltip.ordIncome': 'Ordinary income: ${0}K',
     'tw.tooltip.rmd': 'RMD (forced Trad): ${0}K',
@@ -7430,6 +7432,7 @@ const TRANSLATIONS = {
     'tw.legend.cash': '現金',
     'tw.legend.effTax': '有效稅率（%）',
     'tw.tooltip.totalDrawn': '本年總提領：${0}K',
+    'tw.tooltip.purchasingPower': '≈ ${0}K（換算成今日購買力）',
     'tw.tooltip.taxOwed': '應繳稅：${0}K（{1}%）',
     'tw.tooltip.ordIncome': '普通所得：${0}K',
     'tw.tooltip.rmd': 'RMD（強制傳統）：${0}K',
@@ -14889,16 +14892,31 @@ function renderRothLadder(inp) {
               if (!items.length) return '';
               const idx = items[0].dataIndex;
               const r = result.strategy[idx];
-              // FR-003: purchasing-power companion line for the bar-chart row.
-              const totalRealK = ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1);
-              const _ppSuffix = (typeof t === 'function')
-                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              // FR-005 (feature 031, C4) — single-frame tooltip. The per-pool
+              // BARS render Book-Value; route "Total drawn" / "Ordinary income"
+              // / "Tax owed" through the pure helper so they ALSO sit in
+              // Book-Value and reconcile with the bars within rounding.
+              // Purchasing power is a clearly-labeled separate comparison line,
+              // never presented as the sum of the displayed bars.
+              const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
+              const _tip = (typeof _buildWithdrawalTooltipLines === 'function')
+                ? _buildWithdrawalTooltipLines(r, {
+                    toBookValue: _conv ? _conv.toBookValue : null,
+                    currentAge: (inp.ageRoger !== undefined ? inp.ageRoger : inp.agePerson1),
+                    inflationRate: inp.inflationRate,
+                  })
+                : null;
+              const _f1 = (v) => (v / 1000).toFixed(1);
+              const _totalDrawnK = _tip ? _f1(_tip.totalDrawn) : _f1(r.wTrad+r.wRoth+r.wStocks+r.wCash);
+              const _ordIncomeK  = _tip ? _f1(_tip.ordIncome)  : _f1(r.ordIncome);
+              const _taxOwedK    = _tip ? _f1(_tip.taxOwed)    : _f1(r.taxOwed);
+              const _ppK         = _tip ? _f1(_tip.purchasingPower.value) : _f1(r.wTrad+r.wRoth+r.wStocks+r.wCash);
               const lines = [
                 ``,
-                `≈ $${totalRealK}K ${_ppSuffix}`,
-                t('tw.tooltip.totalDrawn', ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1)),
-                t('tw.tooltip.taxOwed', (r.taxOwed/1000).toFixed(1), (r.effRate*100).toFixed(1)),
-                t('tw.tooltip.ordIncome', (r.ordIncome/1000).toFixed(1)),
+                t('tw.tooltip.totalDrawn', _totalDrawnK),
+                t('tw.tooltip.purchasingPower', _ppK),
+                t('tw.tooltip.taxOwed', _taxOwedK, (r.effRate*100).toFixed(1)),
+                t('tw.tooltip.ordIncome', _ordIncomeK),
               ];
               if (r.rmd > 0) lines.push(t('tw.tooltip.rmd', (r.rmd/1000).toFixed(1)));
               if (r.shortfall > 0) lines.push(t('tw.tooltip.shortfall', (r.shortfall/1000).toFixed(1)));
