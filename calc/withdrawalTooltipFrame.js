@@ -119,14 +119,86 @@ function _buildWithdrawalTooltipLines(row, opts) {
 }
 
 // ---------------------------------------------------------------------------
+// FALLBACK assembler (Feature 031, US4 follow-up / Defect 3b).
+//
+// WHY THIS EXISTS:
+//   renderRothLadder's afterBody guards the primary helper above with
+//   `typeof _buildWithdrawalTooltipLines === 'function'`. If that UMD global is
+//   ever unavailable at runtime, the inline code used to fall through to a
+//   branch that computed "Total drawn" / "Ordinary income" from RAW real-$
+//   fields (r.wTrad+r.wRoth+..., r.ordIncome) — while the BARS always read the
+//   *BookValue series. That re-introduced the exact frame-mix defect US4 fixed:
+//   Book-Value bars but real-$ total in the same tooltip.
+//
+//   This helper computes the SAME Book-Value numbers as the bars (and as the
+//   primary helper), so the total reconciles with the bars whether or not the
+//   external helper loads. The HTML fallback branch calls this exact function.
+//
+// Inputs:
+//   - row: the same per-year strategy row the bars read.
+//   - conv: a Book-Value converter ALREADY bound to (currentAge, inflationRate),
+//           called as conv(realValue, age) → Book-Value number. In the browser
+//           this wraps globalThis.displayConverter.toBookValue; pass null to
+//           degrade gracefully to real-$ (mirrors the bar series' Number.isFinite
+//           fallback — never NaN).
+//
+// Output: identical shape to _buildWithdrawalTooltipLines (frame: 'bookValue').
+//
+// Purity (Constitution II): no DOM, no globals, deterministic.
+// FRAME: Book-Value (nominal) primary; purchasing power is the only real-$
+//   field and is explicitly flagged isComparison.
+// ---------------------------------------------------------------------------
+function _buildWithdrawalTooltipFallback(row, conv) {
+  const r = row || {};
+  // Same converter posture as the primary helper: identity when missing/non-finite.
+  const toBV = (val, age) => {
+    if (typeof conv === 'function' && typeof age === 'number') {
+      const out = conv(_finiteOr(val, 0), age);
+      return Number.isFinite(out) ? out : _finiteOr(val, 0);
+    }
+    return _finiteOr(val, 0);
+  };
+
+  // Pools — read the SAME *BookValue series the bars render, with the same
+  // Number.isFinite → raw real-$ fallback (mirrors RR :14513-14520).
+  const pools = {
+    trad:   _finiteOr(r.wTradBookValue,   r.wTrad),
+    roth:   _finiteOr(r.wRothBookValue,   r.wRoth),
+    stocks: _finiteOr(r.wStocksBookValue, r.wStocks),
+    cash:   _finiteOr(r.wCashBookValue,   r.wCash),
+  };
+
+  const totalDrawn = pools.trad + pools.roth + pools.stocks + pools.cash;
+  const ordIncome = toBV(r.ordIncome, r.age);
+  const taxOwed = toBV(r.taxOwed, r.age);
+
+  const purchasingPowerValue =
+    _finiteOr(r.wTrad, 0) + _finiteOr(r.wRoth, 0) +
+    _finiteOr(r.wStocks, 0) + _finiteOr(r.wCash, 0);
+
+  return {
+    frame: 'bookValue',
+    pools: pools,
+    totalDrawn: totalDrawn,
+    ordIncome: ordIncome,
+    taxOwed: taxOwed,
+    purchasingPower: { value: purchasingPowerValue, isComparison: true },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // UMD wrapper — works under Node `require` AND under file:// classic <script>.
 // Mirror calc/cashSweep.js. Constitution Principle V.
 // ---------------------------------------------------------------------------
 
-const _api = { _buildWithdrawalTooltipLines: _buildWithdrawalTooltipLines };
+const _api = {
+  _buildWithdrawalTooltipLines: _buildWithdrawalTooltipLines,
+  _buildWithdrawalTooltipFallback: _buildWithdrawalTooltipFallback,
+};
 if (typeof module !== 'undefined' && module && module.exports) {
   module.exports = _api;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis._buildWithdrawalTooltipLines = _buildWithdrawalTooltipLines;
+  globalThis._buildWithdrawalTooltipFallback = _buildWithdrawalTooltipFallback;
 }

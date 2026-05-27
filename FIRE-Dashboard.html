@@ -14629,18 +14629,47 @@ function renderRothLadder(inp) {
               // Purchasing power is a clearly-labeled separate comparison line,
               // never presented as the sum of the displayed bars.
               const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
-              const _tip = (typeof _buildWithdrawalTooltipLines === 'function')
+              const _curAge = (inp.ageRoger !== undefined ? inp.ageRoger : inp.agePerson1);
+              let _tip = (typeof _buildWithdrawalTooltipLines === 'function')
                 ? _buildWithdrawalTooltipLines(r, {
                     toBookValue: _conv ? _conv.toBookValue : null,
-                    currentAge: (inp.ageRoger !== undefined ? inp.ageRoger : inp.agePerson1),
+                    currentAge: _curAge,
                     inflationRate: inp.inflationRate,
                   })
                 : null;
+              // FR-005 follow-up (Defect 3b) — when the primary helper global is
+              // unavailable at runtime, route the fallback through the pure
+              // _buildWithdrawalTooltipFallback so "Total drawn"/"Ordinary income"
+              // stay in Book-Value and reconcile with the bars (NOT raw real-$).
+              if (!_tip) {
+                const _convBound = (_conv && typeof _conv.toBookValue === 'function')
+                  ? (val, age) => _conv.toBookValue(val, age, _curAge, inp.inflationRate)
+                  : null;
+                if (typeof _buildWithdrawalTooltipFallback === 'function') {
+                  _tip = _buildWithdrawalTooltipFallback(r, _convBound);
+                } else {
+                  // Last-resort inline fallback — still Book-Value, still mirrors
+                  // the bar series' Number.isFinite → raw real-$ posture.
+                  const _fin = (v, f) => (Number.isFinite(v) ? v : (Number.isFinite(f) ? f : 0));
+                  const _pTrad = _fin(r.wTradBookValue, r.wTrad);
+                  const _pRoth = _fin(r.wRothBookValue, r.wRoth);
+                  const _pStocks = _fin(r.wStocksBookValue, r.wStocks);
+                  const _pCash = _fin(r.wCashBookValue, r.wCash);
+                  const _bv = (val) => _convBound ? _fin(_convBound(_fin(val, 0), r.age), _fin(val, 0)) : _fin(val, 0);
+                  _tip = {
+                    pools: { trad: _pTrad, roth: _pRoth, stocks: _pStocks, cash: _pCash },
+                    totalDrawn: _pTrad + _pRoth + _pStocks + _pCash,
+                    ordIncome: _bv(r.ordIncome),
+                    taxOwed: _bv(r.taxOwed),
+                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
+                  };
+                }
+              }
               const _f1 = (v) => (v / 1000).toFixed(1);
-              const _totalDrawnK = _tip ? _f1(_tip.totalDrawn) : _f1(r.wTrad+r.wRoth+r.wStocks+r.wCash);
-              const _ordIncomeK  = _tip ? _f1(_tip.ordIncome)  : _f1(r.ordIncome);
-              const _taxOwedK    = _tip ? _f1(_tip.taxOwed)    : _f1(r.taxOwed);
-              const _ppK         = _tip ? _f1(_tip.purchasingPower.value) : _f1(r.wTrad+r.wRoth+r.wStocks+r.wCash);
+              const _totalDrawnK = _f1(_tip.totalDrawn);
+              const _ordIncomeK  = _f1(_tip.ordIncome);
+              const _taxOwedK    = _f1(_tip.taxOwed);
+              const _ppK         = _f1(_tip.purchasingPower.value);
               const lines = [
                 ``,
                 t('tw.tooltip.totalDrawn', _totalDrawnK),

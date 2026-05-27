@@ -36,7 +36,7 @@ const displayConverter = require(
   path.resolve(__dirname, '..', '..', 'calc', 'displayConverter.js'),
 );
 
-const { _buildWithdrawalTooltipLines } = tooltipMod;
+const { _buildWithdrawalTooltipLines, _buildWithdrawalTooltipFallback } = tooltipMod;
 const { toBookValue } = displayConverter;
 
 // ---------------------------------------------------------------------------
@@ -193,4 +193,120 @@ test('case 6: taxOwed is Book-Value', () => {
     Math.abs(out.taxOwed - expectedTaxBV) < 1,
     `taxOwed (${out.taxOwed.toFixed(2)}) must be Book-Value (${expectedTaxBV.toFixed(2)})`,
   );
+});
+
+// ===========================================================================
+// FALLBACK-PATH REGRESSION (Feature 031, US4 follow-up).
+//
+// THE NEW BUG: the renderRothLadder afterBody guards the US4 helper with
+// `typeof _buildWithdrawalTooltipLines === 'function'`. When that global is
+// unavailable at runtime, the code falls through to an inline FALLBACK branch
+// that computed total/ordIncome from RAW real-$ fields, while the BARS always
+// read *BookValue. So with the helper absent, the tooltip mixed frames again:
+// stacked bars in Book-Value but "Total drawn"/"Ordinary income" in real-$.
+//
+// THE FIX: `_buildWithdrawalTooltipFallback(row, conv)` computes the SAME
+// Book-Value numbers as the bars (and the primary helper), so the total
+// reconciles with the bars whether or not the external helper loads. The HTML
+// fallback branch calls this exact function.
+//
+// `conv` is the same Book-Value converter the helper uses, already bound to
+// (age, currentAge, inflationRate); here we bind it from displayConverter so
+// the test mirrors the runtime (globalThis.displayConverter.toBookValue).
+// ===========================================================================
+const makeConv = (currentAge, inflationRate) =>
+  (val, age) => toBookValue(val, age, currentAge, inflationRate);
+
+test('fallback case A: _buildWithdrawalTooltipFallback exists and returns Book-Value pools matching the bars', () => {
+  assert.strictEqual(
+    typeof _buildWithdrawalTooltipFallback, 'function',
+    'fallback computation must be an exported pure helper so the HTML fallback ' +
+    'branch can reuse it and tests can pin its frame',
+  );
+  const r = makeRow();
+  const conv = makeConv(CURRENT_AGE, INFLATION);
+  const out = _buildWithdrawalTooltipFallback(r, conv);
+
+  // Pools equal the *BookValue bar fields — same frame the chart renders.
+  assert.strictEqual(out.pools.trad, r.wTradBookValue);
+  assert.strictEqual(out.pools.roth, r.wRothBookValue);
+  assert.strictEqual(out.pools.stocks, r.wStocksBookValue);
+  assert.strictEqual(out.pools.cash, r.wCashBookValue);
+});
+
+test('fallback case B: totalDrawn is Book-Value (sum of *BookValue bars), NOT the raw real-$ sum', () => {
+  const r = makeRow();
+  const conv = makeConv(CURRENT_AGE, INFLATION);
+  const out = _buildWithdrawalTooltipFallback(r, conv);
+
+  const barSum =
+    r.wTradBookValue + r.wRothBookValue + r.wStocksBookValue + r.wCashBookValue;
+  assert.ok(
+    Math.abs(out.totalDrawn - barSum) < 1,
+    `fallback totalDrawn (${out.totalDrawn.toFixed(0)}) must equal the displayed ` +
+    `Book-Value bar sum (${barSum.toFixed(0)})`,
+  );
+
+  const rawRealSum = r.wTrad + r.wRoth + r.wStocks + r.wCash; // 159000
+  assert.ok(
+    out.totalDrawn > rawRealSum + 1000,
+    `fallback totalDrawn (${out.totalDrawn.toFixed(0)}) must NOT be the raw real-$ ` +
+    `sum (${rawRealSum}) — that was the frame-mix defect`,
+  );
+});
+
+test('fallback case C: ordIncome is converted to Book-Value, consistent with the Trad bar', () => {
+  const r = makeRow();
+  const conv = makeConv(CURRENT_AGE, INFLATION);
+  const out = _buildWithdrawalTooltipFallback(r, conv);
+
+  const expectedOrdBV = toBookValue(r.ordIncome, r.age, CURRENT_AGE, INFLATION);
+  assert.ok(
+    Math.abs(out.ordIncome - expectedOrdBV) < 1,
+    `fallback ordIncome (${out.ordIncome.toFixed(2)}) must be Book-Value ` +
+    `(${expectedOrdBV.toFixed(2)}), not raw real-$ (${r.ordIncome})`,
+  );
+});
+
+test('fallback case D: parity — fallback output equals the primary helper output within rounding', () => {
+  const r = makeRow();
+  const conv = makeConv(CURRENT_AGE, INFLATION);
+  const fb = _buildWithdrawalTooltipFallback(r, conv);
+  const primary = _buildWithdrawalTooltipLines(r, FRAME_OPTS);
+
+  assert.ok(Math.abs(fb.totalDrawn - primary.totalDrawn) < 1, 'totalDrawn parity');
+  assert.ok(Math.abs(fb.ordIncome - primary.ordIncome) < 1, 'ordIncome parity');
+  assert.ok(Math.abs(fb.taxOwed - primary.taxOwed) < 1, 'taxOwed parity');
+  assert.ok(
+    Math.abs(fb.purchasingPower.value - primary.purchasingPower.value) < 1,
+    'purchasing-power parity',
+  );
+});
+
+test('fallback case E: purchasing power stays the labeled real-$ comparison, not the bar total', () => {
+  const r = makeRow();
+  const conv = makeConv(CURRENT_AGE, INFLATION);
+  const out = _buildWithdrawalTooltipFallback(r, conv);
+
+  const rawRealSum = r.wTrad + r.wRoth + r.wStocks + r.wCash;
+  assert.ok(
+    Math.abs(out.purchasingPower.value - rawRealSum) < 1,
+    `fallback purchasingPower (${out.purchasingPower.value}) must equal the real-$ ` +
+    `sum (${rawRealSum})`,
+  );
+  assert.notStrictEqual(
+    out.purchasingPower.value, out.totalDrawn,
+    'purchasing power must not be presented as the displayed-bar total',
+  );
+});
+
+test('fallback case F: degrades to real-$ pools without crashing when converter is missing', () => {
+  // Mirror the bars: when a *BookValue companion is non-finite, fall back to
+  // the raw real-$ pool — never NaN.
+  const r = makeRow();
+  delete r.wTradBookValue; // simulate a missing companion
+  const out = _buildWithdrawalTooltipFallback(r, null); // no converter
+  assert.strictEqual(out.pools.trad, r.wTrad, 'missing companion falls back to real-$ pool');
+  assert.ok(Number.isFinite(out.totalDrawn), 'totalDrawn must stay finite');
+  assert.ok(Number.isFinite(out.ordIncome), 'ordIncome must stay finite');
 });
