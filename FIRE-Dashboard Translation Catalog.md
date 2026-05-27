@@ -611,6 +611,15 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | `plan.cashflowOverrideToggle` | Override computed cash flow | 覆寫自動計算的現金流 |
 | `plan.cashflowWarning` | Cash flow is negative for some pre-FIRE years. Spending exceeds income after savings — buffer growth is clamped at $0. | 部分 FIRE 前年度的現金流為負——支出超過收入扣除儲蓄後的金額；緩衝成長已被限制在 $0。 |
 
+**Plan tab — Cash-sweep to stocks (feature 030 / FR-001, FR-002)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `plan.cashSweepToggle` | Sweep excess cash into stocks each year | 每年將多餘現金掃入股票市場 |
+| `plan.cashSweepThreshold` | Cash floor to keep ($) | 保留現金底線 ($) |
+| `plan.cashSweepTooltip` | Excess cash above the floor is invested in stocks at year-end, compounding at the stock return rate. Year-0 starting cash is preserved. | 高於底線的多餘現金於年末投入股票，按股票回報率複利成長。起始年現金保持不變。 |
+| `plan.cashSweepThresholdHelp` | Minimum cash balance to maintain (real-$). Default $10,000. | 要保留的最低現金餘額（今日購買力）。預設 $10,000。 |
+
 **Mortgage (`mtg.*`) — new keys**
 
 | Key | EN | zh-TW |

@@ -119,6 +119,11 @@ function _pct(num, denom) {
   return Math.round((num / denom) * 1000) / 10; // one decimal
 }
 
+/** Comma-format an integer dollar amount for inline display in audit prose. */
+function _fmtMoney(n) {
+  return _round(n).toLocaleString('en-US');
+}
+
 /**
  * Validate required options. Throws TypeError listing the first missing key.
  * Per contract: missing required → throw; we allow null/0/'' as valid because
@@ -322,16 +327,20 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.safe.verdict.feasible', { floor, floorSS });
+      // Template: 'Safe: every retirement-year total ≥ ${0}. End balance ${1}. Verdict: feasible.'
+      reason = t('audit.gate.safe.verdict.feasible', _fmtMoney(floor), _fmtMoney(lastTotal));
       formulaPlainEnglish = reason;
     } else {
-      const args = {
-        floor,
-        floorSS,
-        firstViolationAge,
-        endBalance: _round(lastTotal),
-      };
-      reason = t('audit.gate.safe.verdict.infeasible', args);
+      // Template: 'Safe: ... ≥ ${0}. First violation at age {1} (total ${2}). Verdict: infeasible.'
+      const violationTotal = (violations.length > 0 && typeof violations[0].total === 'number')
+        ? violations[0].total
+        : _round(lastTotal);
+      reason = t(
+        'audit.gate.safe.verdict.infeasible',
+        _fmtMoney(floor),
+        firstViolationAge != null ? firstViolationAge : '?',
+        _fmtMoney(violationTotal),
+      );
       formulaPlainEnglish = reason;
     }
   } else if (mode === 'dieWithZero') {
@@ -345,16 +354,15 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.dieWithZero.verdict.feasible', { floor, floorSS });
+      // Template: 'DWZ: every retirement-year total ≥ ${0} AND end balance ${1} ≥ 0. Verdict: feasible.'
+      reason = t('audit.gate.dieWithZero.verdict.feasible', _fmtMoney(floor), _fmtMoney(lastTotal));
       formulaPlainEnglish = reason;
     } else {
-      const args = {
-        floor,
-        floorSS,
-        firstViolationAge,
-        endBalance: _round(lastTotal),
-      };
-      reason = t('audit.gate.dieWithZero.verdict.infeasible', args);
+      // Template: 'DWZ: {0}. Verdict: infeasible.' — synthesize a brief why.
+      const detail = (firstViolationAge != null)
+        ? `first violation at age ${firstViolationAge} (total $${_fmtMoney(violations[0] && violations[0].total)} < floor $${_fmtMoney(floor)})`
+        : `end balance $${_fmtMoney(lastTotal)} below zero`;
+      reason = t('audit.gate.dieWithZero.verdict.infeasible', detail);
       formulaPlainEnglish = reason;
     }
   } else {
@@ -366,16 +374,20 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.exact.verdict.feasible', {
-        endBalance: _round(lastTotal),
-        threshold: terminalThreshold,
-      });
+      // Template: 'Exact: end balance ${0} ≥ required ${1}. Verdict: feasible.'
+      reason = t(
+        'audit.gate.exact.verdict.feasible',
+        _fmtMoney(lastTotal),
+        _fmtMoney(terminalThreshold),
+      );
       formulaPlainEnglish = reason;
     } else {
-      reason = t('audit.gate.exact.verdict.infeasible', {
-        endBalance: _round(lastTotal),
-        threshold: terminalThreshold,
-      });
+      // Template: 'Exact: end balance ${0} < required ${1}. Verdict: infeasible.'
+      reason = t(
+        'audit.gate.exact.verdict.infeasible',
+        _fmtMoney(lastTotal),
+        _fmtMoney(terminalThreshold),
+      );
       formulaPlainEnglish = reason;
     }
   }
@@ -873,6 +885,82 @@ function _invariantD(options, ctx) {
  * @param {object} ctx — { simulatorTraces?: Array }
  * @returns {Array<CrossValidationWarning>}
  */
+/**
+ * _invariantF — simulator-cash-sweep-parity cross-validation (feature 030).
+ *
+ * Every simulator that maintains a per-year (pCash, pStocks) pair MUST apply
+ * the canonical _applyCashSweep helper identically. This invariant verifies
+ * the resulting post-sweep pool state agrees across simulators at every age.
+ *
+ * Trigger: ctx.cashSweepTraces is provided AND ≥2 simulators have trace rows
+ * at the same `age` with pCashRange > $1 OR pStocksRange > $1.
+ *
+ * See: specs/030-cash-sweep-stocks/contracts/cash-sweep.contract.md
+ *
+ * @param {object} options — audit options (unused; kept for signature symmetry)
+ * @param {object} ctx — { cashSweepTraces?: Array<{age, simulatorId, pCash, pStocks, swept}> }
+ * @returns {Array<CrossValidationWarning>}
+ */
+function _invariantF(options, ctx) {
+  const out = [];
+  if (!ctx || !Array.isArray(ctx.cashSweepTraces) || ctx.cashSweepTraces.length === 0) {
+    return out;
+  }
+  // Group rows by age.
+  const byAge = new Map();
+  for (const row of ctx.cashSweepTraces) {
+    if (!row || typeof row.age !== 'number'
+        || typeof row.pCash !== 'number' || typeof row.pStocks !== 'number') continue;
+    const arr = byAge.get(row.age) || [];
+    arr.push(row);
+    byAge.set(row.age, arr);
+  }
+  // For each age, compute max - min for both pCash and pStocks across simulator entries.
+  for (const [age, rows] of byAge) {
+    if (rows.length < 2) continue;
+    let cashMin = Infinity;
+    let cashMax = -Infinity;
+    let stocksMin = Infinity;
+    let stocksMax = -Infinity;
+    const simMap = {};
+    for (const r of rows) {
+      if (r.pCash < cashMin) cashMin = r.pCash;
+      if (r.pCash > cashMax) cashMax = r.pCash;
+      if (r.pStocks < stocksMin) stocksMin = r.pStocks;
+      if (r.pStocks > stocksMax) stocksMax = r.pStocks;
+      simMap[r.simulatorId || 'unknown'] = {
+        pCash: _round(r.pCash),
+        pStocks: _round(r.pStocks),
+      };
+    }
+    const pCashRange = cashMax - cashMin;
+    const pStocksRange = stocksMax - stocksMin;
+    if (pCashRange > 1.0 || pStocksRange > 1.0) {
+      const worst = Math.max(pCashRange, pStocksRange);
+      const labels = Object.keys(simMap);
+      const cashData = labels.map((k) => simMap[k].pCash);
+      out.push({
+        kind: 'simulator-cash-sweep-parity',
+        age,
+        simulators: simMap,
+        valueA: _round(cashMin),
+        valueB: _round(cashMax),
+        delta: _round(worst),
+        deltaPct: _pct(worst, Math.max(Math.abs(cashMax), Math.abs(stocksMax), 1)),
+        expected: false,
+        reason: `Simulators disagree on post-sweep pool state at age ${age}. ` +
+                `pCash range: $${_round(pCashRange)}, pStocks range: $${_round(pStocksRange)}. ` +
+                `Check that all simulators apply the canonical sweep rule per contracts/cash-sweep.contract.md.`,
+        dualBarSeries: {
+          labels: labels,
+          data: cashData,
+        },
+      });
+    }
+  }
+  return out;
+}
+
 function _invariantE(options, ctx) {
   const out = [];
   if (!ctx || !Array.isArray(ctx.simulatorTraces) || ctx.simulatorTraces.length === 0) {
@@ -1022,6 +1110,7 @@ function assembleAuditSnapshot(options) {
     crossValidationWarnings.push(..._invariantB(options, ctx));
     crossValidationWarnings.push(..._invariantD(options, ctx));
     crossValidationWarnings.push(..._invariantE(options, ctx));
+    crossValidationWarnings.push(..._invariantF(options, ctx));
   }
   crossValidationWarnings.push(..._invariantC(options));
 
@@ -1067,7 +1156,11 @@ function assembleAuditSnapshot(options) {
 // Feature 029 (US4 / FR-005) — expose _invariantE so its behavior can be
 // unit-tested directly with synthetic simulatorTraces input. Internal helper;
 // dashboard code consumes assembleAuditSnapshot only.
-const _api = { assembleAuditSnapshot: assembleAuditSnapshot, _invariantE_test_only_: _invariantE };
+const _api = {
+  assembleAuditSnapshot: assembleAuditSnapshot,
+  _invariantE_test_only_: _invariantE,
+  _invariantF_test_only_: _invariantF,
+};
 if (typeof module !== 'undefined' && module && module.exports) {
   module.exports = _api;
 }
