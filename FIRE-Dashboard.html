@@ -10847,6 +10847,23 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       portfolio401kRoth = Math.max(0, portfolio401kRoth) * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
       portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
+      // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      // Feature 031 US5 — sixth simulator sweep site; matches the other five.
+      {
+        const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+          ? _applyCashSweep(portfolioCash, portfolioStocks, inp.cashSweepThreshold,
+              age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+              !!inp.cashSweepEnabled)
+          : { pCash: portfolioCash, pStocks: portfolioStocks, swept: 0 };
+        portfolioCash = _f030_sweep_.pCash;
+        portfolioStocks = _f030_sweep_.pStocks;
+        if (options && Array.isArray(options.cashSweepTraces)) {
+          options.cashSweepTraces.push({
+            age, simulatorId: 'projectFullLifecycle',
+            pCash: portfolioCash, pStocks: portfolioStocks, swept: _f030_sweep_.swept,
+          });
+        }
+      }
       // Annotate the most recent per-year row with feature-007 flags so the
       // sidebar mirror + future chart renderers can read them from
       // _lastLifecycleDataset without re-running this function.
