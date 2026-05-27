@@ -413,10 +413,12 @@ test('T12: gate verdicts call t() with the right keys and args', () => {
     (c) => c.key === 'audit.gate.safe.verdict.feasible',
   );
   assert.ok(safeFeasibleCall, 'expected t("audit.gate.safe.verdict.feasible", ...) call');
-  // Args should include the floor.
-  const argsObj = safeFeasibleCall.args[0];
-  assert.equal(typeof argsObj, 'object');
-  assert.equal(typeof argsObj.floor, 'number');
+  // Args are positional and map to the template's {0}/{1} placeholders:
+  // {0} = floor (comma-formatted string), {1} = endBalance (comma-formatted string).
+  assert.equal(safeFeasibleCall.args.length, 2, 'feasible-safe expects 2 positional args');
+  assert.equal(typeof safeFeasibleCall.args[0], 'string', 'arg[0] is the formatted floor');
+  assert.ok(/^\d{1,3}(,\d{3})*$/.test(safeFeasibleCall.args[0]),
+    'arg[0] should be a comma-formatted integer (e.g., "72,700")');
 
   // Now plant an INFEASIBLE Safe — chart dips below floor at age 60.
   const fakeChart = makeStockChart();
@@ -436,10 +438,9 @@ test('T12: gate verdicts call t() with the right keys and args', () => {
     (c) => c.key === 'audit.gate.safe.verdict.infeasible',
   );
   assert.ok(safeInfeasCall, 'expected t("audit.gate.safe.verdict.infeasible", ...) call');
-  const argsObj2 = safeInfeasCall.args[0];
-  assert.equal(typeof argsObj2, 'object');
-  assert.equal(argsObj2.firstViolationAge, 60,
-    'first violation age should be 60');
+  // Positional args: {0}=floor, {1}=firstViolationAge, {2}=violation total.
+  assert.equal(safeInfeasCall.args.length, 3, 'infeasible-safe expects 3 positional args');
+  assert.equal(safeInfeasCall.args[1], 60, 'arg[1] is the first-violation age');
 });
 
 // ----------------------------------------------------------------------------

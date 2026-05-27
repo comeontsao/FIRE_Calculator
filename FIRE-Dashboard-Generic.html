@@ -5673,6 +5673,43 @@ function getTotalCollegeCostForYear(inp, yearsFromNow) {
   }
   return total;
 }
+// Build the Audit-tab Spending table's `collegeYears` rows from per-kid inputs.
+// Emits one row per active phase (in-school tuition, post-grad loan repayment)
+// so the audit display matches what the simulator actually deducts each year.
+// Schema: { kid: string, ageStart: number, ageEnd: number, annualCost: number }.
+function _buildCollegeYearsForAudit(inp) {
+  const rows = [];
+  if (!Array.isArray(inp.childAges) || !Array.isArray(inp.childCollegePlans)) return rows;
+  const rate = (inp.loanRate ?? 6.53) / 100;
+  const term = inp.loanTerm ?? 10;
+  for (let i = 0; i < inp.childAges.length; i++) {
+    const age = inp.childAges[i];
+    const plan = inp.childCollegePlans[i];
+    if (age == null || !plan) continue;
+    const d = getCollegeDefaults(plan);
+    if (!d || d.years <= 0 || d.cost <= 0) continue;
+    const startAge = 18;
+    const gradAge = startAge + d.years;
+    const loanPct = (inp.childLoanPcts && inp.childLoanPcts[i]) || 0;
+    const parentPct = (inp.childLoanParentPcts && inp.childLoanParentPcts[i] != null)
+      ? inp.childLoanParentPcts[i] : 100;
+    const pctFinanced = Math.max(0, Math.min(100, loanPct)) / 100;
+    const pctParent = Math.max(0, Math.min(100, parentPct)) / 100;
+    const name = 'Child ' + (i + 1);
+    const inSchoolCost = d.cost * (1 - pctFinanced);
+    if (inSchoolCost > 0) {
+      rows.push({ kid: name + ' (tuition)', ageStart: startAge, ageEnd: gradAge, annualCost: inSchoolCost });
+    }
+    if (pctFinanced > 0 && term > 0) {
+      const principal = d.cost * pctFinanced * d.years;
+      const annualPmt = amortizedAnnualPayment(principal, rate, term) * pctParent;
+      if (annualPmt > 0) {
+        rows.push({ kid: name + ' (loan repay)', ageStart: gradAge, ageEnd: gradAge + term, annualCost: annualPmt });
+      }
+    }
+  }
+  return rows;
+}
 
 let selectedScenario = 'taiwan'; // default primary target
 
@@ -14200,8 +14237,15 @@ function recalcAll() {
       const _auditFireAgeCandidates = []; // Optional — leave empty; calcAudit
                                           // tolerates an empty candidate list
                                           // and falls back to a coarse sweep.
+      // Build the per-kid college schedule for the Audit tab's Spending table.
+      // The simulator reads from inp.childAges[] + inp.childCollegePlans[] +
+      // inp.childLoanPcts[] + inp.childLoanParentPcts[] via getKidYearExpense;
+      // assembleAuditSnapshot's display passthrough reads `inp.collegeYears`
+      // and renders one row per entry. Populate it here so the simulator and
+      // the audit display agree.
+      const _auditCollegeYears = _buildCollegeYearsForAudit(inp);
       window._lastAuditSnapshot = window._assembleAuditSnapshot({
-        inputs: inp,
+        inputs: { ...inp, collegeYears: _auditCollegeYears },
         fireAge: fireAge,
         fireMode: fireMode,
         annualSpend: effectiveSpend,

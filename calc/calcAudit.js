@@ -119,6 +119,11 @@ function _pct(num, denom) {
   return Math.round((num / denom) * 1000) / 10; // one decimal
 }
 
+/** Comma-format an integer dollar amount for inline display in audit prose. */
+function _fmtMoney(n) {
+  return _round(n).toLocaleString('en-US');
+}
+
 /**
  * Validate required options. Throws TypeError listing the first missing key.
  * Per contract: missing required → throw; we allow null/0/'' as valid because
@@ -322,16 +327,20 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.safe.verdict.feasible', { floor, floorSS });
+      // Template: 'Safe: every retirement-year total ≥ ${0}. End balance ${1}. Verdict: feasible.'
+      reason = t('audit.gate.safe.verdict.feasible', _fmtMoney(floor), _fmtMoney(lastTotal));
       formulaPlainEnglish = reason;
     } else {
-      const args = {
-        floor,
-        floorSS,
-        firstViolationAge,
-        endBalance: _round(lastTotal),
-      };
-      reason = t('audit.gate.safe.verdict.infeasible', args);
+      // Template: 'Safe: ... ≥ ${0}. First violation at age {1} (total ${2}). Verdict: infeasible.'
+      const violationTotal = (violations.length > 0 && typeof violations[0].total === 'number')
+        ? violations[0].total
+        : _round(lastTotal);
+      reason = t(
+        'audit.gate.safe.verdict.infeasible',
+        _fmtMoney(floor),
+        firstViolationAge != null ? firstViolationAge : '?',
+        _fmtMoney(violationTotal),
+      );
       formulaPlainEnglish = reason;
     }
   } else if (mode === 'dieWithZero') {
@@ -345,16 +354,15 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.dieWithZero.verdict.feasible', { floor, floorSS });
+      // Template: 'DWZ: every retirement-year total ≥ ${0} AND end balance ${1} ≥ 0. Verdict: feasible.'
+      reason = t('audit.gate.dieWithZero.verdict.feasible', _fmtMoney(floor), _fmtMoney(lastTotal));
       formulaPlainEnglish = reason;
     } else {
-      const args = {
-        floor,
-        floorSS,
-        firstViolationAge,
-        endBalance: _round(lastTotal),
-      };
-      reason = t('audit.gate.dieWithZero.verdict.infeasible', args);
+      // Template: 'DWZ: {0}. Verdict: infeasible.' — synthesize a brief why.
+      const detail = (firstViolationAge != null)
+        ? `first violation at age ${firstViolationAge} (total $${_fmtMoney(violations[0] && violations[0].total)} < floor $${_fmtMoney(floor)})`
+        : `end balance $${_fmtMoney(lastTotal)} below zero`;
+      reason = t('audit.gate.dieWithZero.verdict.infeasible', detail);
       formulaPlainEnglish = reason;
     }
   } else {
@@ -366,16 +374,20 @@ function _buildGate(mode, options, ctx) {
       endBalance: _round(lastTotal),
     };
     if (verdict) {
-      reason = t('audit.gate.exact.verdict.feasible', {
-        endBalance: _round(lastTotal),
-        threshold: terminalThreshold,
-      });
+      // Template: 'Exact: end balance ${0} ≥ required ${1}. Verdict: feasible.'
+      reason = t(
+        'audit.gate.exact.verdict.feasible',
+        _fmtMoney(lastTotal),
+        _fmtMoney(terminalThreshold),
+      );
       formulaPlainEnglish = reason;
     } else {
-      reason = t('audit.gate.exact.verdict.infeasible', {
-        endBalance: _round(lastTotal),
-        threshold: terminalThreshold,
-      });
+      // Template: 'Exact: end balance ${0} < required ${1}. Verdict: infeasible.'
+      reason = t(
+        'audit.gate.exact.verdict.infeasible',
+        _fmtMoney(lastTotal),
+        _fmtMoney(terminalThreshold),
+      );
       formulaPlainEnglish = reason;
     }
   }
