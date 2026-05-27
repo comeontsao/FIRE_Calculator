@@ -16732,6 +16732,14 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
  * Rendering before the winner resolves draws the stale bracket-fill default.
  * Callers: recalcAll post-rank trio, objective-toggle handler, FIRE-marker drag
  * preview, and the if(!_cs()) cold-load fallback.
+ *
+ * @strategy (feature 031, US2 / contract C2): DURING a FIRE-marker drag preview
+ * (`_previewFireAge` set ≠ the real effective age) this chart is PINNED to
+ * bracket-fill for the preview age. The winner in _lastStrategyResults was ranked
+ * at the COMMITTED age, so applying it at a previewed age would draw a winner
+ * ranked at a different age (the C2 prohibition) and diverge from the Withdrawal
+ * Strategy chart. Re-ranking per mousemove is too costly for the ≥30fps drag
+ * floor; the authoritative re-rank happens on commit via the recalcAll path.
  */
 // FRAME: real-$ (lifecycle data) + conversion (caption helper reads inflationRate)
 function renderGrowthChart(inp) {
@@ -16759,11 +16767,22 @@ function renderGrowthChart(inp) {
   // Feature 008 — if a non-bracket-fill strategy is winning or being previewed,
   // thread that through projectFullLifecycle so the chart trajectory reflects
   // the displayed strategy (not always bracket-fill-smoothed).
+  // Feature 031 US2 (FR-003 / contract C2): during a FIRE-marker DRAG preview the
+  // FIRE age has moved (`_previewFireAge`) but `_lastStrategyResults.winnerId` was
+  // ranked at the COMMITTED age. Threading that winner here would draw a preview-age
+  // balance trajectory using a winner ranked at a different age — the C2 prohibition,
+  // and the source of the lifecycle-vs-withdrawal divergence mid-drag. Re-running the
+  // ranker per mousemove is too costly for the ≥30fps drag floor, so during the drag
+  // preview we PIN the lifecycle chart to bracket-fill (the always-available default
+  // basis); on mouseup → recalcAll, US1's post-rank render restores the winner.
+  const _fireDragPreviewActive = (typeof _previewFireAge === 'number' && _previewFireAge != null
+    && _previewFireAge !== realEffectiveFireAge);
   let _chartStrategyId = null;
   let _chartThetaOverride = null;
   try {
-    const _displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
-      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId);
+    const _displayedId = _fireDragPreviewActive ? null
+      : ((typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId));
     if (_displayedId && _displayedId !== 'bracket-fill-smoothed') {
       _chartStrategyId = _displayedId;
       if (_displayedId === 'tax-optimized-search' && _lastStrategyResults && _lastStrategyResults.rows) {
