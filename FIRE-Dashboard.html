@@ -8163,6 +8163,9 @@ let _lastKpiSnapshot = null;
 // Populated by renderGrowthChart after it computes `lifecycle`. Consumed by
 // renderLifecycleSidebarChart (the mirror chart in the pinnable sidebar).
 // Consumers: renderGrowthChart (primary), renderLifecycleSidebarChart (mirror).
+// Feature 031 (US1): both are re-rendered as a post-rank trio in recalcAll
+// (after scoreAndRank resolves _lastStrategyResults.winnerId) so this cache
+// reflects the resolved winner, not the stale bracket-fill default.
 let _lastLifecycleDataset = null;
 
 /**
@@ -13127,6 +13130,34 @@ function recalcAll() {
       }
     }
   }
+  // Feature 031 (US1) — re-render the Full Portfolio Lifecycle chart AND its
+  // pinnable sidebar mirror AFTER scoreAndRank has populated _lastStrategyResults.
+  // Root cause: the chartState.onChange listener fired inside _setCalculatedFire
+  // above draws the Lifecycle chart while _lastStrategyResults is still null, so
+  // renderGrowthChart falls through to the default bracket-fill trajectory while
+  // the Withdrawal Strategy chart (re-rendered just above) shows the winner —
+  // two different strategies on screen. This second pass makes the Lifecycle
+  // chart consume the resolved winner via getActiveChartStrategyOptions(), the
+  // single source of truth (Constitution III; contract C1). Mirrors the
+  // objective-toggle handler's (renderRothLadder → renderGrowthChart →
+  // renderLifecycleSidebarChart) trio. When bracket-fill IS the winner this
+  // re-render is idempotent (contract C6 regression guard).
+  if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') {
+    try { renderGrowthChart(getInputs()); } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[strategies] post-rank renderGrowthChart threw:',
+          _e && _e.stack ? _e.stack : _e);
+      }
+    }
+  }
+  if (typeof renderLifecycleSidebarChart === 'function') {
+    try { renderLifecycleSidebarChart(null); } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[strategies] post-rank renderLifecycleSidebarChart threw:',
+          _e && _e.stack ? _e.stack : _e);
+      }
+    }
+  }
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
   // Feature 023 follow-up — FIRE NUMBER now displays the projected portfolio
@@ -16266,6 +16297,18 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
  * real-$ lifecycle values from projectFullLifecycle pending Wave 4b visual swap;
  * caption helper is invoked on the wrap container to surface the Book Value
  * frame label per FR-004.
+ *
+ * @strategy (feature 031, US1): this chart consumes the RESOLVED WINNING
+ * strategy — `_lastStrategyResults.winnerId` (or `_previewStrategyId` during a
+ * drag preview) — via getActiveChartStrategyOptions(), which feeds
+ * strategyOverride/thetaOverride into projectFullLifecycle. It must therefore be
+ * (re-)rendered AFTER scoreAndRank populates _lastStrategyResults. recalcAll
+ * adds a dedicated post-rank renderGrowthChart pass (after the post-rank
+ * renderRothLadder) so the Lifecycle chart, the Withdrawal Strategy chart, and
+ * the verdict all reference the same winnerId (Constitution III; contract C1).
+ * Rendering before the winner resolves draws the stale bracket-fill default.
+ * Callers: recalcAll post-rank trio, objective-toggle handler, FIRE-marker drag
+ * preview, and the if(!_cs()) cold-load fallback.
  */
 // FRAME: real-$ (lifecycle data) + conversion (caption helper reads inflationRate)
 function renderGrowthChart(inp) {
