@@ -9360,18 +9360,26 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      // Feature 031 (part 2 — clamp-then-sweep parity): sweep split decision on
+      // CLAMPED copies (Math.max(0,…)) — the SAME non-negative basis the chart
+      // (projectFullLifecycle) clamps to — then apply only the swept DELTA so the
+      // Feature-015 signed-debt totals are preserved (negative pStocks stays
+      // negative). Cash-driven swept ⇒ end balances unchanged; makes intent explicit.
       {
+        const _f031_clampedCash_ = Math.max(0, pCash);
+        const _f031_clampedStocks_ = Math.max(0, pStocks);
         const _f030_sweep_ = (typeof _applyCashSweep === 'function')
-          ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+          ? _applyCashSweep(_f031_clampedCash_, _f031_clampedStocks_, inp.cashSweepThreshold,
               age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
               !!inp.cashSweepEnabled)
-          : { pCash, pStocks, swept: 0 };
-        pCash = _f030_sweep_.pCash;
-        pStocks = _f030_sweep_.pStocks;
+          : { pCash: _f031_clampedCash_, pStocks: _f031_clampedStocks_, swept: 0 };
+        const _f031_swept_ = _f030_sweep_.swept;
+        pCash -= _f031_swept_;
+        pStocks += _f031_swept_;
         if (options && Array.isArray(options.cashSweepTraces)) {
           options.cashSweepTraces.push({
             age, simulatorId: 'signedLifecycleEndBalance',
-            pCash, pStocks, swept: _f030_sweep_.swept,
+            pCash, pStocks, swept: _f031_swept_,
           });
         }
       }

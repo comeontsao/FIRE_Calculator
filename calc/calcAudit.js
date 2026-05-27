@@ -677,9 +677,24 @@ function _invariantA(options, ctx) {
           ? ctx.activeStrategyRow.chosenTheta : null,
       }
     : undefined;
+  // Feature 031 (part 1 — apples-to-apples): capture whether the signed sim's
+  // trajectory dipped negative anywhere (any retirement-phase minimum < 0). The
+  // signed sim preserves negative pool balances (Feature 015 invariant) while
+  // the chart sim clamps to >= 0 before compounding and the post-flow cash-sweep
+  // (Feature 030) then re-buckets cash->stocks on those clamped pools. A
+  // negative dip is therefore positive EVIDENCE that the clamp/sweep path could
+  // produce a benign dollar-amount delta between the two sims even when both end
+  // balances finish >= 0. Without a dip, no clamp could fire, so any divergence
+  // is a genuine threading/math bug. Used below to keep the divergence test
+  // apples-to-apples.
+  let signedDippedNegative = false;
   try {
     const r = options.signedLifecycleEndBalance(options.inputs, options.annualSpend, options.fireAge, _signedOpts);
     A = r && typeof r.endBalance === 'number' ? r.endBalance : null;
+    if (r && typeof r === 'object') {
+      const mins = [r.minBalancePhase1, r.minBalancePhase2, r.minBalancePhase3];
+      signedDippedNegative = mins.some((m) => typeof m === 'number' && Number.isFinite(m) && m < 0);
+    }
   } catch (_e) {
     return out; // Treated separately by degraded path elsewhere
   }
@@ -727,29 +742,49 @@ function _invariantA(options, ctx) {
     const strategyMismatch = !!(ctx.activeStrategyId
       && ctx.activeStrategyId !== BRACKET_FILL_STRATEGY_ID);
     const bothFeasible = A >= 0 && B >= 0;
-    // Feature 031: `expected` is true ONLY for the strategy-independent
-    // clamping-artifact class (both feasible AND no strategy mismatch). Under a
-    // non-bracket-fill winner the divergence is genuine, so expected = false.
-    const expected = bothFeasible && !strategyMismatch;
-    // Feature 029 (US3 / Bug B) — suppress the audit warning when both sims
-    // agree on feasibility verdict (A ≥ 0 AND B ≥ 0) AND no strategy-axis
-    // mismatch. That dollar-amount difference is the documented
-    // clamping-vs-signed-debt design intent (Feature 015 invariant). Surfacing
-    // it every recalc clutters the Audit panel without revealing a real bug.
+    // Feature 031 (part 1 — apples-to-apples correction). The previous criterion
+    // (`expected = bothFeasible && !strategyMismatch`) flagged EVERY both-feasible
+    // divergence under a non-bracket-fill winner as a genuine bug. That over-
+    // fired on the user-reported case (signed $554K vs chart $604K, 8.4%, winner
+    // aggressive-bracket-fill, exact, cashSweepEnabled): the delta there is the
+    // strategy-INDEPENDENT Feature-015 clamp-vs-signed-debt artifact, amplified
+    // by the Feature-030 cash-sweep operating on clamped pools (chart) vs
+    // unclamped pools (signed sim) — NOT a strategy-threading bug.
     //
-    // The warning STILL fires (and is now NON-expected) when:
-    //   - strategyMismatch (a non-bracket-fill winner is active) — feature 031
-    //     surfaces this as a GENUINE divergence between two winner-consuming
-    //     sims (was suppressed-as-expected pre-031).
-    //   - verdictA !== verdictB (one sim crosses zero while the other doesn't)
-    //     — the genuine class of bug this invariant exists to catch (chart
-    //     clamping hides the signed sim's depletion signal).
-    if (bothFeasible && !strategyMismatch) {
+    // The discriminator that makes the test apples-to-apples is
+    // `signedDippedNegative`: when the signed sim's trajectory went negative
+    // somewhere, the chart's clamp/sweep path could legitimately produce a
+    // benign dollar delta even though both end balances finish >= 0. When the
+    // signed sim NEVER dipped negative, no clamp could fire, so a divergence
+    // under the winner is a GENUINE threading/math bug and MUST flag.
+    //
+    //   clampArtifact = bothFeasible && signedDippedNegative
+    //     — strategy-independent by-design difference (Feature 015 + 030).
+    //
+    // Verdict matrix (delta > $1K & deltaPct > 1):
+    //   - bothFeasible & default strategy            → clamping noise, SUPPRESS (Feature 029).
+    //   - bothFeasible & winner & signed dipped < 0  → clamp/sweep artifact, SUPPRESS, expected:true (Feature 031).
+    //   - bothFeasible & winner & signed never < 0   → GENUINE drift, FLAG expected:false (US3 intent preserved).
+    //   - chart >= 0 but signed < 0 (verdict split)  → chart clamping hides depletion, FLAG expected:false.
+    //   - both negative / chart negative             → genuine issue, FLAG expected:false.
+    const clampArtifact = bothFeasible && signedDippedNegative;
+    // `expected` is true for the strategy-independent clamping-artifact class:
+    // (a) default-strategy both-feasible noise, OR (b) winner both-feasible where
+    // the signed sim dipped negative (the clamp/sweep delta is by design).
+    const expected = (bothFeasible && !strategyMismatch) || clampArtifact;
+    // Suppress entirely the benign by-design classes:
+    //   - Feature 029: both feasible AND default strategy (clamping noise).
+    //   - Feature 031: both feasible AND a winner is active AND the signed sim
+    //     dipped negative (clamp/sweep artifact — apples-to-apples by design).
+    // The warning STILL fires (NON-expected) for the genuine classes:
+    //   - both feasible under a winner with NO negative dip (true threading/math drift),
+    //   - verdict split (signed < 0 while chart >= 0, or both negative).
+    if ((bothFeasible && !strategyMismatch) || clampArtifact) {
       return out;
     }
     let reason;
     if (strategyMismatch) {
-      reason = `signedLifecycleEndBalance and chart-sim both consume winner ${ctx.activeStrategyId} but still diverge on end balance — genuine drift; investigate strategy-options threading or simulator math.`;
+      reason = `signedLifecycleEndBalance and chart-sim both consume winner ${ctx.activeStrategyId} and the signed sim never dipped negative, yet they still diverge on end balance — genuine drift; investigate strategy-options threading or simulator math.`;
     } else if (bothFeasible) {
       reason = 'signed-sim ≠ chart-sim end balance, but both ≥ 0 — clamping artifact (Feature 015 design intent: signed sim preserves negative shortfall while chart sim clamps to ≥ 0). Verdict agreement intact.';
     } else {

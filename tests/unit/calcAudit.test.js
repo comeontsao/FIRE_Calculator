@@ -368,6 +368,79 @@ test('T8b (NEW Feature 031): genuine AGREEMENT under a non-bracket-fill winner e
 });
 
 // ----------------------------------------------------------------------------
+// T8c (NEW Feature 031 — part 1 apples-to-apples): under a non-bracket-fill
+// winner, when BOTH sims are feasible (>= 0) AND the signed sim's trajectory
+// dipped negative somewhere (any minBalancePhase < 0), the dollar-amount delta
+// is the documented Feature-015 clamp-vs-signed-debt artifact (amplified by the
+// post-flow cash-sweep operating on clamped pools in the chart vs unclamped
+// pools in the signed sim). That difference is BY DESIGN — not a strategy-
+// threading bug — so it MUST be marked expected:true and suppressed.
+//
+// This is the corrected criterion that stops the user-reported false positive
+// (signed $554K vs chart $604K, 8.4%, winner=aggressive-bracket-fill, exact,
+// cashSweepEnabled). Both feasible + signed dipped negative ⇒ clamp artifact.
+// ----------------------------------------------------------------------------
+
+test('T8c (NEW Feature 031): winner + both feasible + signed-sim dipped negative → clamp artifact SUPPRESSED', () => {
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 604637; // chart-sim clamped end balance
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    // Signed sim diverges by 8.4% AND records a negative-pool dip mid-trajectory:
+    // that negative dip is the clamp-path evidence that explains the delta.
+    signedLifecycleEndBalance: () => ({
+      endBalance: 554038,
+      minBalancePhase1: 12000,
+      minBalancePhase2: -45000, // dipped negative — signed debt the chart clamps
+      minBalancePhase3: 8000,
+    }),
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.strictEqual(warn, undefined,
+    'Feature 031: under a winner, both feasible + signed dipped negative is the by-design clamp/sweep artifact — must be suppressed, NOT flagged as a threading bug');
+});
+
+// ----------------------------------------------------------------------------
+// T8d (NEW Feature 031 — part 1 apples-to-apples GUARD): under a non-bracket-fill
+// winner, when BOTH sims are feasible (>= 0) AND the signed sim NEVER dipped
+// negative (all minBalancePhase >= 0), the clamp path could not have fired, so a
+// dollar-amount divergence cannot be a clamp artifact — it IS a genuine
+// strategy-threading or simulator-math bug and MUST flag (expected:false). This
+// preserves the US3 intent: a true winner-divergence still flags.
+// ----------------------------------------------------------------------------
+
+test('T8d (NEW Feature 031): winner + both feasible + signed NEVER dipped negative + divergence → GENUINE bug FLAGS', () => {
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 600000;
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    // Divergence with NO negative dip anywhere → clamp cannot explain it → genuine.
+    signedLifecycleEndBalance: () => ({
+      endBalance: 400000,
+      minBalancePhase1: 50000,
+      minBalancePhase2: 30000,
+      minBalancePhase3: 20000,
+    }),
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.ok(warn, 'expected endBalance-mismatch warning (genuine divergence, no clamp evidence)');
+  assert.equal(warn.expected, false,
+    'Feature 031: divergence under a winner with no negative dip is a genuine threading/math bug — must flag');
+});
+
+// ----------------------------------------------------------------------------
 // T9 — Cross-val B planted (feasibility mismatch)
 // ----------------------------------------------------------------------------
 
