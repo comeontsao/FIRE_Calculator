@@ -606,3 +606,95 @@ test('Required options: missing fireAge throws TypeError', () => {
     /TypeError: assembleAuditSnapshot: required option 'fireAge' missing/,
   );
 });
+
+// ----------------------------------------------------------------------------
+// Feature 032 (US6 / T045) — composition surfaces the Roth IRA pool
+// ----------------------------------------------------------------------------
+
+test('T045 (Feature 032 US6): composition includes lockedRothIra mirroring inputs.pRothIra', () => {
+  // Canonical RR scenario: rogerRothIra=25000 + rebeccaRothIra=60000 → rothIraReal=85000.
+  // The audit composition's input field is `pRothIra` (mirrors `p401kRoth`/etc).
+  const opts = buildOptions({
+    _extra: {
+      inputs: {
+        ageRoger: 42,
+        ageRebecca: 42,
+        endAge: 100,
+        bufferUnlock: 1,
+        bufferSS: 1,
+        terminalBuffer: 0,
+        swr: 0.04,
+        pStocksTaxable: 445000,
+        pCashTaxable: 80000,
+        p401kTrad: 26454,
+        p401kRoth: 58000,
+        pRothIra: 85000,
+        annualIncome: 200000,
+        monthlySavings: 5000,
+      },
+    },
+  });
+  const snap = assembleAuditSnapshot(opts);
+
+  assert.equal(typeof snap.resolvedInputs.composition, 'object',
+    'composition must be an object');
+  // Mirrors the sibling-field convention used by `locked401kRoth`.
+  assert.equal(snap.resolvedInputs.composition.lockedRothIra, 85000,
+    'lockedRothIra must equal _round(inputs.pRothIra)');
+});
+
+test('T045b (Feature 032 US6): composition.lockedRothIra defaults to 0 when pRothIra missing', () => {
+  // Backwards-compat: legacy inputs without pRothIra still produce a clean
+  // integer 0 (NOT undefined, NaN, or null). The audit-tab renderer expects
+  // a numeric field per the contract Outputs declaration.
+  const snap = assembleAuditSnapshot(buildOptions());
+  assert.equal(snap.resolvedInputs.composition.lockedRothIra, 0,
+    'lockedRothIra must be 0 when inputs.pRothIra is undefined');
+});
+
+// ----------------------------------------------------------------------------
+// Feature 032 (US6 / T046) — non-zero Roth IRA persona keeps all 6 invariants
+// quiet. The 6 invariants are _invariantA–F inside calcAudit.js. With
+// well-behaved (matching) fake calc-engine functions, the resulting
+// `crossValidationWarnings` array must contain ZERO non-expected entries when
+// the inputs include a non-zero pRothIra pool.
+// ----------------------------------------------------------------------------
+
+test('T046 (Feature 032 US6): non-zero Roth IRA persona produces zero non-expected crossValidationWarnings', () => {
+  // Persona p_roth_ira_active — non-zero Roth IRA balances/contribs threaded
+  // through the audit assembler. The fake calc engine produces matching
+  // chart + signed-sim end balances so invariants A/B/D stay green; C reads
+  // matching fireAge; E/F traces are absent.
+  const inputs = {
+    ageRoger: 42,
+    ageRebecca: 42,
+    endAge: 100,
+    bufferUnlock: 1,
+    bufferSS: 1,
+    terminalBuffer: 0,
+    swr: 0.04,
+    pStocksTaxable: 445000,
+    pCashTaxable: 80000,
+    p401kTrad: 26454,
+    p401kRoth: 58000,
+    pRothIra: 125000, // 50000 + 75000
+    pRothIraContrib: 14000, // 7000 + 7000
+    rogerRothIra: 50000,
+    rebeccaRothIra: 75000,
+    rogerRothIraContrib: 7000,
+    rebeccaRothIraContrib: 7000,
+    annualIncome: 200000,
+    monthlySavings: 5000,
+  };
+  const snap = assembleAuditSnapshot(buildOptions({
+    _extra: { inputs },
+  }));
+
+  // Composition reflects the non-zero pool.
+  assert.equal(snap.resolvedInputs.composition.lockedRothIra, 125000);
+
+  // No unexpected warnings: all 6 invariants stay green.
+  const nonExpected = snap.crossValidationWarnings.filter((w) => w.expected !== true);
+  assert.deepEqual(nonExpected, [],
+    'all 6 invariants must produce zero non-expected warnings under the matched-sim persona');
+});

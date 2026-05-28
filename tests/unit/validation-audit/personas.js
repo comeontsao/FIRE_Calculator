@@ -45,6 +45,19 @@ const RR_BASELINE = {
   person2Stocks:       230000,
   cashSavings:         80000,
   otherAssets:         0,
+  // Feature 032 (US6 / T048) — Roth IRA pool defaults to 0 so every existing
+  // persona inherits a zero-valued pool (no impact on prior invariants).
+  // One dedicated persona (`p_roth_ira_active` in Group I below) exercises the
+  // non-zero path. `rothIraContrib` fields are the annual contributions added
+  // each accumulation year.
+  rogerRothIra:        0,
+  rebeccaRothIra:      0,
+  person1RothIra:      0,
+  person2RothIra:      0,
+  rogerRothIraContrib:   0,
+  rebeccaRothIraContrib: 0,
+  person1RothIraContrib: 0,
+  person2RothIraContrib: 0,
 
   // --- Returns ---
   returnRate:          0.07,
@@ -1127,6 +1140,30 @@ const personas = [
       pviExtraMonthly:          500,
     },
     'Pair-wise: late age 52 × prepay-extra strategy.'
+  ),
+
+  // ---------------------------------------------------------------------------
+  // Group I: Roth IRA pool exercise (Feature 032 US6 / T048)
+  // ---------------------------------------------------------------------------
+
+  persona(
+    'p_roth_ira_active',
+    'RR',
+    {
+      // Non-zero individual Roth IRA balances + annual contributions exercise
+      // the new pool through every audit invariant (_invariantA–F). With the
+      // pool wired correctly through accumulateToFire (US2) and projectFullLifecycle
+      // (US3), every cross-validation invariant must stay green.
+      rogerRothIra:          50000,
+      rebeccaRothIra:        75000,
+      person1RothIra:        50000,
+      person2RothIra:        75000,
+      rogerRothIraContrib:    7000,
+      rebeccaRothIraContrib:  7000,
+      person1RothIraContrib:  7000,
+      person2RothIraContrib:  7000,
+    },
+    'Feature 032 US6: non-zero individual Roth IRA pool ($125k total, $14k/yr contrib). Exercises the new pool across all 6 audit invariants.'
   ),
 
 ];

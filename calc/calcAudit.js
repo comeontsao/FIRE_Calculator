@@ -7,7 +7,14 @@
  *
  * Inputs:
  *   - options: an object with these required keys:
- *       inputs                       — resolved-input snapshot (from getInputs())
+ *       inputs                       — resolved-input snapshot (from getInputs()).
+ *                                      Feature 032 (US6): `inputs.pRothIra` is
+ *                                      the new individual-Roth-IRA pool total
+ *                                      (sum of rogerRothIra + rebeccaRothIra in
+ *                                      RR / person1RothIra + person2RothIra in
+ *                                      Generic). Surfaced as
+ *                                      `resolvedInputs.composition.lockedRothIra`
+ *                                      in the snapshot output.
  *       fireAge                      — number (currently displayed FIRE age)
  *       fireMode                     — 'safe' | 'exact' | 'dieWithZero'
  *       annualSpend                  — number (post-mortgage-adjusted spend)
@@ -33,6 +40,10 @@
  *     generatedAt: ISO 8601 string,
  *     flowDiagram: { stages: [6 stages] },
  *     resolvedInputs: { raw, derivedFrom, composition },
+ *       — composition: { accessibleStocks, cash, locked401kTrad,
+ *         locked401kRoth, lockedRothIra } — `lockedRothIra` (Feature 032 US6)
+ *         mirrors the new Roth IRA pool; sibling-field to `locked401kRoth`
+ *         (Process Lesson: sibling-field beats overloading).
  *     spendingAdjustments: { rawAnnualSpend, mortgageAdjustedAnnualSpend, ...},
  *     gates: [GateEvaluation x3 in order safe/exact/dieWithZero],
  *     fireAgeResolution: { displayedFireAge, searchMethod, candidates, ... },
@@ -177,6 +188,13 @@ function _buildResolvedInputs(inputs) {
     cash: _round(raw.pCashTaxable || 0),
     locked401kTrad: _round(raw.p401kTrad || 0),
     locked401kRoth: _round(raw.p401kRoth || 0),
+    // Feature 032 (US6 / T047) — surface the new Roth IRA pool in the audit
+    // composition snapshot, parallel to locked401kRoth. Source: inputs.pRothIra
+    // (resolved from rogerRothIra + rebeccaRothIra in RR / person1RothIra +
+    // person2RothIra in Generic) — same locked-until-59.5 semantics as the
+    // Roth 401K pool. Defaults to 0 for pre-feature-032 inputs (backwards-
+    // compat). See specs/032-roth-ira-accounts/audit.md rows #14, #40.
+    lockedRothIra: _round(raw.pRothIra || 0),
   };
   // derivedFrom: surface a few well-known defaults so the user can see when a
   // value came from the default vs an explicit input. The `bufferUnlock`,

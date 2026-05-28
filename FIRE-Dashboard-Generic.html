@@ -20525,6 +20525,18 @@ function copyDebugInfo() {
       p401k: Math.round(d.p401k || 0),
       pStocks: Math.round(d.pStocks || 0),
       pCash: Math.round(d.pCash || 0),
+      // Feature 032 (US6 / T049) — surface pRoth (401K Roth) and pRothIra
+      // (individual Roth IRA) in real-$ AND nominal-$ frames so the
+      // copy-debug payload mirrors the audit composition. Without these, the
+      // user pasting a debug dump sees a portfolio total that does NOT
+      // reconcile against the visible pool breakdown.
+      pRoth: Math.round(d.pRoth || 0),
+      pRothIra: Math.round(d.pRothIra || 0),
+      p401kBookValue: Math.round(d.p401kBookValue || 0),
+      pStocksBookValue: Math.round(d.pStocksBookValue || 0),
+      pCashBookValue: Math.round(d.pCashBookValue || 0),
+      pRothBookValue: Math.round(d.pRothBookValue || 0),
+      pRothIraBookValue: Math.round(d.pRothIraBookValue || 0),
       phase: d.phase,
       synthConv: Math.round(d.syntheticConversion || 0),
     }));
