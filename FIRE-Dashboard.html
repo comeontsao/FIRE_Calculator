@@ -5980,6 +5980,7 @@ const TRANSLATIONS = {
     'tw.tooltip.ordIncome': 'Ordinary income: ${0}K',
     'tw.tooltip.rmd': 'RMD (forced Trad): ${0}K',
     'tw.tooltip.shortfall': '⚠ Shortfall: ${0}K',
+    'tooltip.withdraw.rothIraLabel': 'Roth IRA',
     'tw.howToRead': '💡 <strong>How to read this chart:</strong> Stacked bars = <em>where each year\'s spending comes from</em> — <span style="color:#4a9eff">blue = Social Security</span> (income, not a draw), <span style="color:#00d4aa">teal = Trad 401K draw</span> (taxed at ordinary rate), <span style="color:#846cff">purple = Roth draw</span> (tax-free), <span style="color:#ffd93d">yellow = Taxable stocks</span> (LTCG), <span style="color:#aab4c8">grey = Cash</span>. The orange line overlay = <em>effective tax rate that year</em>. The strategy: fill the 12% bracket with Trad (cheap), then use Roth to avoid pushing higher. Pre-59.5: only Taxable (401K locked). 73+: forced RMDs on Trad.',
     // Healthcare
     'hc.intro': 'Healthcare is a <strong>huge</strong> FIRE variable, especially in the US (pre-Medicare). Each scenario has baked-in researched defaults for a family of 4 pre-65 and a couple post-65 (Medicare / senior equivalent). Override below if your situation differs. Age-exact costs are applied inside the lifecycle drawdown (switch at age 65). FIRE number uses a blended retirement-window average.',
@@ -7086,6 +7087,7 @@ const TRANSLATIONS = {
     'tw.tooltip.ordIncome': '普通所得：${0}K',
     'tw.tooltip.rmd': 'RMD（強制傳統）：${0}K',
     'tw.tooltip.shortfall': '⚠ 短缺：${0}K',
+    'tooltip.withdraw.rothIraLabel': 'Roth IRA',
     'tw.howToRead': '💡 <strong>如何解讀本圖：</strong> 堆疊長條 = <em>該年支出的來源</em> — <span style="color:#4a9eff">藍色＝社會安全金</span>（所得，非提領）、<span style="color:#00d4aa">青綠色＝傳統 401K 提領</span>（按普通所得課稅）、<span style="color:#846cff">紫色＝Roth 提領</span>（免稅）、<span style="color:#ffd93d">黃色＝應稅股票</span>（LTCG）、<span style="color:#aab4c8">灰色＝現金</span>。橘色線＝<em>該年有效稅率</em>。策略：以傳統填滿 12% 級距（便宜），再用 Roth 避免升級。59.5 歲前：只動應稅（401K 鎖定）。73 歲後：傳統強制 RMD。',
     'hc.intro': '醫療保健是<strong>巨大</strong>的 FIRE 變數，特別是 65 歲前的美國。每個情境都有已研究的預設值：65 歲前四口之家、65 歲後夫妻（Medicare／同等長者方案）。若你的情況不同，可在下方覆寫。實際年齡會在生命週期提領中按 65 歲切換。FIRE 金額採退休期間的混合平均。',
     'hc.baseline': '情境年度支出中已隱含 $400/月 的基準；僅將超出基準的<em>差額</em>納入計算。',
@@ -11574,11 +11576,16 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
 
   // Start with RMD floor on Trad. Everything else starts at zero and grows
   // through the fixed-point iteration below.
+  // Feature 032 (US4 / T031): `wRothIra` + `avail.pRothIra` added in parallel
+  // to the existing `wRoth` / `avail.pRoth` so strategies whose poolOrder
+  // includes 'rothIra' (immediately after 'roth' per FR-021a) can draw from
+  // the new tax-free pool.
   let wTrad = rmd;
-  let wRoth = 0, wStocks = 0, wCash = 0;
+  let wRoth = 0, wRothIra = 0, wStocks = 0, wCash = 0;
   const avail = {
     pTrad: Math.max(0, pools.pTrad - rmd),
     pRoth: Math.max(0, pools.pRoth),
+    pRothIra: Math.max(0, pools.pRothIra || 0),
     pStocks: Math.max(0, pools.pStocks),
     pCash: Math.max(0, pools.pCash),
   };
@@ -11590,7 +11597,9 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
     const gain = wStocks * stockGainPct;
     const ltcg = calcLTCGTax(gain, taxable, brackets);
     const totalTax = ordTax + ltcg;
-    const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
+    // Feature 032: wRothIra is tax-free — added to grossReceived but contributes
+    // zero to ordinary income / LTCG (I1 — tax-free invariant).
+    const grossReceived = ssIncome + wTrad + wRoth + wRothIra + wStocks + wCash;
     return { ordIncome, taxable, ordTax, ltcg, totalTax, grossReceived, netReceived: grossReceived - totalTax };
   }
 
@@ -11609,6 +11618,12 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
       if (p === 'roth' && canAccess401k && avail.pRoth > 0) {
         const add = Math.min(gap, avail.pRoth);
         wRoth += add; avail.pRoth -= add; drew = true; break;
+      }
+      // Feature 032 (T031): parallel branch for the Roth IRA pool. Gated by
+      // canAccess401k — pre-59.5 lock per FR-019 / Invariant I3.
+      if (p === 'rothIra' && canAccess401k && avail.pRothIra > 0) {
+        const add = Math.min(gap, avail.pRothIra);
+        wRothIra += add; avail.pRothIra -= add; drew = true; break;
       }
       if (p === 'stocks' && avail.pStocks > 0) {
         // LTCG means we need to over-draw by the tax on the gain. Bump estimate.
@@ -11629,7 +11644,7 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
   const magi = wTrad + taxableSS + wStocks * stockGainPct;
   const effRate = t.grossReceived > 0 ? t.totalTax / t.grossReceived : 0;
   return {
-    wTrad, wRoth, wStocks, wCash,
+    wTrad, wRoth, wRothIra, wStocks, wCash,
     syntheticConversion: 0,
     rmd,
     taxOwed: t.totalTax,
@@ -13017,6 +13032,9 @@ function _extendSnapshotWithBookValues(snap, currentAge, inflationRate) {
     row.pStocksBookValue            = toBV(row.pStocks, row.age);
     row.pCashBookValue              = toBV(row.pCash, row.age);
     row.pRothBookValue              = toBV(row.pRoth, row.age);
+    // Feature 032 (T033): Roth IRA balance companion — mirrors pRothBookValue
+    // so the lifecycle chart's new Roth IRA stacked-area dataset reads from it.
+    row.pRothIraBookValue           = toBV(row.pRothIra, row.age);
     row.ssIncomeBookValue           = toBV(row.ssIncome, row.age);
     row.withdrawalsBookValue        = toBV(row.withdrawals, row.age);
     row.grossIncomeBookValue        = toBV(row.grossIncome, row.age);
@@ -13043,10 +13061,13 @@ function _extendSnapshotWithBookValues(snap, currentAge, inflationRate) {
   const _wsRows = (snap.withdrawalStrategy && snap.withdrawalStrategy.rows) || [];
   for (const row of _wsRows) {
     if (!row || typeof row.age !== 'number') continue;
-    row.wTradBookValue   = toBV(row.wTrad, row.age);
-    row.wRothBookValue   = toBV(row.wRoth, row.age);
-    row.wStocksBookValue = toBV(row.wStocks, row.age);
-    row.wCashBookValue   = toBV(row.wCash, row.age);
+    row.wTradBookValue    = toBV(row.wTrad, row.age);
+    row.wRothBookValue    = toBV(row.wRoth, row.age);
+    // Feature 032 (T033): Roth IRA withdrawal companion — feeds the tooltip's
+    // new `rothIra` line and (future) a stacked bar series for Roth IRA draws.
+    row.wRothIraBookValue = toBV(row.wRothIra, row.age);
+    row.wStocksBookValue  = toBV(row.wStocks, row.age);
+    row.wCashBookValue    = toBV(row.wCash, row.age);
   }
 
   // === Drawdown chart ===
@@ -14637,7 +14658,9 @@ function renderRothLadder(inp) {
   try {
     if (typeof _extendRowsWithBookValues === 'function') {
       _extendRowsWithBookValues(result.strategy, inp.ageRoger, inp.inflationRate,
-        ['ssIncome','wTrad','wRoth','wStocks','wCash','syntheticConversion','withdraw','grossIncome']);
+        // Feature 032 (US4 / T033): 'wRothIra' added so wRothIraBookValue
+        // companion is auto-populated for the new Roth IRA tooltip line + bar.
+        ['ssIncome','wTrad','wRoth','wRothIra','wStocks','wCash','syntheticConversion','withdraw','grossIncome']);
     }
   } catch (_e) {
     // Hot-fix 022: loudify so a malformed `result.strategy` (e.g. missing
@@ -14802,18 +14825,21 @@ function renderRothLadder(inp) {
                 } else {
                   // Last-resort inline fallback — still Book-Value, still mirrors
                   // the bar series' Number.isFinite → raw real-$ posture.
+                  // Feature 032 (T032): include `rothIra` pool so the tooltip
+                  // matches the new Roth IRA bar series (same fallback posture).
                   const _fin = (v, f) => (Number.isFinite(v) ? v : (Number.isFinite(f) ? f : 0));
                   const _pTrad = _fin(r.wTradBookValue, r.wTrad);
                   const _pRoth = _fin(r.wRothBookValue, r.wRoth);
+                  const _pRothIra = _fin(r.wRothIraBookValue, r.wRothIra);
                   const _pStocks = _fin(r.wStocksBookValue, r.wStocks);
                   const _pCash = _fin(r.wCashBookValue, r.wCash);
                   const _bv = (val) => _convBound ? _fin(_convBound(_fin(val, 0), r.age), _fin(val, 0)) : _fin(val, 0);
                   _tip = {
-                    pools: { trad: _pTrad, roth: _pRoth, stocks: _pStocks, cash: _pCash },
-                    totalDrawn: _pTrad + _pRoth + _pStocks + _pCash,
+                    pools: { trad: _pTrad, roth: _pRoth, rothIra: _pRothIra, stocks: _pStocks, cash: _pCash },
+                    totalDrawn: _pTrad + _pRoth + _pRothIra + _pStocks + _pCash,
                     ordIncome: _bv(r.ordIncome),
                     taxOwed: _bv(r.taxOwed),
-                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
+                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wRothIra,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
                   };
                 }
               }

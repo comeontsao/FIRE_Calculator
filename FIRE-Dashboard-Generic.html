@@ -6329,6 +6329,7 @@ const TRANSLATIONS = {
     'tw.legend.ltcg': 'Taxable stocks (LTCG)',
     'tw.legend.cash': 'Cash',
     'tw.legend.effTax': 'Effective tax rate (%)',
+    'tooltip.withdraw.rothIraLabel': 'Roth IRA',
     'tw.tooltip.totalDrawn': 'Total drawn: ${0}K',
     'tw.tooltip.purchasingPower': '≈ ${0}K in today’s spending power',
     'tw.tooltip.taxOwed': 'Tax owed: ${0}K ({1}%)',
@@ -7432,6 +7433,7 @@ const TRANSLATIONS = {
     'tw.legend.ltcg': '應稅股票（LTCG）',
     'tw.legend.cash': '現金',
     'tw.legend.effTax': '有效稅率（%）',
+    'tooltip.withdraw.rothIraLabel': 'Roth IRA',
     'tw.tooltip.totalDrawn': '本年總提領：${0}K',
     'tw.tooltip.purchasingPower': '≈ ${0}K（換算成今日購買力）',
     'tw.tooltip.taxOwed': '應繳稅：${0}K（{1}%）',
@@ -11882,11 +11884,16 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
 
   // Start with RMD floor on Trad. Everything else starts at zero and grows
   // through the fixed-point iteration below.
+  // Feature 032 (US4 / T031): `wRothIra` + `avail.pRothIra` added in parallel
+  // to the existing `wRoth` / `avail.pRoth` so strategies whose poolOrder
+  // includes 'rothIra' (immediately after 'roth' per FR-021a) can draw from
+  // the new tax-free pool.
   let wTrad = rmd;
-  let wRoth = 0, wStocks = 0, wCash = 0;
+  let wRoth = 0, wRothIra = 0, wStocks = 0, wCash = 0;
   const avail = {
     pTrad: Math.max(0, pools.pTrad - rmd),
     pRoth: Math.max(0, pools.pRoth),
+    pRothIra: Math.max(0, pools.pRothIra || 0),
     pStocks: Math.max(0, pools.pStocks),
     pCash: Math.max(0, pools.pCash),
   };
@@ -11898,7 +11905,9 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
     const gain = wStocks * stockGainPct;
     const ltcg = calcLTCGTax(gain, taxable, brackets);
     const totalTax = ordTax + ltcg;
-    const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
+    // Feature 032: wRothIra is tax-free — added to grossReceived but contributes
+    // zero to ordinary income / LTCG (I1 — tax-free invariant).
+    const grossReceived = ssIncome + wTrad + wRoth + wRothIra + wStocks + wCash;
     return { ordIncome, taxable, ordTax, ltcg, totalTax, grossReceived, netReceived: grossReceived - totalTax };
   }
 
@@ -11917,6 +11926,12 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
       if (p === 'roth' && canAccess401k && avail.pRoth > 0) {
         const add = Math.min(gap, avail.pRoth);
         wRoth += add; avail.pRoth -= add; drew = true; break;
+      }
+      // Feature 032 (T031): parallel branch for the Roth IRA pool. Gated by
+      // canAccess401k — pre-59.5 lock per FR-019 / Invariant I3.
+      if (p === 'rothIra' && canAccess401k && avail.pRothIra > 0) {
+        const add = Math.min(gap, avail.pRothIra);
+        wRothIra += add; avail.pRothIra -= add; drew = true; break;
       }
       if (p === 'stocks' && avail.pStocks > 0) {
         // LTCG means we need to over-draw by the tax on the gain. Bump estimate.
@@ -11937,7 +11952,7 @@ function _drawByPoolOrder(ctx, poolOrder, opts) {
   const magi = wTrad + taxableSS + wStocks * stockGainPct;
   const effRate = t.grossReceived > 0 ? t.totalTax / t.grossReceived : 0;
   return {
-    wTrad, wRoth, wStocks, wCash,
+    wTrad, wRoth, wRothIra, wStocks, wCash,
     syntheticConversion: 0,
     rmd,
     taxOwed: t.totalTax,
@@ -13320,6 +13335,9 @@ function _extendSnapshotWithBookValues(snap, currentAge, inflationRate) {
     row.pStocksBookValue            = toBV(row.pStocks, row.age);
     row.pCashBookValue              = toBV(row.pCash, row.age);
     row.pRothBookValue              = toBV(row.pRoth, row.age);
+    // Feature 032 (T033): Roth IRA balance companion — mirrors pRothBookValue
+    // so the lifecycle chart's new Roth IRA stacked-area dataset reads from it.
+    row.pRothIraBookValue           = toBV(row.pRothIra, row.age);
     row.ssIncomeBookValue           = toBV(row.ssIncome, row.age);
     row.withdrawalsBookValue        = toBV(row.withdrawals, row.age);
     row.grossIncomeBookValue        = toBV(row.grossIncome, row.age);
@@ -13346,10 +13364,13 @@ function _extendSnapshotWithBookValues(snap, currentAge, inflationRate) {
   const _wsRows = (snap.withdrawalStrategy && snap.withdrawalStrategy.rows) || [];
   for (const row of _wsRows) {
     if (!row || typeof row.age !== 'number') continue;
-    row.wTradBookValue   = toBV(row.wTrad, row.age);
-    row.wRothBookValue   = toBV(row.wRoth, row.age);
-    row.wStocksBookValue = toBV(row.wStocks, row.age);
-    row.wCashBookValue   = toBV(row.wCash, row.age);
+    row.wTradBookValue    = toBV(row.wTrad, row.age);
+    row.wRothBookValue    = toBV(row.wRoth, row.age);
+    // Feature 032 (T033): Roth IRA withdrawal companion — feeds the tooltip's
+    // new `rothIra` line and (future) a stacked bar series for Roth IRA draws.
+    row.wRothIraBookValue = toBV(row.wRothIra, row.age);
+    row.wStocksBookValue  = toBV(row.wStocks, row.age);
+    row.wCashBookValue    = toBV(row.wCash, row.age);
   }
 
   // === Drawdown chart ===
@@ -14865,7 +14886,9 @@ function renderRothLadder(inp) {
   try {
     if (typeof _extendRowsWithBookValues === 'function') {
       _extendRowsWithBookValues(result.strategy, inp.agePerson1, inp.inflationRate,
-        ['ssIncome','wTrad','wRoth','wStocks','wCash','syntheticConversion','withdraw','grossIncome']);
+        // Feature 032 (US4 / T033): 'wRothIra' added so wRothIraBookValue
+        // companion is auto-populated for the new Roth IRA tooltip line + bar.
+        ['ssIncome','wTrad','wRoth','wRothIra','wStocks','wCash','syntheticConversion','withdraw','grossIncome']);
     }
   } catch (_e) {
     // Hot-fix 022: loudify so a malformed `result.strategy` (e.g. missing
@@ -15022,18 +15045,21 @@ function renderRothLadder(inp) {
                 } else {
                   // Last-resort inline fallback — still Book-Value, still mirrors
                   // the bar series' Number.isFinite → raw real-$ posture.
+                  // Feature 032 (T032): include `rothIra` pool so the tooltip
+                  // matches the new Roth IRA bar series (same fallback posture).
                   const _fin = (v, f) => (Number.isFinite(v) ? v : (Number.isFinite(f) ? f : 0));
                   const _pTrad = _fin(r.wTradBookValue, r.wTrad);
                   const _pRoth = _fin(r.wRothBookValue, r.wRoth);
+                  const _pRothIra = _fin(r.wRothIraBookValue, r.wRothIra);
                   const _pStocks = _fin(r.wStocksBookValue, r.wStocks);
                   const _pCash = _fin(r.wCashBookValue, r.wCash);
                   const _bv = (val) => _convBound ? _fin(_convBound(_fin(val, 0), r.age), _fin(val, 0)) : _fin(val, 0);
                   _tip = {
-                    pools: { trad: _pTrad, roth: _pRoth, stocks: _pStocks, cash: _pCash },
-                    totalDrawn: _pTrad + _pRoth + _pStocks + _pCash,
+                    pools: { trad: _pTrad, roth: _pRoth, rothIra: _pRothIra, stocks: _pStocks, cash: _pCash },
+                    totalDrawn: _pTrad + _pRoth + _pRothIra + _pStocks + _pCash,
                     ordIncome: _bv(r.ordIncome),
                     taxOwed: _bv(r.taxOwed),
-                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
+                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wRothIra,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
                   };
                 }
               }

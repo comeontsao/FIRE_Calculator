@@ -22,13 +22,15 @@
  *
  * Inputs:
  *   - row: a Withdrawal Strategy per-year row. Reads:
- *       Book-Value pools: wTradBookValue, wRothBookValue, wStocksBookValue,
- *                         wCashBookValue (fall back to raw real-$ if a
- *                         companion is non-finite — mirrors the bar series
- *                         Number.isFinite guards).
- *       real-$ fields:    wTrad, wRoth, wStocks, wCash (for purchasing power),
- *                         ordIncome, taxOwed (converted to Book-Value here),
- *                         age (for the inflation factor).
+ *       Book-Value pools: wTradBookValue, wRothBookValue, wRothIraBookValue,
+ *                         wStocksBookValue, wCashBookValue (fall back to raw
+ *                         real-$ if a companion is non-finite — mirrors the
+ *                         bar series Number.isFinite guards).
+ *                         `wRothIraBookValue` is the feature-032 Roth IRA
+ *                         draw companion.
+ *       real-$ fields:    wTrad, wRoth, wRothIra, wStocks, wCash (for purchasing
+ *                         power), ordIncome, taxOwed (converted to Book-Value
+ *                         here), age (for the inflation factor).
  *   - opts: {
  *       toBookValue: (val, age, currentAge, inflationRate) => number,  // pure converter (calc/displayConverter.js)
  *       currentAge:  number,
@@ -38,7 +40,8 @@
  * Output (structured, frame-tagged so callers + tests can reason about frames):
  *   {
  *     frame: 'bookValue',
- *     pools:  { trad, roth, stocks, cash },   // Book-Value $ — equals the bar series
+ *     pools:  { trad, roth, rothIra, stocks, cash },   // Book-Value $ — equals the bar series
+ *                                                       // `rothIra` is the feature-032 Roth IRA pool line
  *     totalDrawn,                             // Book-Value $ — sum of pools
  *     ordIncome,                              // Book-Value $
  *     taxOwed,                                // Book-Value $
@@ -86,16 +89,19 @@ function _buildWithdrawalTooltipLines(row, opts) {
 
   // Per-pool lines — read the SAME Book-Value series the bars render
   // (Number.isFinite fallback to raw real-$, mirroring RR :14493-14500).
+  // Feature 032: `rothIra` is the NEW Roth IRA pool — fed by wRothIraBookValue
+  // with real-$ wRothIra fallback (mirrors the existing pool patterns).
   const pools = {
-    trad:   _finiteOr(r.wTradBookValue,   r.wTrad),
-    roth:   _finiteOr(r.wRothBookValue,   r.wRoth),
-    stocks: _finiteOr(r.wStocksBookValue, r.wStocks),
-    cash:   _finiteOr(r.wCashBookValue,   r.wCash),
+    trad:    _finiteOr(r.wTradBookValue,    r.wTrad),
+    roth:    _finiteOr(r.wRothBookValue,    r.wRoth),
+    rothIra: _finiteOr(r.wRothIraBookValue, r.wRothIra),
+    stocks:  _finiteOr(r.wStocksBookValue,  r.wStocks),
+    cash:    _finiteOr(r.wCashBookValue,    r.wCash),
   };
 
   // Total drawn — sum of the displayed Book-Value pools so it reconciles with
   // the bars within rounding.
-  const totalDrawn = pools.trad + pools.roth + pools.stocks + pools.cash;
+  const totalDrawn = pools.trad + pools.roth + pools.rothIra + pools.stocks + pools.cash;
 
   // Ordinary income + tax owed — converted to Book-Value so they sit in the
   // same frame as the Trad bar.
@@ -104,8 +110,10 @@ function _buildWithdrawalTooltipLines(row, opts) {
 
   // Purchasing power — the raw real-$ pool sum, kept as an explicitly-labeled
   // today's-spending comparison. NEVER presented as the displayed-bar total.
+  // Feature 032: include `wRothIra` so the comparison stays consistent with the
+  // displayed bars (sum of the same pool set, just in the real-$ frame).
   const purchasingPowerValue =
-    _finiteOr(r.wTrad, 0) + _finiteOr(r.wRoth, 0) +
+    _finiteOr(r.wTrad, 0) + _finiteOr(r.wRoth, 0) + _finiteOr(r.wRothIra, 0) +
     _finiteOr(r.wStocks, 0) + _finiteOr(r.wCash, 0);
 
   return {
@@ -161,19 +169,21 @@ function _buildWithdrawalTooltipFallback(row, conv) {
 
   // Pools — read the SAME *BookValue series the bars render, with the same
   // Number.isFinite → raw real-$ fallback (mirrors RR :14513-14520).
+  // Feature 032: `rothIra` is the NEW Roth IRA pool — same fallback posture.
   const pools = {
-    trad:   _finiteOr(r.wTradBookValue,   r.wTrad),
-    roth:   _finiteOr(r.wRothBookValue,   r.wRoth),
-    stocks: _finiteOr(r.wStocksBookValue, r.wStocks),
-    cash:   _finiteOr(r.wCashBookValue,   r.wCash),
+    trad:    _finiteOr(r.wTradBookValue,    r.wTrad),
+    roth:    _finiteOr(r.wRothBookValue,    r.wRoth),
+    rothIra: _finiteOr(r.wRothIraBookValue, r.wRothIra),
+    stocks:  _finiteOr(r.wStocksBookValue,  r.wStocks),
+    cash:    _finiteOr(r.wCashBookValue,    r.wCash),
   };
 
-  const totalDrawn = pools.trad + pools.roth + pools.stocks + pools.cash;
+  const totalDrawn = pools.trad + pools.roth + pools.rothIra + pools.stocks + pools.cash;
   const ordIncome = toBV(r.ordIncome, r.age);
   const taxOwed = toBV(r.taxOwed, r.age);
 
   const purchasingPowerValue =
-    _finiteOr(r.wTrad, 0) + _finiteOr(r.wRoth, 0) +
+    _finiteOr(r.wTrad, 0) + _finiteOr(r.wRoth, 0) + _finiteOr(r.wRothIra, 0) +
     _finiteOr(r.wStocks, 0) + _finiteOr(r.wCash, 0);
 
   return {

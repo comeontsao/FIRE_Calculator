@@ -130,24 +130,24 @@ function rmdFactor(age) {
 /**
  * Which pools are accessible in a given phase. Trad is locked pre-59.5.
  *
- * Feature 032: `rothIra` follows `roth`'s pre-unlock semantics — fully
- * locked until 59.5 per FR-019 (no basis-vs-earnings split in v1). Adding
- * `'rothIra'` to the pre-unlock accessible set matches the existing `roth`
- * treatment.
+ * Feature 032 (Invariant I3 — Locked until 59.5): `'rothIra'` is fully
+ * locked pre-59.5 per the contract (no basis-vs-earnings split in v1 — FR-019).
+ * It is therefore EXCLUDED from the preUnlock accessible set; any pre-59.5
+ * year with `pRothIra > 0` must NOT draw from it. See
+ * specs/032-roth-ira-accounts/contracts/roth-ira-pool.contract.md §I3.
  *
  * NOTE: the current code keeps `'roth'` in the pre-unlock set (legacy
- * misnomer; in the old shape `roth` was actually Roth 401K, which is
- * generally locked until 59.5 with limited contribution-only access via
- * Roth conversion ladders). Preserving the existing inclusion for
+ * shape — `roth` represented Roth 401K with limited pre-59.5 access via
+ * conversion-ladder semantics). Preserving the existing inclusion for
  * backwards compatibility — feature 032 does NOT change the `roth`
- * accessibility semantics, only adds `rothIra` in parallel.
+ * accessibility semantics, only adds the stricter `rothIra` rule.
  *
  * @param {Phase} phase
  * @returns {ReadonlySet<string>}
  */
 function accessiblePools(phase) {
   if (phase === 'preUnlock') {
-    return new Set(['cash', 'taxable', 'roth', 'rothIra']);
+    return new Set(['cash', 'taxable', 'roth']);
   }
   return new Set(POOL_KEYS);
 }
