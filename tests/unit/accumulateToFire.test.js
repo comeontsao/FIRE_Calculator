@@ -2309,3 +2309,52 @@ test('T017b: pRothIra seeds from inp.rothIraReal at year 0', () => {
     `T017b: end.pRothIra after 10y pure-compound: expected ≈ ${expectedEnd.toFixed(2)}, got ${result.end.pRothIra.toFixed(2)}`
   );
 });
+
+// ---------------------------------------------------------------------------
+// T034 (feature 032 US4b) — Roth IRA annual contribution is consumed by the
+// accumulation engine. Stricter end-state assertion than T017: explicitly
+// proves that `rothIraContribReal=7000` produces the annuity-FV result
+// `7000 * ((1.07^10 - 1) / 0.07) ≈ 96,715.43` and not the pure-compound 0
+// (which would mean the contribution field is being silently ignored).
+//
+// If this test ever fails, the most likely cause is a new accumulation site
+// (or refactor) that re-declares `rothIraContrib = 0` and forgets to source
+// it from `inp.rothIraContribReal`. See FIRE-Dashboard.html line ~9126 for
+// the canonical source pattern. ---------------------------------------------
+test('T034: rothIraContribReal=7000 flows into accumulation (annuity-FV $96,715)', () => {
+  const inp = baseInp({
+    ageRoger: 40,
+    roger401kTrad: 0,
+    roger401kRoth: 0,
+    rogerStocks: 0,
+    rebeccaStocks: 0,
+    cashSavings: 0,
+    otherAssets: 0,
+    monthlySavings: 0,
+    contrib401kTrad: 0,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    annualIncome: 0,
+    taxRate: 0,
+    inflationRate: 0,
+    return401k: 0.07,
+    returnRate: 0.07,
+    rothIraReal: 0,
+    rothIraContribReal: 7000,
+  });
+  const result = accumulateToFire(inp, 50, baseOptions());
+  const expected = 7000 * ((Math.pow(1.07, 10) - 1) / 0.07); // ≈ 96715.43
+  assert.ok(
+    typeof result.end.pRothIra === 'number',
+    `T034: end.pRothIra should be a number, got ${result.end.pRothIra}`
+  );
+  assert.ok(
+    Math.abs(result.end.pRothIra - expected) < 1,
+    `T034: end.pRothIra annuity-FV expected ≈ ${expected.toFixed(2)}, got ${result.end.pRothIra.toFixed(2)} — contribution silently dropped?`
+  );
+  // Sanity: must not be the pure-compound-from-0 result (which would be 0).
+  assert.ok(
+    result.end.pRothIra > 90000,
+    `T034: end.pRothIra > 90000 confirms contribution applied; got ${result.end.pRothIra}`
+  );
+});

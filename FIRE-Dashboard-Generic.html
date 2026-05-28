@@ -5828,6 +5828,12 @@ const TRANSLATIONS = {
     'invest.monthlySavingsTooltip': 'Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow.',
     'invest.contrib401k': '401K: Traditional Contribution (pre-tax)',
     'invest.contrib401kRoth': '401K: Roth Contribution (after-tax)',
+    // Feature 032 (US4b) — Roth IRA contributions. RR-only UI per FR-018;
+    // keys defined defensively in Generic per US2 pattern.
+    'invest.rothIraSection': 'Roth IRA Contributions (annual)',
+    'invest.rogerRothIraContrib': "Roger's Roth IRA Contribution",
+    'invest.rebeccaRothIraContrib': "Rebecca's Roth IRA Contribution",
+    'invest.rothIraLimitTooltip2026': '2026 IRS limit: $7,000 base / $8,000 catch-up (age 50+).',
     'invest.taxTrad': 'Effective Tax on Trad 401K Withdrawals',
     'invest.empMatch': '401K: Employer Match (annual)',
     // Feature 020 — Cash-flow override (US4 / FR-015.5)
@@ -6933,6 +6939,11 @@ const TRANSLATIONS = {
     'invest.monthlySavingsTooltip': '稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。',
     'invest.contrib401k': '401K：傳統提撥（稅前）',
     'invest.contrib401kRoth': '401K：Roth 提撥（稅後）',
+    // Feature 032 (US4b) — Roth IRA contributions (defensive defs).
+    'invest.rothIraSection': 'Roth IRA 年度供款',
+    'invest.rogerRothIraContrib': 'Roger 的 Roth IRA 供款',
+    'invest.rebeccaRothIraContrib': 'Rebecca 的 Roth IRA 供款',
+    'invest.rothIraLimitTooltip2026': '2026 IRS 上限：$7,000 / 50 歲以上 $8,000',
     'invest.taxTrad': '傳統 401K 提領的有效稅率',
     'invest.empMatch': '401K：雇主配對（年度）',
     // Feature 020 — Cash-flow override (US4 / FR-015.5)
@@ -10419,14 +10430,19 @@ function findMinAccessibleAtFireNumerical(inp, annualSpend, fireAge, mode) {
   const row = proj.length > 0 ? proj[Math.min(yrs, proj.length - 1)] : null;
   const k401Trad = row ? row.p401kTrad : inp.person1_401kTrad;
   const k401Roth = row ? row.p401kRoth : inp.person1_401kRoth;
-  // Feature 032 (US3) — project pRothIra forward to fireAge using the 401k real
-  // return; the same growth equation the chart-side accumulation uses. Generic
-  // typically supplies 0 per FR-018 but the sandbox path still threads it.
+  // Feature 032 (US3 + US4b) — project pRothIra forward to fireAge using the
+  // 401k real return; the same growth equation the chart-side accumulation
+  // uses. US4b adds annual contributions to the local annuity-FV fallback;
+  // Generic typically supplies 0 per FR-018 but threading it keeps lockstep.
   const realReturn401k = inp.return401k - inp.inflationRate;
   const _rothIraStart = (typeof inp.rothIraReal === 'number') ? inp.rothIraReal : 0;
+  const _rothIraContrib = (typeof inp.rothIraContribReal === 'number') ? inp.rothIraContribReal : 0;
+  const _annuityFV = (realReturn401k === 0)
+    ? _rothIraContrib * yrs
+    : _rothIraContrib * ((Math.pow(1 + realReturn401k, yrs) - 1) / realReturn401k);
   const k401RothIra = (row && typeof row.pRothIra === 'number')
     ? row.pRothIra
-    : _rothIraStart * Math.pow(1 + realReturn401k, yrs);
+    : _rothIraStart * Math.pow(1 + realReturn401k, yrs) + _annuityFV;
 
   // Quick feasibility check at the upper bound — if $10M isn't enough, bail out.
   const HI_CAP = 10_000_000;
@@ -10757,6 +10773,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   const realReturn401k = inp.return401k - inp.inflationRate;
   const tradContrib = inp.contrib401kTrad + inp.empMatch; // employer match → Trad
   const rothContrib = inp.contrib401kRoth;
+  // Feature 032 (US4b) — Roth IRA contribution; mirrors signedLifecycleEndBalance.
+  const rothIraContrib = (typeof inp.rothIraContribReal === 'number') ? inp.rothIraContribReal : 0;
   const taxTrad = inp.taxTrad;
   const fireAge = overrideFireAge != null ? overrideFireAge : (inp.agePerson1 + yearsToFIREcache);
   const yrsToFire = fireAge - inp.agePerson1;
@@ -11202,9 +11220,10 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       income *= (1 + inp.raiseRate);
       portfolio401kTrad = portfolio401kTrad * (1 + realReturn401k) + tradContrib;
       portfolio401kRoth = portfolio401kRoth * (1 + realReturn401k) + rothContrib;
-      // Feature 032 (US2) — Roth IRA accumulation growth (fallback path when
-      // accumulateToFire helper unavailable). Lockstep with RR.
-      portfolioRothIra = portfolioRothIra * (1 + realReturn401k);
+      // Feature 032 (US2 + US4b) — Roth IRA accumulation growth (fallback path
+      // when accumulateToFire helper unavailable). Lockstep with RR.
+      // US4b: contribution sourced from `rothIraContrib`.
+      portfolioRothIra = portfolioRothIra * (1 + realReturn401k) + rothIraContrib;
       portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
       portfolioCash *= 1.005;
     } else {

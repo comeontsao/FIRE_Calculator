@@ -606,6 +606,10 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | Key | EN | zh-TW |
 |-----|----|----|
 | `invest.contrib401kRoth` | 401K: Roth Contribution (after-tax) | 401K：Roth 提撥（稅後） |
+| `invest.rothIraSection` (feature 032 US4b) | Roth IRA Contributions (annual) | Roth IRA 年度供款 |
+| `invest.rogerRothIraContrib` (feature 032 US4b) | Roger's Roth IRA Contribution | Roger 的 Roth IRA 供款 |
+| `invest.rebeccaRothIraContrib` (feature 032 US4b) | Rebecca's Roth IRA Contribution | Rebecca 的 Roth IRA 供款 |
+| `invest.rothIraLimitTooltip2026` (feature 032 US4b) | 2026 IRS limit: $7,000 base / $8,000 catch-up (age 50+). | 2026 IRS 上限：$7,000 / 50 歲以上 $8,000 |
 | `invest.taxTrad` | Effective Tax on Trad 401K Withdrawals | 傳統 401K 提領的有效稅率 |
 | `invest.monthlySavings` (relabeled, feature 020 T038/T039) | Monthly Stock Contribution | 每月股票投入 |
 | `invest.monthlySavingsTooltip` (feature 020) | Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow. | 稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。 |
