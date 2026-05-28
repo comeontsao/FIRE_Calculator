@@ -9433,6 +9433,10 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   // Employer match is always Traditional
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
+  // Feature 032 (US3) — Roth IRA pool. Real-$ annual contribution; Generic
+  // dashboard supplies 0 per FR-018 (no UI inputs exist there) — but the
+  // canonical input fallback covers any sandbox/test that passes it explicitly.
+  const rothIraContrib = (typeof inp.rothIraContribReal === 'number') ? inp.rothIraContribReal : 0;
   const endAge = inp.endAge || 95;
   const unlockAge = 59.5;
   const taxTrad = inp.taxTrad;
@@ -9450,6 +9454,12 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   // Feature 009 — FR-018: person2Stocks suppressed when adultCount === 1.
   let pStocks = inp.person1Stocks + ((inp.adultCount === 2) ? inp.person2Stocks : 0);
   let pCash = inp.cashSavings + inp.otherAssets;
+  // Feature 032 (US3 / FR-021e CRITICAL) — Roth IRA starting balance (real-$).
+  // Generic dashboard typically supplies 0 (no UI inputs exist per FR-018);
+  // sandbox fixtures may pass rothIraReal or per-person fields.
+  let pRothIra = (typeof inp.rothIraReal === 'number')
+    ? inp.rothIraReal
+    : ((inp.person1RothIra || 0) + (inp.person2RothIra || 0));
 
   // Mortgage upfront handling
   // Feature 020 (C3 fix): use the safe deduction pattern from projectFullLifecycle —
@@ -9511,7 +9521,10 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   let minBalancePhase1 = Infinity;
   let minBalancePhase2 = Infinity;
   let minBalancePhase3 = Infinity;
-  const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
+  // Feature 032 (US3 / FR-021e CRITICAL — Invariant I7) — effBal() MUST sum
+  // pRothIra alongside other pools. Missing this term silently de-syncs the
+  // FIRE-feasibility verdict from the chart. Both effBal sites stay lockstep.
+  const effBal = () => pTrad * (1 - taxTrad) + pRoth + pRothIra + pStocks + pCash;
 
   // CANONICAL ACCUMULATION (T019.5) — see calc/accumulateToFire.js.
   // Replaces the inline accumulation below. The inline path had the same
@@ -9530,6 +9543,8 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pRoth = _accumResult.end.pRoth;
       pStocks = _accumResult.end.pStocks;
       pCash = _accumResult.end.pCash;
+      // Feature 032 (US3) — capture pRothIra so effBal() sums the new pool.
+      if (typeof _accumResult.end.pRothIra === 'number') pRothIra = _accumResult.end.pRothIra;
       const _yrsToFire = fireAge - inp.agePerson1;
       if (mortgageEnabled && mtg && mtg.ownership === 'buying-in' && _yrsToFire >= mtg.buyInYears) {
         mtgPurchased = true;
@@ -9623,6 +9638,9 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
     if (!isRetired) {
       pTrad = pTrad * (1 + realReturn401k) + tradContrib;
       pRoth = pRoth * (1 + realReturn401k) + rothContrib;
+      // Feature 032 (US3 / Invariant I4) — pRothIra grows at the SAME real
+      // return as Roth 401K; contribution added post-growth, matching pRoth.
+      pRothIra = pRothIra * (1 + realReturn401k) + rothIraContrib;
       const effAnnualSavings = Math.max(0, inp.monthlySavings * 12 - mtgAdjust - collegeCostThisYear - h2Carry);
       pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
       pCash *= 1.005;
@@ -9722,6 +9740,11 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       // detect plan infeasibility as negative balance.
       pTrad *= (1 + realReturn401k);
       pRoth *= (1 + realReturn401k);
+      // Feature 032 (US3 / Invariant I4) — pRothIra grows at the SAME real
+      // return as Roth 401K through retirement. US3 has no withdrawal from
+      // pRothIra (mix has no wRothIra field yet — US4 wires draws); the pool
+      // simply compounds until US4 lands.
+      pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
@@ -9754,7 +9777,8 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   // retirement year's tax is already paid through `taxOptimizedWithdrawal`,
   // so leftover Trad is worth its face value. If any pool accumulated signed
   // shortfall debt, this sum will be negative → infeasible.
-  const endBalance = pTrad + pRoth + pStocks + pCash;
+  // Feature 032 (US3 / FR-021e) — include pRothIra in signed end-balance.
+  const endBalance = pTrad + pRoth + pRothIra + pStocks + pCash;
   if (balanceAtUnlock === null) balanceAtUnlock = fireAge >= unlockAge ? endBalance : 0;
   if (balanceAtSS === null) balanceAtSS = fireAge >= inp.ssClaimAge ? endBalance : 0;
   if (balanceAtFire === null) balanceAtFire = endBalance;
@@ -10157,7 +10181,7 @@ function findDWZFireAge(inp, annualSpend) {
 // projectFullLifecycle). When set to a non-default registered strategy, the
 // per-year withdrawal step dispatches via getStrategies()[id].computePerYearMix.
 // Back-compat: omitting `options` preserves byte-identical pre-028 behavior.
-function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p401kRoth0, pStocks0, pCash0, options) {
+function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p401kRoth0, pStocks0, pCash0, options, p401kRothIra0) {
   const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
@@ -10186,6 +10210,11 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
   let pRoth = p401kRoth0;
   let pStocks = pStocks0;
   let pCash = pCash0;
+  // Feature 032 (US3 / FR-021e CRITICAL) — Roth IRA starting balance for the
+  // retirement-only sim. Defaults to 0 for legacy callers; callers that pass
+  // it (the FIRE resolver via getActiveChartStrategyOptions plumbing) keep the
+  // gate aligned with the chart.
+  let pRothIra = (typeof p401kRothIra0 === 'number') ? p401kRothIra0 : 0;
 
   if (mtgAdj.saleProceeds > 0) pStocks += mtgAdj.saleProceeds;
   if (relocationCost > 0) pStocks -= relocationCost;
@@ -10211,7 +10240,10 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
   let minBalancePhase1 = Infinity;
   let minBalancePhase2 = Infinity;
   let minBalancePhase3 = Infinity;
-  const effBal = () => pTrad * (1 - taxTrad) + pRoth + pStocks + pCash;
+  // Feature 032 (US3 / FR-021e CRITICAL — Invariant I7) — effBal() MUST sum
+  // pRothIra alongside other pools. Missing this term silently de-syncs the
+  // FIRE-feasibility verdict from the chart. Both effBal sites stay lockstep.
+  const effBal = () => pTrad * (1 - taxTrad) + pRoth + pRothIra + pStocks + pCash;
 
   // FEATURE 022 / US6 — per-iteration row log (MPF audit consumer).
   // Each entry: { age, hasShortfall, scale }. Cheap O(years) memory; safe to
@@ -10318,6 +10350,10 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     // For partial FIRE-year row: (1 + r × scale). For full years: (1 + r).
     pTrad *= (1 + realReturn401k * scale);
     pRoth *= (1 + realReturn401k * scale);
+    // Feature 032 (US3 / Invariant I4) — pRothIra compounds at the 401k real
+    // return, mirroring pRoth. No withdrawal from this pool in US3 (US4 wires
+    // draws); for now it grows monotonically through retirement.
+    pRothIra *= (1 + realReturn401k * scale);
     pStocks *= (1 + realReturnStocks * scale);
     pCash *= (1 + 0.005 * scale);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
@@ -10381,17 +10417,25 @@ function findMinAccessibleAtFireNumerical(inp, annualSpend, fireAge, mode) {
   const row = proj.length > 0 ? proj[Math.min(yrs, proj.length - 1)] : null;
   const k401Trad = row ? row.p401kTrad : inp.person1_401kTrad;
   const k401Roth = row ? row.p401kRoth : inp.person1_401kRoth;
+  // Feature 032 (US3) — project pRothIra forward to fireAge using the 401k real
+  // return; the same growth equation the chart-side accumulation uses. Generic
+  // typically supplies 0 per FR-018 but the sandbox path still threads it.
+  const realReturn401k = inp.return401k - inp.inflationRate;
+  const _rothIraStart = (typeof inp.rothIraReal === 'number') ? inp.rothIraReal : 0;
+  const k401RothIra = (row && typeof row.pRothIra === 'number')
+    ? row.pRothIra
+    : _rothIraStart * Math.pow(1 + realReturn401k, yrs);
 
   // Quick feasibility check at the upper bound — if $10M isn't enough, bail out.
   const HI_CAP = 10_000_000;
   const simHi = simulateRetirementOnlySigned(inp, annualSpend, fireAge,
-    k401Trad, k401Roth, HI_CAP * 0.8, HI_CAP * 0.2);
+    k401Trad, k401Roth, HI_CAP * 0.8, HI_CAP * 0.2, undefined, k401RothIra);
   if (!isFireAgeFeasible(simHi, inp, annualSpend, mode)) {
     return HI_CAP;
   }
   // Lower bound: even $0 might be feasible (if 401K alone carries it past unlockAge).
   const simLo = simulateRetirementOnlySigned(inp, annualSpend, fireAge,
-    k401Trad, k401Roth, 0, 0);
+    k401Trad, k401Roth, 0, 0, undefined, k401RothIra);
   if (isFireAgeFeasible(simLo, inp, annualSpend, mode)) {
     return 0;
   }
@@ -10400,7 +10444,7 @@ function findMinAccessibleAtFireNumerical(inp, annualSpend, fireAge, mode) {
   for (let iter = 0; iter < 40; iter++) {
     const mid = (lo + hi) / 2;
     const sim = simulateRetirementOnlySigned(inp, annualSpend, fireAge,
-      k401Trad, k401Roth, mid * 0.8, mid * 0.2);
+      k401Trad, k401Roth, mid * 0.8, mid * 0.2, undefined, k401RothIra);
     if (isFireAgeFeasible(sim, inp, annualSpend, mode)) {
       hi = mid;
     } else {
@@ -13713,8 +13757,14 @@ function recalcAll() {
       // a non-default strategy (feature 027's aggressive-bracket-fill).
       const _resolverStrategyOpts = (typeof getActiveChartStrategyOptions === 'function')
         ? getActiveChartStrategyOptions() : undefined;
+      // Feature 032 (US3 / FR-021e CRITICAL) — pass pRothIra through to the
+      // signed sim so the resolver's feasibility scan sees the SAME pool total
+      // the chart renders. Closure reads from _accumResult.end.pRothIra (US2
+      // output of accumulateToFire); falls back to 0 for pre-US2 sandbox callers.
+      const _resolverPRothIra0 = (_accumResult && _accumResult.end
+        && typeof _accumResult.end.pRothIra === 'number') ? _accumResult.end.pRothIra : 0;
       const _wrappedSim = function (inpA, spendA, faA, p1, p2, p3, p4) {
-        return simulateRetirementOnlySigned(inpA, spendA, faA, p1, p2, p3, p4, _resolverStrategyOpts);
+        return simulateRetirementOnlySigned(inpA, spendA, faA, p1, p2, p3, p4, _resolverStrategyOpts, _resolverPRothIra0);
       };
       // isFireAgeFeasible already consults getActiveChartStrategyOptions()
       // internally for its chart-consistent gate, so it's already

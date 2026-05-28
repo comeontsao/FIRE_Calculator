@@ -160,6 +160,92 @@ HTML_PATHS.forEach(({ name, file }) => {
 // the displayed strategy under all three modes. We assert each mode branch
 // reads getActiveChartStrategyOptions() before calling projectFullLifecycle.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Feature 032 / US3 — Invariant I7 (FR-021e CRITICAL).
+//
+// The `effBal()` lambda computes the effective-balance number consumed by:
+//   - per-phase trajectory minimums (Safe mode signed-sim fallback)
+//   - balanceAtFire / balanceAtUnlock / balanceAtSS snapshots
+//   - the signed simulator's returned `endBalance`
+//
+// All three feed the FIRE-feasibility gate when the chart-consistent
+// projectFullLifecycle path is unavailable (or for cross-checks). Missing
+// `pRothIra` here silently de-syncs the verdict from the chart total.
+//
+// Per the contract:
+//   const effBal = () => pTrad * (1 - taxTrad) + pRoth + pRothIra + pStocks + pCash;
+//
+// Two effBal() sites per HTML (signedLifecycleEndBalance + simulateRetirementOnlySigned).
+// Both MUST include pRothIra. Tests assert structurally, mirroring this file's
+// existing brace-balanced extraction pattern.
+// ---------------------------------------------------------------------------
+HTML_PATHS.forEach(({ name, file }) => {
+  ['signedLifecycleEndBalance', 'simulateRetirementOnlySigned'].forEach((fnName) => {
+    test(`${name}: ${fnName} effBal() lambda sums pRothIra (Invariant I7 / FR-021e)`, () => {
+      const src = fs.readFileSync(file, 'utf8');
+      const body = extractFunctionBody(src, fnName);
+      // Find the effBal lambda definition — should be a single-line const.
+      const effBalLineMatch = body.match(/const\s+effBal\s*=\s*\(\)\s*=>\s*[^;]+;/);
+      assert.ok(
+        effBalLineMatch,
+        `${name}: ${fnName} must define a const effBal = () => ... lambda`,
+      );
+      const lambda = effBalLineMatch[0];
+      assert.ok(
+        /\bpRothIra\b/.test(lambda),
+        `${name}: ${fnName} effBal() lambda MUST sum pRothIra alongside other pools ` +
+        `per Invariant I7 (FR-021e CRITICAL). Missing this term silently de-syncs the ` +
+        `FIRE-feasibility verdict from the chart. Expected form: ` +
+        `pTrad * (1 - taxTrad) + pRoth + pRothIra + pStocks + pCash. Got: ${lambda}`,
+      );
+    });
+  });
+
+  test(`${name}: signedLifecycleEndBalance declares pRothIra in retirement-phase scope`, () => {
+    const src = fs.readFileSync(file, 'utf8');
+    const body = extractFunctionBody(src, 'signedLifecycleEndBalance');
+    // Must declare a mutable local pRothIra parallel to pRoth so accumulation +
+    // retirement-loop sites can reference it. Either `let pRothIra` direct
+    // declaration or capture from accumulateToFire's end.pRothIra.
+    assert.ok(
+      /\blet\s+pRothIra\b/.test(body) || /pRothIra\s*=\s*_accumResult\.end\.pRothIra/.test(body),
+      `${name}: signedLifecycleEndBalance must declare or capture pRothIra so effBal() ` +
+      `can sum it (FR-021e). Either 'let pRothIra = ...' or capture from ` +
+      `_accumResult.end.pRothIra after accumulateToFire.`,
+    );
+  });
+
+  test(`${name}: simulateRetirementOnlySigned accepts p401kRothIra0 parameter`, () => {
+    const src = fs.readFileSync(file, 'utf8');
+    // Match the function declaration line — assert pRothIra-related parameter
+    // appears in the signature so callers can pass the starting balance.
+    const sigMatch = src.match(/function\s+simulateRetirementOnlySigned\s*\(([^)]*)\)/);
+    assert.ok(sigMatch, `${name}: simulateRetirementOnlySigned signature must exist`);
+    const params = sigMatch[1];
+    assert.ok(
+      /p401kRothIra0|pRothIra0|rothIra0/.test(params),
+      `${name}: simulateRetirementOnlySigned MUST accept a Roth-IRA starting balance ` +
+      `parameter (e.g. p401kRothIra0) so the signed-sim fallback can include the new ` +
+      `pool in its end-balance accumulation. Got params: ${params}`,
+    );
+  });
+
+  test(`${name}: simulateRetirementOnlySigned grows pRothIra in retirement loop`, () => {
+    const src = fs.readFileSync(file, 'utf8');
+    const body = extractFunctionBody(src, 'simulateRetirementOnlySigned');
+    // The retirement-loop growth line must compound pRothIra at the 401k real
+    // return, mirroring pRoth/pTrad. Match a multiplication line that multiplies
+    // pRothIra by a (1 + realReturn401k * ...) factor.
+    assert.ok(
+      /pRothIra\s*\*=\s*\(1\s*\+\s*realReturn401k/.test(body)
+        || /pRothIra\s*=\s*pRothIra\s*\*\s*\(1\s*\+\s*realReturn401k/.test(body),
+      `${name}: simulateRetirementOnlySigned must grow pRothIra at the 401k real return ` +
+      `per Invariant I4 (pool growth equation). Expected something like ` +
+      `pRothIra *= (1 + realReturn401k * scale).`,
+    );
+  });
+});
+
 HTML_PATHS.forEach(({ name, file }) => {
   ['safe', 'exact', 'dieWithZero'].forEach((mode) => {
     test(`${name}: isFireAgeFeasible ${mode}-mode gate threads getActiveChartStrategyOptions into projectFullLifecycle`, () => {
