@@ -3104,6 +3104,19 @@
         <input type="number" id="roger401kRoth" value="58000" onchange="recalcAll()">
       </div>
     </div>
+    <!-- Feature 032 (US1) — Roth IRA balances. Locked until 59.5 per FR-019;
+         mirrors the 401K card structure above. RR-only per FR-018. -->
+    <div style="padding:8px 10px;background:rgba(255,217,61,0.08);border:1px solid rgba(255,217,61,0.2);border-radius:8px;margin-bottom:10px">
+      <div style="font-size:0.72em;text-transform:uppercase;letter-spacing:1px;color:var(--warning);margin-bottom:6px" data-i18n="assets.rothIraGroup">🔒 Roth IRA</div>
+      <div class="input-group" style="margin-bottom:4px">
+        <label data-i18n="assets.rogerRothIra">Roger's Roth IRA</label>
+        <input type="number" id="rogerRothIra" min="0" step="1" value="0" onchange="recalcAll()">
+      </div>
+      <div class="input-group" style="margin-bottom:4px">
+        <label data-i18n="assets.rebeccaRothIra">Rebecca's Roth IRA</label>
+        <input type="number" id="rebeccaRothIra" min="0" step="1" value="59021" onchange="recalcAll()">
+      </div>
+    </div>
     <div style="padding:8px;background:var(--bg);border-radius:8px;text-align:center">
       <span style="color:var(--text-dim);font-size:0.75em" data-i18n="assets.totalNetWorth">TOTAL NET WORTH</span><br>
       <span style="font-size:1.3em;font-weight:700;color:var(--accent2)" id="totalNetWorth">—</span>
@@ -5432,6 +5445,10 @@ const TRANSLATIONS = {
     'assets.roger401k': "Roger's 401K",
     'assets.roger401kTrad': "Roger's Traditional 401K",
     'assets.roger401kRoth': "Roger's Roth 401K",
+    // Feature 032 (US1) — Roth IRA accounts. RR-only.
+    'assets.rothIraGroup': '🔒 Roth IRA',
+    'assets.rogerRothIra': "Roger's Roth IRA",
+    'assets.rebeccaRothIra': "Rebecca's Roth IRA",
     'assets.totalNetWorth': 'TOTAL NET WORTH',
     'assets.accessibleLabel': 'Accessible:',
     'assets.lockedLabel': 'Locked:',
@@ -6549,6 +6566,10 @@ const TRANSLATIONS = {
     'assets.roger401k': 'Roger 的 401K',
     'assets.roger401kTrad': 'Roger 的傳統 401K (稅前)',
     'assets.roger401kRoth': 'Roger 的 Roth 401K (稅後)',
+    // Feature 032 (US1) — Roth IRA accounts. RR-only.
+    'assets.rothIraGroup': '🔒 Roth IRA',
+    'assets.rogerRothIra': 'Roger 的 Roth IRA (個人退休帳戶)',
+    'assets.rebeccaRothIra': 'Rebecca 的 Roth IRA (個人退休帳戶)',
     'assets.totalNetWorth': '總淨資產',
     'assets.accessibleLabel': '可用：',
     'assets.lockedLabel': '鎖定：',
@@ -7894,6 +7915,10 @@ function getInputs() {
     // inp.roger401k is kept as the TOTAL (trad+roth) for chart totals/net worth.
     roger401kTrad: parseFloat(document.getElementById('roger401k').value) || 0,
     roger401kRoth: parseFloat((document.getElementById('roger401kRoth')||{}).value) || 0,
+    // Feature 032 (US1) — Roth IRA balances. Locked-pool inputs (FR-019).
+    // Default 0 when DOM missing so Generic/cold-load paths don't NaN.
+    rogerRothIra:   parseFloat((document.getElementById('rogerRothIra')||{}).value)   || 0,
+    rebeccaRothIra: parseFloat((document.getElementById('rebeccaRothIra')||{}).value) || 0,
     rogerStocks: parseFloat(document.getElementById('rogerStocks').value),
     rebeccaStocks: parseFloat(document.getElementById('rebeccaStocks').value),
     cashSavings: parseFloat(document.getElementById('cashSavings').value),
@@ -7973,16 +7998,29 @@ function getInputs() {
   return inp;
 }
 
+// Feature 032 (US1) — Whole Portfolio aggregation.
+// SOURCE-OF-TRUTH: calc/portfolioAggregation.js (unit-tested in
+// tests/unit/portfolioAggregation.test.js). The inline forms below MUST
+// mirror that module exactly. Locked semantics (FR-019): Roth IRA balances
+// are inaccessible until 59.5, so they appear in Locked + NetWorth but NOT
+// in Accessible.
 function calcNetWorth(inp) {
-  return inp.roger401k + inp.rogerStocks + inp.rebeccaStocks + inp.cashSavings + inp.otherAssets;
+  return inp.roger401k
+       + inp.rogerStocks + inp.rebeccaStocks
+       + inp.cashSavings + inp.otherAssets
+       + (inp.rogerRothIra   || 0)
+       + (inp.rebeccaRothIra || 0);
 }
 
 function calcAccessible(inp) {
+  // Roth IRA pool deliberately EXCLUDED — locked until 59.5 (FR-006/FR-019).
   return inp.rogerStocks + inp.rebeccaStocks + inp.cashSavings + inp.otherAssets;
 }
 
 function calcLocked(inp) {
-  return inp.roger401k;
+  // inp.roger401k = roger401kTrad + roger401kRoth (derived above). Add the
+  // two new Roth IRA balances to keep the Locked sub-label honest (FR-005).
+  return inp.roger401k + (inp.rogerRothIra || 0) + (inp.rebeccaRothIra || 0);
 }
 
 // ==================== REALISTIC SSA CALCULATOR ====================
@@ -17581,6 +17619,8 @@ const STATE_KEY = 'fire_dashboard_state';
 const PERSIST_IDS = [
   'annualIncome', 'raiseRate', 'taxRate',
   'roger401k', 'roger401kRoth', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
+  // Feature 032 (US1) — Roth IRA balances
+  'rogerRothIra', 'rebeccaRothIra',
   'returnRate', 'return401k', 'inflationRate', 'swr',
   'monthlySavings', 'contrib401k', 'contrib401kRoth', 'taxTrad', 'empMatch',
   'ssWorkStart', 'ssAvgEarnings', 'ssRebeccaOwn',

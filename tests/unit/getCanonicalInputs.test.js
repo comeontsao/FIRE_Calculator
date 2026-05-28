@@ -97,6 +97,24 @@ test('getCanonicalInputs: rothIraReal defaults to 0 when rogerRothIra/rebeccaRot
   );
 });
 
+// ---------------------------------------------------------------------------
+// Feature 032 — T009 (US1) — Realistic RR defaults: Roger Roth IRA = 0,
+// Rebecca Roth IRA = 59_021 sums into rothIraReal = 59_021. This mirrors the
+// values the DOM exposes on first load (`value="0"` and `value="59021"`).
+// ---------------------------------------------------------------------------
+test('getCanonicalInputs: RR realistic defaults — rogerRothIra=0 + rebeccaRothIra=59021 → rothIraReal=59021 — feature 032 T009', () => {
+  const inp = makeRrInput({
+    rogerRothIra: 0,
+    rebeccaRothIra: 59_021,
+  });
+  const canonical = getCanonicalInputs(inp);
+  assert.equal(
+    canonical.portfolioPrimary.rothIraReal,
+    59_021,
+    `rothIraReal must equal rogerRothIra (0) + rebeccaRothIra (59021) = 59021; got ${canonical.portfolioPrimary.rothIraReal}`,
+  );
+});
+
 test('getCanonicalInputs: Generic shape — rothIraReal defaults to 0 when person1RothIra/person2RothIra missing — feature 032 T004', () => {
   const inp = {
     agePerson1: 36,

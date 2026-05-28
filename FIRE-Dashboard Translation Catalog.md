@@ -593,6 +593,14 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | `assets.person1_401kTrad` | Person 1 Traditional 401K | 成員 1 傳統 401K (稅前) |
 | `assets.person1_401kRoth` | Person 1 Roth 401K | 成員 1 Roth 401K (稅後) |
 
+**Assets (`assets.*`) — Feature 032 Roth IRA accounts (RR-only per FR-018)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `assets.rothIraGroup` | 🔒 Roth IRA | 🔒 Roth IRA |
+| `assets.rogerRothIra` | Roger's Roth IRA | Roger 的 Roth IRA (個人退休帳戶) |
+| `assets.rebeccaRothIra` | Rebecca's Roth IRA | Rebecca 的 Roth IRA (個人退休帳戶) |
+
 **Investment & Savings (`invest.*`) — new keys**
 
 | Key | EN | zh-TW |
