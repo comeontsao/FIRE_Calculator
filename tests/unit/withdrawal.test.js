@@ -20,7 +20,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeWithdrawal } from '../../calc/withdrawal.js';
+import {
+  computeWithdrawal,
+  POOL_KEYS,
+  STRATEGY_ORDER,
+} from '../../calc/withdrawal.js';
 
 const TAX = Object.freeze({
   ordinaryBrackets: Object.freeze([
@@ -38,10 +42,13 @@ const TAX = Object.freeze({
 });
 
 test('withdrawal: three-phase canonical — preUnlock/unlocked/ssActive draws sum correctly', () => {
-  // preUnlock year (age 55): taxable + cash only; no 401(k) access, no SS.
+  // preUnlock year (age 55): taxable + cash + roth(401K) accessible; no trad
+  // (locked), no SS. Feature 032: `roth401kReal` is the renamed legacy field;
+  // `rothIraReal` is the NEW pool (set to 0 in this legacy fixture).
   const pools = {
     trad401kReal: 400_000,
-    rothIraReal: 100_000,
+    roth401kReal: 100_000,
+    rothIraReal: 0,
     taxableStocksReal: 300_000,
     cashReal: 50_000,
   };
@@ -80,9 +87,12 @@ test('withdrawal: three-phase canonical — preUnlock/unlocked/ssActive draws su
 
 test('withdrawal: RMD-active at age 73 forces a minimum Trad draw regardless of strategy', () => {
   // Age 73, trad401kReal > 0. Even a strategy preferring taxable must pull RMD.
+  // Feature 032: `roth401kReal` renamed from legacy `rothIraReal`; the new
+  // Roth IRA pool is 0 here.
   const pools = {
     trad401kReal: 500_000,
-    rothIraReal: 100_000,
+    roth401kReal: 100_000,
+    rothIraReal: 0,
     taxableStocksReal: 500_000,
     cashReal: 100_000,
   };
@@ -106,9 +116,11 @@ test('withdrawal: RMD-active at age 73 forces a minimum Trad draw regardless of 
 
 test('withdrawal: infeasibility returns feasible:false with deficitReal > 0 (FR-013)', () => {
   // Tiny pools, large spend, no SS income — should NOT silently absorb into any pool.
+  // Feature 032: `roth401kReal` renamed from legacy `rothIraReal`.
   const pools = {
     trad401kReal: 1_000,
-    rothIraReal: 1_000,
+    roth401kReal: 1_000,
+    rothIraReal: 0,
     taxableStocksReal: 5_000,
     cashReal: 2_000,
   };
@@ -133,4 +145,46 @@ test('withdrawal: infeasibility returns feasible:false with deficitReal > 0 (FR-
     Math.abs(result.deficitReal - (80_000 - result.netSpendReal)) < 1e-6,
     `deficit identity: deficitReal === annualSpend - netSpend; got ${result.deficitReal} vs ${80_000 - result.netSpendReal}`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Feature 032 — Roth IRA pool wiring (T002, T003).
+// ---------------------------------------------------------------------------
+
+test('withdrawal: POOL_KEYS contains `rothIra` at index 3 (immediately after `roth`) — feature 032 T002', () => {
+  assert.ok(Array.isArray(POOL_KEYS) || POOL_KEYS instanceof Array || typeof POOL_KEYS[Symbol.iterator] === 'function',
+    'POOL_KEYS must be iterable / array-like');
+  const keys = Array.from(POOL_KEYS);
+  assert.deepEqual(
+    keys,
+    ['cash', 'taxable', 'roth', 'rothIra', 'trad'],
+    `POOL_KEYS must be exactly ['cash','taxable','roth','rothIra','trad']; got ${JSON.stringify(keys)}`,
+  );
+  assert.equal(keys[3], 'rothIra', 'rothIra must sit at index 3 (immediately after roth)');
+});
+
+test('withdrawal: every STRATEGY_ORDER entry contains `rothIra` immediately after `roth` — feature 032 T003', () => {
+  const strategies = Object.keys(STRATEGY_ORDER);
+  assert.ok(strategies.length >= 1, 'STRATEGY_ORDER must have at least one strategy');
+
+  for (const strategyName of strategies) {
+    const order = Array.from(STRATEGY_ORDER[strategyName]);
+    const rothIdx = order.indexOf('roth');
+    const rothIraIdx = order.indexOf('rothIra');
+    assert.notEqual(
+      rothIdx,
+      -1,
+      `strategy "${strategyName}" must include 'roth'; got ${JSON.stringify(order)}`,
+    );
+    assert.notEqual(
+      rothIraIdx,
+      -1,
+      `strategy "${strategyName}" must include 'rothIra'; got ${JSON.stringify(order)}`,
+    );
+    assert.equal(
+      rothIraIdx,
+      rothIdx + 1,
+      `strategy "${strategyName}" must place 'rothIra' IMMEDIATELY after 'roth'; got ${JSON.stringify(order)} (roth@${rothIdx}, rothIra@${rothIraIdx})`,
+    );
+  }
 });

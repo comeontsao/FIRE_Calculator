@@ -50,7 +50,7 @@ const fixture = Object.freeze({
 
     portfolioPrimary: Object.freeze({
       trad401kReal: 500_000,
-      rothIraReal: 200_000,
+      roth401kReal: 200_000,
       taxableStocksReal: 800_000,
       cashReal: 100_000,
       annualContributionReal: 0,

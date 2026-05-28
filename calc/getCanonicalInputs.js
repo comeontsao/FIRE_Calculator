@@ -172,11 +172,21 @@ export function getCanonicalInputs(inp) {
   // -------------------------------------------------------------------------
   // Primary portfolio.
   // -------------------------------------------------------------------------
-  // Per data-model §1 Portfolio note: Roth 401(k) pool merges into rothIraReal
-  // (they behave identically for withdrawal ordering). Cash pool = cashSavings
-  // + otherAssets (inline convention).
+  // Feature 032 rename: the canonical field formerly called `rothIraReal`
+  // (which actually held the Roth 401K balance) is now `roth401kReal`. A
+  // NEW canonical field `rothIraReal` represents the actual individual
+  // Roth IRA pool (sum of rogerRothIra + rebeccaRothIra in RR, or
+  // person1RothIra + person2RothIra in Generic; defaults to 0). See
+  // specs/032-roth-ira-accounts/research.md §Q1.
+  // Cash pool = cashSavings + otherAssets (inline convention).
   const trad401k = inp.roger401kTrad ?? inp.person1_401kTrad ?? 0;
   const roth401k = inp.roger401kRoth ?? inp.person1_401kRoth ?? 0;
+  const rothIraPrimary =
+    (inp.rogerRothIra ?? inp.person1RothIra ?? 0)
+    + (inp.rebeccaRothIra ?? inp.person2RothIra ?? 0);
+  const rothIraContribPrimary =
+    (inp.rogerRothIraContrib ?? 0)
+    + (inp.rebeccaRothIraContrib ?? 0);
   const taxablePrimary = inp.rogerStocks ?? inp.person1Stocks ?? 0;
   const cashPrimary = (inp.cashSavings ?? 0) + (inp.otherAssets ?? 0);
   const monthlySavings = inp.monthlySavings ?? 0;
@@ -189,7 +199,9 @@ export function getCanonicalInputs(inp) {
 
   const portfolioPrimary = Object.freeze({
     trad401kReal: trad401k,
-    rothIraReal: roth401k,
+    roth401kReal: roth401k,
+    rothIraReal: rothIraPrimary,
+    rothIraContribReal: rothIraContribPrimary,
     taxableStocksReal: taxablePrimary,
     cashReal: cashPrimary,
     annualContributionReal: annualContribPrimary,
@@ -205,7 +217,9 @@ export function getCanonicalInputs(inp) {
     const taxableSecondary = inp.rebeccaStocks ?? inp.person2Stocks ?? 0;
     portfolioSecondary = Object.freeze({
       trad401kReal: 0,
+      roth401kReal: 0,
       rothIraReal: 0,
+      rothIraContribReal: 0,
       taxableStocksReal: taxableSecondary,
       cashReal: 0,
       annualContributionReal: 0,

@@ -14,7 +14,7 @@
  *   Portfolios (all zero on Generic cold load — infeasibility-by-design
  *   becomes feasibility-at-65 once the full signed simulator runs; see
  *   baseline-rr-inline.md §B "Analytical expectation vs observed"):
- *     portfolioPrimary.trad401kReal / rothIraReal / taxableStocksReal /
+ *     portfolioPrimary.trad401kReal / roth401kReal / taxableStocksReal /
  *       cashReal = 0
  *     portfolioPrimary.annualContributionReal = $500×12 + $3_000 + $1_500
  *                                             = $10_500
@@ -75,14 +75,14 @@ const fixture = Object.freeze({
 
     portfolioPrimary: Object.freeze({
       trad401kReal: 0,
-      rothIraReal: 0,
+      roth401kReal: 0,
       taxableStocksReal: 0,
       cashReal: 0,
       annualContributionReal: 10_500, // monthly 6k + trad 3k + match 1.5k
     }),
     portfolioSecondary: Object.freeze({
       trad401kReal: 0,
-      rothIraReal: 0,
+      roth401kReal: 0,
       taxableStocksReal: 0,
       cashReal: 0,
       annualContributionReal: 0,
