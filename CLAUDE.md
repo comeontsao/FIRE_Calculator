@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
-**Active feature**: 031 (lifecycle-strategy-parity) — **IMPLEMENTATION COMPLETE — AWAITING BROWSER SMOKE (T030)** on branch `031-lifecycle-strategy-parity` (2026-05-27). All 5 user stories shipped via multi-agent dispatch (US1/US2/US3 sequential single-owner on the shared recalc pipeline; US4/US5 parallel in isolated worktrees, cherry-picked). **Tests: 614/614 unit** (606 baseline + 6 tooltip-frame + 2 cash-sweep structural) + **6/6 live Playwright drag E2E**; review gates 6 (strategyMatrix+spendingFloorPass) & 7 (modeObjectiveOrthogonality) green; lockstep byte-identical (`_applyCashSweep` 7× both files, tooltip helper 3× both). Commits: US1 `41eba96`, US3 `c8a6ee5`, US2 `dbe9656`, US4 `6cb1ecc`, US5 `adde35c`. Two follow-up fixes from live diagnosis (commits `563b0c7` tooltip Book-Value fallback — US4's fallback branch rendered real-$ while bars were Book-Value; `7f13067` apples-to-apples `_invariantA` + clamp-then-sweep parity). **Tests now 622/622.** Confirmed: US5's sweep did NOT amplify the signed-vs-chart drift (sweep is cash-driven, cash never negative); the 8.4% gap is the by-design Feature-015 signed-vs-clamp difference, now correctly NOT flagged. Deferred to backlog: B-031-1 (re-rank on override-commit), B-031-2 (pill class/age text), B-031-3 (audit chart-sim omits mortgage strategy threading). Merge gate: T030 manual browser smoke per `quickstart.md`. Root cause CONFIRMED (user's hypothesis): the Lifecycle chart renders via the `chartState.onChange` listener fired inside `_setCalculatedFire` (RR `FIRE-Dashboard.html:13067`) **before** `scoreAndRank` populates `_lastStrategyResults` (RR `:13081`), and — unlike the Withdrawal Strategy chart, which gets a post-rank re-render (RR `:13122`) — receives **no post-rank re-render**, so it silently draws the **default bracket-fill** strategy while the Withdrawal Strategy chart splices in the **winner**'s per-year rows. The FIRE-marker drag (RR `:14919`) never re-ranks for the previewed age. Separate display bug: the Withdrawal Strategy tooltip mixes nominal Book-Value bars (`r.wTradBookValue` RR `:14429`) with real-$ totals (RR `:14542/:14548/:14550`), so $101.7K+$100.3K ≠ $103.7K. **Clarifications locked 2026-05-27**: (1) the Safe/Exact/DWZ verdict MUST evaluate the **displayed winner** (not pinned bracket-fill at RR `:13024-13029`); stop `_invariantA` suppression (`calc/calcAudit.js:711-714`); (2) tooltip frame-fix included; (3) close the cash-sweep gap (add `_applyCashSweep` to `projectFullLifecycle`'s retirement loop after RR `:10843` — other 5 sim sites already sweep). **Fix shape**: one resolved winner consumed by all surfaces (Constitution III) — add post-rank `renderGrowthChart` after RR `:13128` mirroring `renderRothLadder` at `:13122`; thread winner into drag-preview; verdict via `getActiveChartStrategyOptions()`; one-frame tooltip; lockstep to Generic (~+388-line offset). Constitution check: PASS on all 9 (III directly restored), no Complexity Tracking entries. Spec [`spec.md`](./specs/031-lifecycle-strategy-parity/spec.md), Plan [`plan.md`](./specs/031-lifecycle-strategy-parity/plan.md), Research [`research.md`](./specs/031-lifecycle-strategy-parity/research.md), Data Model [`data-model.md`](./specs/031-lifecycle-strategy-parity/data-model.md), Contract [`contracts/lifecycle-strategy-parity.contract.md`](./specs/031-lifecycle-strategy-parity/contracts/lifecycle-strategy-parity.contract.md), Quickstart [`quickstart.md`](./specs/031-lifecycle-strategy-parity/quickstart.md). Predecessor 030 (cash-sweep-stocks) merged to main 2026-05-27 via merge commit `0f0c67b` (browser smoke skipped per user).
+**Active feature**: 031 (lifecycle-strategy-parity) — **IMPLEMENTATION COMPLETE — AWAITING BROWSER SMOKE (T030)** on branch `031-lifecycle-strategy-parity` (2026-05-27). Made the Lifecycle chart, FIRE verdict gate, drag-preview, and tooltip all consume the single resolved withdrawal-strategy winner (Constitution III), plus closed the `projectFullLifecycle` cash-sweep gap and fixed a Book-Value tooltip frame mix. **Tests 622/622 unit + 6/6 Playwright drag E2E**; review gates 6 & 7 green; lockstep byte-identical to Generic. Key commits: US1 `41eba96`, US3 `c8a6ee5`, US2 `dbe9656`, US4 `6cb1ecc`, US5 `adde35c`, follow-ups `563b0c7` + `7f13067`. Deferred to backlog: B-031-1/2/3. Merge gate: T030 manual browser smoke per `quickstart.md`. Full root-cause + locked-decision detail in spec docs: [`spec.md`](./specs/031-lifecycle-strategy-parity/spec.md), [`plan.md`](./specs/031-lifecycle-strategy-parity/plan.md), [`research.md`](./specs/031-lifecycle-strategy-parity/research.md), [`data-model.md`](./specs/031-lifecycle-strategy-parity/data-model.md), [`contract`](./specs/031-lifecycle-strategy-parity/contracts/lifecycle-strategy-parity.contract.md), [`quickstart.md`](./specs/031-lifecycle-strategy-parity/quickstart.md). The displayed-strategy gate rule is codified under Process Lessons below.
 
-**Prior feature**: 030 (cash-sweep-stocks) — merged to main 2026-05-27 (`0f0c67b`). Three-engineer parallel dispatch (Backend + Frontend + QA agents) implemented user-requested opt-in cash-sweep behavior closing the unrealistic "$354K cash at age 100" pattern. Locked semantics: default OFF (snapshot reproducibility preserved), year-0 starting cash preserved, year-1+ standard threshold rule, one-way (cash → stocks), real-$ frame, threshold default $10K, sweep AFTER all flows (Constitution VIII preserved). Shipped: (a) new `calc/cashSweep.js` UMD helper (`_applyCashSweep` pure function); (b) 6 simulator integration sites (5 inline in HTMLs + 1 in `calc/accumulateToFire.js`); (c) new `_invariantF` (`simulator-cash-sweep-parity`) audit invariant + wiring; (d) Plan-tab Investment-section UI (toggle + threshold + visibility handler) mirroring `pviCashflowOverrideEnabled` pattern; (e) `localStorage` persistence; (f) 4 i18n keys × EN+zh-TW × 2 HTMLs = 16 translation entries + Translation Catalog rows. **Tests**: 587/587 unit (548 baseline + 14 helper + 11 simulator integration + 6 RR fixture + 8 audit invariant). Constitution review-gates 6 + 7 pass (strategyMatrix + modeObjectiveOrthogonality). E2E spec written (4 cases), executes against live server during browser smoke. Constitution check: PASS on all 9 principles, no Complexity Tracking entries. **Lockstep audit: RR +127 / Generic +127, 0-line delta** (byte-identical insertions across all 6 simulator call sites + UI + i18n). Merge gate: T036 manual browser smoke per `quickstart.md` (verify age-100 cash drops from $354K → $10K with toggle ON; year-0 cash = $80K preserved; cycle threshold values; toggle EN↔中文; reload persistence). Spec [`spec.md`](./specs/030-cash-sweep-stocks/spec.md), Plan [`plan.md`](./specs/030-cash-sweep-stocks/plan.md), Research [`research.md`](./specs/030-cash-sweep-stocks/research.md), Data Model [`data-model.md`](./specs/030-cash-sweep-stocks/data-model.md), Contract [`contracts/cash-sweep.contract.md`](./specs/030-cash-sweep-stocks/contracts/cash-sweep.contract.md), Quickstart [`quickstart.md`](./specs/030-cash-sweep-stocks/quickstart.md), Closeout [`CLOSEOUT.md`](./specs/030-cash-sweep-stocks/CLOSEOUT.md). Predecessor 029 (withdrawal-spend-parity) merged to main 2026-05-11 via merge commit `ea431f7`.
+**Prior feature**: 030 (cash-sweep-stocks) — merged to main 2026-05-27 (`0f0c67b`, browser smoke skipped per user). Opt-in cash-sweep (cash → stocks above a threshold) closing the unrealistic age-100 cash pile-up. Locked semantics: default OFF, year-0 cash preserved, one-way, real-$ frame, $10K default threshold, sweep AFTER all flows. Shipped `calc/cashSweep.js` (`_applyCashSweep`), 6 simulator sites, `_invariantF` audit invariant, Plan-tab UI + localStorage + i18n. Tests 587/587. Detail in [`CLOSEOUT.md`](./specs/030-cash-sweep-stocks/CLOSEOUT.md) and sibling spec docs. Predecessor 029 merged 2026-05-11 (`ea431f7`).
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
@@ -290,15 +290,9 @@ every relevant `calc/*.js` / `tests/**` file that might use them. Count call
 sites. Confirm every caller is handled by the refactor (either rewired,
 rewritten, or also scheduled for deletion in the same commit).
 
-**Why:** Feature 004 (`specs/004-html-canonical-swap/ABANDONED.md`) attempted
-to delete `isFireAgeFeasible` without first auditing that its caller
-`findMinAccessibleAtFireNumerical` was shimmed. The deletion stopped short and
-the refactor left an inconsistent state that cascaded into the browser-level
-NaN issue.
+**Why:** Feature 004 (`specs/004-html-canonical-swap/ABANDONED.md`) deleted `isFireAgeFeasible` without auditing its shimmed caller `findMinAccessibleAtFireNumerical`; the half-done refactor cascaded into a browser NaN issue.
 
-**How to apply:** Before every `Edit` that deletes a function, grep the whole
-repo for the function name. Document the caller count in the commit message.
-If any caller is out-of-scope, stop and expand the spec.
+**How to apply:** Before every `Edit` that deletes a function, grep the whole repo for the function name; document the caller count in the commit message. If any caller is out-of-scope, stop and expand the spec.
 
 ### Shim defense-in-depth
 
@@ -315,15 +309,9 @@ four of:
 4. Have a Node unit test in `tests/unit/shims.test.js` that stubs the canonical
    helper to throw and asserts the fallback return + the `[shim-name]` prefix.
 
-**Why:** Feature 004 shipped green CI (smoke harness + unit tests) but the
-browser showed a full NaN cascade. The cause was that the shim's `try/catch`
-was working — but its fallback VALUE (`NaN`) was cascading visually through
-the DOM. The smoke harness tested `adapter → canonical` but never exercised
-`shim → canonical`. Closing this gap is the central discipline of feature 005.
+**Why:** Feature 004 shipped green CI but the browser showed a NaN cascade — the shim's `try/catch` worked, but its fallback VALUE (`NaN`) cascaded through the DOM. The harness tested `adapter → canonical`, never `shim → canonical`.
 
-**How to apply:** Every commit that changes shim behavior MUST also touch the
-shim unit test in the same commit. If you can't write the test, you don't
-understand the fallback contract well enough to ship the code.
+**How to apply:** Every commit that changes shim behavior MUST touch the shim unit test in the same commit. If you can't write the test, you don't understand the fallback contract well enough to ship the code.
 
 ### Browser smoke before claiming a feature "done"
 
@@ -358,21 +346,9 @@ Each mode has its own contract:
   trajectory enforcement; intermediate years can dip arbitrarily.
 - **DieWithZero** — `endBalance ≥ 0` at plan age. Targets exactly $0 surplus.
 
-**The non-negotiable rule:** the gate MUST evaluate the SAME simulated
-lifecycle that the chart renders. The active strategy (feature 008's
-`_lastStrategyResults.winnerId`, or `_previewStrategyId` during hover) is the
-last factor before chart creation. If the gate evaluates a different strategy
-than the chart, the verdict drifts out of sync with what the user sees — e.g.,
-"On Track — FIRE at 48" displayed alongside a chart that visibly depletes to
-$0 at age 70.
+**The non-negotiable rule:** the gate MUST evaluate the SAME simulated lifecycle that the chart renders. The active strategy (feature 008's `_lastStrategyResults.winnerId`, or `_previewStrategyId` during hover) is the last factor before chart creation. If the gate evaluates a different strategy than the chart, the verdict drifts out of sync — e.g., "On Track — FIRE at 48" alongside a chart that visibly depletes to $0 at age 70.
 
-**Why:** before the strategy-aware fix, `isFireAgeFeasible` always called
-`projectFullLifecycle(inp, annualSpend, fireAge, true)` with no `options`,
-which silently used the bracket-fill-smoothed default. When feature 008's
-strategy ranking picked a non-default winner (e.g., `tax-optimized-search`),
-the chart rendered the winner's trajectory while the verdict gate kept
-checking bracket-fill. Bracket-fill happened to pass the buffer floor for
-that scenario; the actually-displayed strategy did not.
+**Why:** before the fix, `isFireAgeFeasible` called `projectFullLifecycle` with no `options`, silently using the bracket-fill default. When feature 008's ranking picked a non-default winner, the chart drew the winner while the gate checked bracket-fill — which passed the floor when the displayed strategy did not.
 
 **How to apply:**
 
@@ -393,25 +369,13 @@ that scenario; the actually-displayed strategy did not.
    `projectFullLifecycle` is unavailable. If the chart and the signed sim ever
    disagree on end-balance sign, that is its own bug (separate from this rule).
 
-**Test for regression:** the project's TEMP debug button at the bottom-right
-of both HTML files (when present) emits a `feasibilityProbe` block that
-records `isFeasible_safe` alongside `defaultChartViolations` and
-`overrideChartViolations`. The invariant: `isFeasible_safe === true` ⇒
-`overrideChartViolations === 0` (i.e., the strategy actually being drawn
-passes the buffer floor everywhere). Any divergence is a regression of this
-rule.
+**Test for regression:** the TEMP debug button (when present) emits a `feasibilityProbe` recording `isFeasible_safe`, `defaultChartViolations`, `overrideChartViolations`. Invariant: `isFeasible_safe === true` ⇒ `overrideChartViolations === 0`. Any divergence is a regression.
 
 ### Mortgage strategy threading must follow the options-override pattern
 
-Extends the strategy-parity rule above to mortgage strategy. Feature 018 ships
-a `getActiveMortgageStrategyOptions()` helper alongside the existing
-`getActiveChartStrategyOptions()` — same shape, same call-site discipline.
+Extends the strategy-parity rule to mortgage strategy. Feature 018 ships `getActiveMortgageStrategyOptions()` alongside `getActiveChartStrategyOptions()` — same shape, same call-site discipline.
 
-The non-negotiable rule: every code path that runs `projectFullLifecycle`
-(chart render, FIRE-feasibility probe, strategy ranker, audit recompute,
-copy-debug snapshot) MUST consume the SAME `mortgageStrategyOverride` value.
-Mismatches produce drift between what the user sees on the chart and what
-the verdict gate evaluates — exactly the failure mode of feature 014.
+The non-negotiable rule: every code path that runs `projectFullLifecycle` (chart render, FIRE-feasibility probe, strategy ranker, audit recompute, copy-debug snapshot) MUST consume the SAME `mortgageStrategyOverride`. Mismatches reproduce the feature-014 drift failure.
 
 **Apply:** when adding a new caller of `projectFullLifecycle`, audit it
 against this rule. Use `getActiveMortgageStrategyOptions()` (don't read
@@ -427,16 +391,9 @@ stockGainPct)`). The trigger fires on `investedI >= actualDrawdown`, not
 
 ### Calc-contract field-semantics extensions need test audits BEFORE landing
 
-When a calc module's contract field gains new semantics mid-feature (here:
-LTCG gross-up extension to `LumpSumEvent`), pre-existing tests that asserted
-on the OLD contract (e.g., `paidOff` equivalence to brokerage delta) become
-silent landmines. Feature 018's mid-implementation pause caught this only
-because the resume session ran tests as the first action.
+When a calc-contract field gains new semantics mid-feature (here: LTCG gross-up on `LumpSumEvent`), pre-existing tests asserting on the OLD contract become silent landmines. Feature 018 caught this only because the resume session ran tests first.
 
-**Apply:** any time a calc-contract field gains new semantics, run a tests
-audit BEFORE landing the calc change. Grep the field name across all test
-files; for each hit, decide whether the test still holds under the new
-semantics or needs updating in the same change set.
+**Apply:** when a calc-contract field gains new semantics, run a tests audit BEFORE landing the change. Grep the field name across all test files; for each hit, decide whether the test still holds or needs updating in the same change set.
 
 **Sibling-field beats overloading.** When a v2 field is given new v3 meaning,
 prefer adding a sibling field (`actualDrawdown`) over redefining the
@@ -445,57 +402,19 @@ diff-of-record clean.
 
 ### Audit-harness wiring needs persona-aware DOM stubs and explicit constants
 
-Two systemic harness gaps surfaced ~250 false-positive findings during
-feature 020's first audit run. Both are sandbox-only — the calc layer is
-unaffected — but they teach a discipline for any future harness work.
+Two sandbox-only harness gaps surfaced ~250 false-positives in feature 020's first audit run (calc layer unaffected).
 
-**Gap 1 — static `DOC_STUB` returns wrong values for persona-driven fields.**
-Any HTML helper that reads from `document.getElementById(<id>).value` for a
-field that varies by persona (`terminalBuffer`, `safetyMargin`, `bufferUnlock`,
-`bufferSS`, `irmaaThreshold`, etc.) must have its DOM stub built **per
-persona**, not cached at sandbox-factory time. A static stub of
-`terminalBuffer: '0'` made Exact-mode trivially feasible at currentAge for
-all 92 personas — ~91 false-positive A1 + B2 findings. Fix pattern: bind
-the doc stub inside the per-persona `boundFactory` closure and read from
-`persona.inp[<id>]` with a sane fallback.
+**Gap 1 — static `DOC_STUB` returns wrong values for persona-driven fields.** Any helper reading `document.getElementById(<id>).value` for a persona-varying field (`terminalBuffer`, `safetyMargin`, `bufferUnlock`, `bufferSS`, `irmaaThreshold`, …) needs its DOM stub built **per persona**, not cached at factory time. A static `terminalBuffer: '0'` made Exact-mode trivially feasible for all 92 personas. Fix: bind the doc stub inside the per-persona `boundFactory` closure, reading `persona.inp[<id>]` with a fallback.
 
-**Gap 2 — top-level constants in HTML need explicit `OVERRIDES` redeclaration.**
-The harness's brace-balanced extractor only captures function declarations,
-not `const`s. Top-level constants like `SAFE_TERMINAL_FIRE_RATIO = 0.20`
-(declared at line 8889 RR) must be redeclared in the harness `OVERRIDES`
-code string. Without it, every Safe-mode `findFireAgeNumerical` call threw
-inside the sandbox, and Safe-dependent invariants silently skipped. Fix
-pattern: add `var <CONST_NAME> = <value>;` to the `OVERRIDES` string when
-adding a new audit invariant that exercises a code path reading the constant.
+**Gap 2 — top-level HTML constants need explicit `OVERRIDES` redeclaration.** The extractor captures function declarations, not `const`s. Constants like `SAFE_TERMINAL_FIRE_RATIO = 0.20` must be redeclared as `var <NAME> = <value>;` in the `OVERRIDES` string, else Safe-mode `findFireAgeNumerical` throws and Safe invariants silently skip.
 
-**Apply:** when adding a new persona axis or a new invariant family that
-exercises a previously-unrun code path, audit (a) every `document.getElementById`
-call in the helpers it touches and confirm the stub serves the right
-persona-driven value, AND (b) every top-level `const` referenced by those
-helpers is present in `OVERRIDES`. The cost of skipping these checks is
-hours of false-positive triage.
+**Apply:** when adding a persona axis or an invariant family hitting a previously-unrun path, audit (a) every `document.getElementById` call serves the right persona value, AND (b) every top-level `const` it references is in `OVERRIDES`.
 
 ### Multi-agent dispatch produces lockstep results when each agent gets the contract path
 
-Wave 1 of feature 020's resume run dispatched 5 parallel agents (Frontend
-Wave 2 UI, Backend Phase 4 module, two QA Engineers for Phase 5–8, and a
-Research Agent for Phase 9). All 5 succeeded on first dispatch with no
-re-work needed. The pattern that made this work:
+Feature 020's resume run dispatched 5 parallel agents (UI, Backend, 2 QA, Research) that all succeeded first-try. The pattern: each prompt named (1) the exact contract/spec doc to read first, (2) the EXACT files to edit and to leave alone, (3) the test suite to run before declaring done; (4) agents touched disjoint files; (5) Manager committed at the end.
 
-1. Each agent prompt named the exact contract / spec doc(s) to read first.
-2. Each agent prompt named the EXACT files to edit (and which to leave alone).
-3. Each agent prompt named the test suite to run before declaring done.
-4. Independent agents touched disjoint files (UI agent → HTMLs; Backend →
-   `calc/*.js` + new test file; QA1 → `mode-ordering.test.js` +
-   `end-state-validity.test.js`; QA2 → `cross-chart-consistency.test.js` +
-   `drag-invariants.test.js`; Research → `withdrawal-strategy-survey.md`).
-5. Each agent reported uncommitted work; Manager committed at the end.
-
-**Apply:** when a feature has phase parallelism (e.g., calc + UI + tests +
-research), prefer multi-agent parallel dispatch over sequential single-agent
-work. The throughput gain is 4–5× for a multi-phase feature. The risk is
-file-scope conflicts; mitigate by reviewing the file ownership table per
-agent before dispatching.
+**Apply:** when a feature has phase parallelism (calc + UI + tests + research), prefer multi-agent parallel dispatch (4–5× throughput). Mitigate file-scope conflicts by reviewing the ownership table per agent before dispatching.
 
 ## Spec-Driven Development
 
