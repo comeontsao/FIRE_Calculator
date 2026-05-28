@@ -137,6 +137,37 @@ HTML_PATHS.forEach(({ name, file }) => {
     assertSweepFollowsCompounding(body, `${name} computeWithdrawalStrategy`, 1);
   });
 
+  // Feature 031 US5 (T023): projectFullLifecycle's RETIREMENT loop must call
+  // _applyCashSweep after all flows — the SIXTH simulator sweep site, closing
+  // the gap noted in specs/031-lifecycle-strategy-parity/research.md (clause
+  // C5 / FR-006). Unlike the other five inline simulators, projectFullLifecycle
+  // compounds cash via `portfolioCash = Math.max(0, portfolioCash) * 1.005`
+  // (NOT `pCash *= 1.005`), so the generic pCash-compounding regex does not
+  // apply here. We assert (a) the body contains an _applyCashSweep call, and
+  // (b) that call follows the retirement-phase `portfolioCash … * 1.005`
+  // cash-interest compounding line (the canonical year-end point).
+  test(`${name}: projectFullLifecycle retirement loop has _applyCashSweep after portfolioCash compounding`, () => {
+    const src = fs.readFileSync(file, 'utf8');
+    const body = extractFunctionBody(src, 'projectFullLifecycle');
+    const sweepCount = (body.match(/_applyCashSweep\s*\(/g) || []).length;
+    assert.ok(
+      sweepCount >= 1,
+      `${name} projectFullLifecycle: expected ≥1 _applyCashSweep call, found ${sweepCount}`,
+    );
+    // The retirement cash-interest line: `portfolioCash = Math.max(0, portfolioCash) * 1.005;`
+    const compoundRe = /portfolioCash\s*=\s*Math\.max\(\s*0\s*,\s*portfolioCash\s*\)\s*\*\s*1\.005/g;
+    let pairs = 0;
+    let m;
+    while ((m = compoundRe.exec(body)) !== null) {
+      const after = body.slice(m.index, m.index + 800);
+      if (/_applyCashSweep\s*\(/.test(after)) pairs++;
+    }
+    assert.ok(
+      pairs >= 1,
+      `${name} projectFullLifecycle: expected ≥1 (portfolioCash*1.005 … _applyCashSweep) pair, found ${pairs}`,
+    );
+  });
+
   test(`${name}: i18n catalog contains all 4 plan.cashSweep* keys in EN and zh-TW`, () => {
     const src = fs.readFileSync(file, 'utf8');
     const requiredKeys = [

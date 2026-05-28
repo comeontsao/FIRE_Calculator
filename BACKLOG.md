@@ -623,3 +623,15 @@ Investigated in feature 021 US7 (`commit 09c547d`). Three cross-cutting risks su
 ### ~~B-020-6. Audit harness drives in CI~~ — RESOLVED in feature 021 (2026-05-01)
 
 `.github/workflows/audit.yml` shipped at commit `85af431`. Runs validation-audit harness on every push + PR. Posts finding counts as PR comment via `gh pr comment`. CRITICAL fails the build; HIGH emits warning. 10-minute timeout. awk-based finding-count parser sums across multiple harness summary lines (handles 6+ test files).
+
+### B-031-1. Strategy ranker not re-run on the chartState override-commit path
+
+**Surfaced during feature 031 (US2), 2026-05-27.** When a FIRE-age change is committed via `chartState.setOverride` (FIRE-marker drag release, and likely the reset button + mode switches too), `recalcAll` does NOT run, so `scoreAndRank` is not re-invoked for the new committed age — the surfaces stay mutually consistent but on the winner ranked at the *previous* age until the next full recalc. Feature 031 made the live preview consistent (pins to bracket-fill during drag) and the per-recalc surfaces winner-consistent (US1 post-rank render), but the broader "re-rank the winner on every override gesture" is a pre-existing architectural item out of 031's scope. Pointer: drag commit path in `recalcAll`/`chartState` wiring; instrumentation in US2 showed the re-rank counter stays 0 on the confirm path.
+
+### B-031-2. Verdict pill *class/age text* still uses the bracket-fill FIRE age
+
+**Surfaced during feature 031 (US3), 2026-05-27.** US3 made the feasibility *flag* (KPI cards + deficit banner) winner-aware, and the feature-028 stop-gap flips the pill on-track→behind when the winner fails. But the pill's displayed FIRE-age number stays bracket-fill (intentionally — making it winner-based would reintroduce the circularity US3 avoided). If a future feature wants the pill *text/class* fully winner-derived, it needs a deliberate design that avoids the age-search circularity. Confirm current behavior in the T030 browser smoke.
+
+### B-031-3. Audit chart-sim omits mortgage strategy (signed-vs-chart end-balance threading)
+
+**Surfaced during feature 031 follow-up diagnosis, 2026-05-27.** `calc/calcAudit.js` builds its canonical `ctx.chart` via `getActiveChartStrategyOptions()` (~:1054), which threads strategy+θ but NOT `mortgageStrategyOverride`. So under `invest-lump-sum`, the audit's chart-sim runs `invest-keep-paying` and can drift from the *displayed* lifecycle chart. Separately, the residual signed-vs-clamp end-balance dollar difference (signed sim allows negative pools for Feature-015 insolvency detection; chart clamps to ≥0) is by-design and now correctly NOT flagged by `_invariantA` (031 follow-up made the invariant apples-to-apples). Fully eliminating the dollar drift would require clamping the signed sim — which destroys insolvency detection and flips verdicts — so it's deliberately deferred. A proper fix = thread `getActiveMortgageStrategyOptions()` into the audit's chartOpts; relates to the feature-018 mortgage-threading lesson. Also note `tests/meta/frame-coverage.test.js` sits at 90.28% (pre-existing, not in the `test:unit` gate).

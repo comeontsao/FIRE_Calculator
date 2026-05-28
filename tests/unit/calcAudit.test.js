@@ -314,27 +314,130 @@ test('T7b (NEW Feature 024 / B-023-6): signed-sim negative + chart-sim positive 
 });
 
 // ----------------------------------------------------------------------------
-// T8 — Cross-val A expected divergence
+// T8 — Cross-val A divergence under a non-bracket-fill winner
+//
+// UPDATED Feature 031 (US3 / T014, T016): the signed sim is now strategy-aware
+// (it is threaded with the active winner's options, calcAudit.js:669-685) AND
+// the live verdict re-evaluates on the displayed winner (HTML US3 change). Both
+// surfaces therefore consume the SAME winner, so a genuine end-balance
+// divergence under a non-bracket-fill winner is NO LONGER auto-expected via the
+// old `strategyMismatch → expected = true` suppression — it is a genuine signal
+// that the strategy-options threading or the two sims' math have drifted. It
+// must flag (expected: false), per contract C3:
+//   "_invariantA MUST NOT mark a lifecycle-vs-signed end-balance divergence as
+//    `expected` once both consume the winner; genuine divergence MUST flag."
 // ----------------------------------------------------------------------------
 
-test('T8: same endBalance mismatch with tax-optimized-search winner is expected: true', () => {
+test('T8 (UPDATED Feature 031): genuine endBalance divergence under tax-optimized-search winner FLAGS (expected: false)', () => {
   const fakeChart = makeStockChart();
-  fakeChart[fakeChart.length - 1].total = 200000;
+  fakeChart[fakeChart.length - 1].total = 200000; // chart sim under winner
 
   const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
   // Mark the winning row as the actual winner.
   lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
 
   const snap = assembleAuditSnapshot(buildOptions({
-    signedLifecycleEndBalance: () => ({ endBalance: 100000 }),
+    signedLifecycleEndBalance: () => ({ endBalance: 100000 }), // signed sim under winner
     projectFullLifecycle: () => fakeChart,
     lastStrategyResults: lsr,
   }));
 
   const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
-  assert.ok(warn, 'expected endBalance-mismatch warning');
-  assert.equal(warn.expected, true,
-    'when active strategy != bracket-fill-smoothed, signed-sim mismatch is expected');
+  assert.ok(warn, 'expected endBalance-mismatch warning (genuine $100K divergence)');
+  assert.equal(warn.expected, false,
+    'Feature 031: once both sims consume the winner, a non-bracket-fill divergence is a genuine signal, not auto-expected');
+});
+
+test('T8b (NEW Feature 031): genuine AGREEMENT under a non-bracket-fill winner emits NO endBalance-mismatch warning', () => {
+  // Both sims consume the winner and agree within tolerance → no warning at all.
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 200000;
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    signedLifecycleEndBalance: () => ({ endBalance: 200000 }), // agrees with chart sim
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.strictEqual(warn, undefined,
+    'Feature 031: genuine agreement under the winner must NOT emit an endBalance-mismatch warning');
+});
+
+// ----------------------------------------------------------------------------
+// T8c (NEW Feature 031 — part 1 apples-to-apples): under a non-bracket-fill
+// winner, when BOTH sims are feasible (>= 0) AND the signed sim's trajectory
+// dipped negative somewhere (any minBalancePhase < 0), the dollar-amount delta
+// is the documented Feature-015 clamp-vs-signed-debt artifact (amplified by the
+// post-flow cash-sweep operating on clamped pools in the chart vs unclamped
+// pools in the signed sim). That difference is BY DESIGN — not a strategy-
+// threading bug — so it MUST be marked expected:true and suppressed.
+//
+// This is the corrected criterion that stops the user-reported false positive
+// (signed $554K vs chart $604K, 8.4%, winner=aggressive-bracket-fill, exact,
+// cashSweepEnabled). Both feasible + signed dipped negative ⇒ clamp artifact.
+// ----------------------------------------------------------------------------
+
+test('T8c (NEW Feature 031): winner + both feasible + signed-sim dipped negative → clamp artifact SUPPRESSED', () => {
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 604637; // chart-sim clamped end balance
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    // Signed sim diverges by 8.4% AND records a negative-pool dip mid-trajectory:
+    // that negative dip is the clamp-path evidence that explains the delta.
+    signedLifecycleEndBalance: () => ({
+      endBalance: 554038,
+      minBalancePhase1: 12000,
+      minBalancePhase2: -45000, // dipped negative — signed debt the chart clamps
+      minBalancePhase3: 8000,
+    }),
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.strictEqual(warn, undefined,
+    'Feature 031: under a winner, both feasible + signed dipped negative is the by-design clamp/sweep artifact — must be suppressed, NOT flagged as a threading bug');
+});
+
+// ----------------------------------------------------------------------------
+// T8d (NEW Feature 031 — part 1 apples-to-apples GUARD): under a non-bracket-fill
+// winner, when BOTH sims are feasible (>= 0) AND the signed sim NEVER dipped
+// negative (all minBalancePhase >= 0), the clamp path could not have fired, so a
+// dollar-amount divergence cannot be a clamp artifact — it IS a genuine
+// strategy-threading or simulator-math bug and MUST flag (expected:false). This
+// preserves the US3 intent: a true winner-divergence still flags.
+// ----------------------------------------------------------------------------
+
+test('T8d (NEW Feature 031): winner + both feasible + signed NEVER dipped negative + divergence → GENUINE bug FLAGS', () => {
+  const fakeChart = makeStockChart();
+  fakeChart[fakeChart.length - 1].total = 600000;
+
+  const lsr = makeLastStrategyResults({ winnerId: 'tax-optimized-search' });
+  lsr.rows = lsr.rows.map((r) => ({ ...r, isWinner: r.strategyId === 'tax-optimized-search' }));
+
+  const snap = assembleAuditSnapshot(buildOptions({
+    // Divergence with NO negative dip anywhere → clamp cannot explain it → genuine.
+    signedLifecycleEndBalance: () => ({
+      endBalance: 400000,
+      minBalancePhase1: 50000,
+      minBalancePhase2: 30000,
+      minBalancePhase3: 20000,
+    }),
+    projectFullLifecycle: () => fakeChart,
+    lastStrategyResults: lsr,
+  }));
+
+  const warn = snap.crossValidationWarnings.find((w) => w.kind === 'endBalance-mismatch');
+  assert.ok(warn, 'expected endBalance-mismatch warning (genuine divergence, no clamp evidence)');
+  assert.equal(warn.expected, false,
+    'Feature 031: divergence under a winner with no negative dip is a genuine threading/math bug — must flag');
 });
 
 // ----------------------------------------------------------------------------

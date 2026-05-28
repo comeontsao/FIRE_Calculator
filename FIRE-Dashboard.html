@@ -16,6 +16,7 @@
 <script src="calc/taxExpenseRow.js"></script>
 <script src="calc/fireAgeResolver.js"></script>
 <script src="calc/cashSweep.js"></script>
+<script src="calc/withdrawalTooltipFrame.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -5954,6 +5955,7 @@ const TRANSLATIONS = {
     'tw.legend.cash': 'Cash',
     'tw.legend.effTax': 'Effective tax rate (%)',
     'tw.tooltip.totalDrawn': 'Total drawn: ${0}K',
+    'tw.tooltip.purchasingPower': '≈ ${0}K in today’s spending power',
     'tw.tooltip.taxOwed': 'Tax owed: ${0}K ({1}%)',
     'tw.tooltip.ordIncome': 'Ordinary income: ${0}K',
     'tw.tooltip.rmd': 'RMD (forced Trad): ${0}K',
@@ -7054,6 +7056,7 @@ const TRANSLATIONS = {
     'tw.legend.cash': '現金',
     'tw.legend.effTax': '有效稅率（%）',
     'tw.tooltip.totalDrawn': '本年總提領：${0}K',
+    'tw.tooltip.purchasingPower': '≈ ${0}K（換算成今日購買力）',
     'tw.tooltip.taxOwed': '應繳稅：${0}K（{1}%）',
     'tw.tooltip.ordIncome': '普通所得：${0}K',
     'tw.tooltip.rmd': 'RMD（強制傳統）：${0}K',
@@ -8163,6 +8166,9 @@ let _lastKpiSnapshot = null;
 // Populated by renderGrowthChart after it computes `lifecycle`. Consumed by
 // renderLifecycleSidebarChart (the mirror chart in the pinnable sidebar).
 // Consumers: renderGrowthChart (primary), renderLifecycleSidebarChart (mirror).
+// Feature 031 (US1): both are re-rendered as a post-rank trio in recalcAll
+// (after scoreAndRank resolves _lastStrategyResults.winnerId) so this cache
+// reflects the resolved winner, not the stale bracket-fill default.
 let _lastLifecycleDataset = null;
 
 /**
@@ -9354,18 +9360,26 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      // Feature 031 (part 2 — clamp-then-sweep parity): sweep split decision on
+      // CLAMPED copies (Math.max(0,…)) — the SAME non-negative basis the chart
+      // (projectFullLifecycle) clamps to — then apply only the swept DELTA so the
+      // Feature-015 signed-debt totals are preserved (negative pStocks stays
+      // negative). Cash-driven swept ⇒ end balances unchanged; makes intent explicit.
       {
+        const _f031_clampedCash_ = Math.max(0, pCash);
+        const _f031_clampedStocks_ = Math.max(0, pStocks);
         const _f030_sweep_ = (typeof _applyCashSweep === 'function')
-          ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
+          ? _applyCashSweep(_f031_clampedCash_, _f031_clampedStocks_, inp.cashSweepThreshold,
               age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
               !!inp.cashSweepEnabled)
-          : { pCash, pStocks, swept: 0 };
-        pCash = _f030_sweep_.pCash;
-        pStocks = _f030_sweep_.pStocks;
+          : { pCash: _f031_clampedCash_, pStocks: _f031_clampedStocks_, swept: 0 };
+        const _f031_swept_ = _f030_sweep_.swept;
+        pCash -= _f031_swept_;
+        pStocks += _f031_swept_;
         if (options && Array.isArray(options.cashSweepTraces)) {
           options.cashSweepTraces.push({
             age, simulatorId: 'signedLifecycleEndBalance',
-            pCash, pStocks, swept: _f030_sweep_.swept,
+            pCash, pStocks, swept: _f031_swept_,
           });
         }
       }
@@ -10841,6 +10855,23 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       portfolio401kRoth = Math.max(0, portfolio401kRoth) * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
       portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
+      // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
+      // Feature 031 US5 — sixth simulator sweep site; matches the other five.
+      {
+        const _f030_sweep_ = (typeof _applyCashSweep === 'function')
+          ? _applyCashSweep(portfolioCash, portfolioStocks, inp.cashSweepThreshold,
+              age, (inp.agePerson1 !== undefined ? inp.agePerson1 : inp.ageRoger),
+              !!inp.cashSweepEnabled)
+          : { pCash: portfolioCash, pStocks: portfolioStocks, swept: 0 };
+        portfolioCash = _f030_sweep_.pCash;
+        portfolioStocks = _f030_sweep_.pStocks;
+        if (options && Array.isArray(options.cashSweepTraces)) {
+          options.cashSweepTraces.push({
+            age, simulatorId: 'projectFullLifecycle',
+            pCash: portfolioCash, pStocks: portfolioStocks, swept: _f030_sweep_.swept,
+          });
+        }
+      }
       // Annotate the most recent per-year row with feature-007 flags so the
       // sidebar mirror + future chart renderers can read them from
       // _lastLifecycleDataset without re-running this function.
@@ -13127,6 +13158,67 @@ function recalcAll() {
       }
     }
   }
+  // Feature 031 (US1) — re-render the Full Portfolio Lifecycle chart AND its
+  // pinnable sidebar mirror AFTER scoreAndRank has populated _lastStrategyResults.
+  // Root cause: the chartState.onChange listener fired inside _setCalculatedFire
+  // above draws the Lifecycle chart while _lastStrategyResults is still null, so
+  // renderGrowthChart falls through to the default bracket-fill trajectory while
+  // the Withdrawal Strategy chart (re-rendered just above) shows the winner —
+  // two different strategies on screen. This second pass makes the Lifecycle
+  // chart consume the resolved winner via getActiveChartStrategyOptions(), the
+  // single source of truth (Constitution III; contract C1). Mirrors the
+  // objective-toggle handler's (renderRothLadder → renderGrowthChart →
+  // renderLifecycleSidebarChart) trio. When bracket-fill IS the winner this
+  // re-render is idempotent (contract C6 regression guard).
+  if (typeof renderGrowthChart === 'function' && typeof getInputs === 'function') {
+    try { renderGrowthChart(getInputs()); } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[strategies] post-rank renderGrowthChart threw:',
+          _e && _e.stack ? _e.stack : _e);
+      }
+    }
+  }
+  if (typeof renderLifecycleSidebarChart === 'function') {
+    try { renderLifecycleSidebarChart(null); } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[strategies] post-rank renderLifecycleSidebarChart threw:',
+          _e && _e.stack ? _e.stack : _e);
+      }
+    }
+  }
+  // Feature 031 (US3 / FR-004 / contract C3) — post-rank verdict re-evaluation.
+  // The FIRE-age SEARCH (yearsToFIRE → findFireAgeNumerical) and the FIRST
+  // feasibility verdict (_evaluateFeasibilityAtAge → _setCalculatedFire at the
+  // top of recalcAll) both ran while _lastStrategyResults was still null, so
+  // getActiveChartStrategyOptions() returned undefined and the verdict was
+  // judged on the default bracket-fill trajectory — NOT the strategy the chart
+  // actually draws. That is the "gates MUST evaluate the displayed strategy"
+  // hazard from CLAUDE.md / research.md "Safe/Exact/DWZ gate exposure".
+  //
+  // Design (Option ii — re-evaluate post-rank, mirroring calcAudit.js:262):
+  // keep the age SEARCH pinned to bracket-fill so it stays deterministic and
+  // free of the winner-is-age-dependent circularity documented at the
+  // _lastStrategyResults = null comment above. AFTER scoreAndRank resolves THIS
+  // run's winner, RE-EVALUATE the displayed feasibility verdict under that
+  // winner — _evaluateFeasibilityAtAge → isFireAgeFeasible now reads the winner
+  // via getActiveChartStrategyOptions() (Safe/Exact/DWZ each thread it into
+  // projectFullLifecycle) — and push it back into chartState via a second
+  // _setCalculatedFire so the verdict pill the user sees matches the chart the
+  // user sees. Mode semantics unchanged (Safe = floor + endBalance≥0; Exact =
+  // endBalance≥terminalBuffer; DWZ = floor + endBalance≥0); Objective stays the
+  // sort key (Constitution IX). When bracket-fill IS the winner this is
+  // idempotent (getActiveChartStrategyOptions() returns undefined → identical
+  // to the pre-rank evaluation; contract C6 regression guard).
+  try {
+    const _winnerFeasible = _evaluateFeasibilityAtAge(inp, effectiveSpend, fireAge, fireMode);
+    _lastDeficitReal = _winnerFeasible ? 0 : _computeDeficitReal(inp, effectiveSpend, fireAge, fireMode);
+    _setCalculatedFire(fireAge, _winnerFeasible);
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[strategies] post-rank verdict re-evaluation threw:',
+        _e && _e.stack ? _e.stack : _e);
+    }
+  }
   // Get mortgage-adjusted retirement spend for display
   const mtgAdjDisplay = getMortgageAdjustedRetirement(effectiveSpend, yrsToFire);
   // Feature 023 follow-up — FIRE NUMBER now displays the projected portfolio
@@ -14538,16 +14630,60 @@ function renderRothLadder(inp) {
               if (!items.length) return '';
               const idx = items[0].dataIndex;
               const r = result.strategy[idx];
-              // FR-003: purchasing-power companion line for the bar-chart row.
-              const totalRealK = ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1);
-              const _ppSuffix = (typeof t === 'function')
-                ? t('display.frame.purchasingPowerColumnSuffix') : '(purchasing power)';
+              // FR-005 (feature 031, C4) — single-frame tooltip. The per-pool
+              // BARS render Book-Value; route "Total drawn" / "Ordinary income"
+              // / "Tax owed" through the pure helper so they ALSO sit in
+              // Book-Value and reconcile with the bars within rounding.
+              // Purchasing power is a clearly-labeled separate comparison line,
+              // never presented as the sum of the displayed bars.
+              const _conv = (typeof globalThis !== 'undefined' && globalThis.displayConverter) || null;
+              const _curAge = (inp.ageRoger !== undefined ? inp.ageRoger : inp.agePerson1);
+              let _tip = (typeof _buildWithdrawalTooltipLines === 'function')
+                ? _buildWithdrawalTooltipLines(r, {
+                    toBookValue: _conv ? _conv.toBookValue : null,
+                    currentAge: _curAge,
+                    inflationRate: inp.inflationRate,
+                  })
+                : null;
+              // FR-005 follow-up (Defect 3b) — when the primary helper global is
+              // unavailable at runtime, route the fallback through the pure
+              // _buildWithdrawalTooltipFallback so "Total drawn"/"Ordinary income"
+              // stay in Book-Value and reconcile with the bars (NOT raw real-$).
+              if (!_tip) {
+                const _convBound = (_conv && typeof _conv.toBookValue === 'function')
+                  ? (val, age) => _conv.toBookValue(val, age, _curAge, inp.inflationRate)
+                  : null;
+                if (typeof _buildWithdrawalTooltipFallback === 'function') {
+                  _tip = _buildWithdrawalTooltipFallback(r, _convBound);
+                } else {
+                  // Last-resort inline fallback — still Book-Value, still mirrors
+                  // the bar series' Number.isFinite → raw real-$ posture.
+                  const _fin = (v, f) => (Number.isFinite(v) ? v : (Number.isFinite(f) ? f : 0));
+                  const _pTrad = _fin(r.wTradBookValue, r.wTrad);
+                  const _pRoth = _fin(r.wRothBookValue, r.wRoth);
+                  const _pStocks = _fin(r.wStocksBookValue, r.wStocks);
+                  const _pCash = _fin(r.wCashBookValue, r.wCash);
+                  const _bv = (val) => _convBound ? _fin(_convBound(_fin(val, 0), r.age), _fin(val, 0)) : _fin(val, 0);
+                  _tip = {
+                    pools: { trad: _pTrad, roth: _pRoth, stocks: _pStocks, cash: _pCash },
+                    totalDrawn: _pTrad + _pRoth + _pStocks + _pCash,
+                    ordIncome: _bv(r.ordIncome),
+                    taxOwed: _bv(r.taxOwed),
+                    purchasingPower: { value: _fin(r.wTrad,0)+_fin(r.wRoth,0)+_fin(r.wStocks,0)+_fin(r.wCash,0), isComparison: true },
+                  };
+                }
+              }
+              const _f1 = (v) => (v / 1000).toFixed(1);
+              const _totalDrawnK = _f1(_tip.totalDrawn);
+              const _ordIncomeK  = _f1(_tip.ordIncome);
+              const _taxOwedK    = _f1(_tip.taxOwed);
+              const _ppK         = _f1(_tip.purchasingPower.value);
               const lines = [
                 ``,
-                `≈ $${totalRealK}K ${_ppSuffix}`,
-                t('tw.tooltip.totalDrawn', ((r.wTrad+r.wRoth+r.wStocks+r.wCash)/1000).toFixed(1)),
-                t('tw.tooltip.taxOwed', (r.taxOwed/1000).toFixed(1), (r.effRate*100).toFixed(1)),
-                t('tw.tooltip.ordIncome', (r.ordIncome/1000).toFixed(1)),
+                t('tw.tooltip.totalDrawn', _totalDrawnK),
+                t('tw.tooltip.purchasingPower', _ppK),
+                t('tw.tooltip.taxOwed', _taxOwedK, (r.effRate*100).toFixed(1)),
+                t('tw.tooltip.ordIncome', _ordIncomeK),
               ];
               if (r.rmd > 0) lines.push(t('tw.tooltip.rmd', (r.rmd/1000).toFixed(1)));
               if (r.shortfall > 0) lines.push(t('tw.tooltip.shortfall', (r.shortfall/1000).toFixed(1)));
@@ -16266,6 +16402,26 @@ function renderLifecycleAssetTable(lifecycle, fireAge) {
  * real-$ lifecycle values from projectFullLifecycle pending Wave 4b visual swap;
  * caption helper is invoked on the wrap container to surface the Book Value
  * frame label per FR-004.
+ *
+ * @strategy (feature 031, US1): this chart consumes the RESOLVED WINNING
+ * strategy — `_lastStrategyResults.winnerId` (or `_previewStrategyId` during a
+ * drag preview) — via getActiveChartStrategyOptions(), which feeds
+ * strategyOverride/thetaOverride into projectFullLifecycle. It must therefore be
+ * (re-)rendered AFTER scoreAndRank populates _lastStrategyResults. recalcAll
+ * adds a dedicated post-rank renderGrowthChart pass (after the post-rank
+ * renderRothLadder) so the Lifecycle chart, the Withdrawal Strategy chart, and
+ * the verdict all reference the same winnerId (Constitution III; contract C1).
+ * Rendering before the winner resolves draws the stale bracket-fill default.
+ * Callers: recalcAll post-rank trio, objective-toggle handler, FIRE-marker drag
+ * preview, and the if(!_cs()) cold-load fallback.
+ *
+ * @strategy (feature 031, US2 / contract C2): DURING a FIRE-marker drag preview
+ * (`_previewFireAge` set ≠ the real effective age) this chart is PINNED to
+ * bracket-fill for the preview age. The winner in _lastStrategyResults was ranked
+ * at the COMMITTED age, so applying it at a previewed age would draw a winner
+ * ranked at a different age (the C2 prohibition) and diverge from the Withdrawal
+ * Strategy chart. Re-ranking per mousemove is too costly for the ≥30fps drag
+ * floor; the authoritative re-rank happens on commit via the recalcAll path.
  */
 // FRAME: real-$ (lifecycle data) + conversion (caption helper reads inflationRate)
 function renderGrowthChart(inp) {
@@ -16291,11 +16447,22 @@ function renderGrowthChart(inp) {
   // Feature 008 — if a non-bracket-fill strategy is winning or being previewed,
   // thread that through projectFullLifecycle so the chart trajectory reflects
   // the displayed strategy (not always bracket-fill-smoothed).
+  // Feature 031 US2 (FR-003 / contract C2): during a FIRE-marker DRAG preview the
+  // FIRE age has moved (`_previewFireAge`) but `_lastStrategyResults.winnerId` was
+  // ranked at the COMMITTED age. Threading that winner here would draw a preview-age
+  // balance trajectory using a winner ranked at a different age — the C2 prohibition,
+  // and the source of the lifecycle-vs-withdrawal divergence mid-drag. Re-running the
+  // ranker per mousemove is too costly for the ≥30fps drag floor, so during the drag
+  // preview we PIN the lifecycle chart to bracket-fill (the always-available default
+  // basis); on mouseup → recalcAll, US1's post-rank render restores the winner.
+  const _fireDragPreviewActive = (typeof _previewFireAge === 'number' && _previewFireAge != null
+    && _previewFireAge !== realEffectiveFireAge);
   let _chartStrategyId = null;
   let _chartThetaOverride = null;
   try {
-    const _displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
-      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId);
+    const _displayedId = _fireDragPreviewActive ? null
+      : ((typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId));
     if (_displayedId && _displayedId !== 'bracket-fill-smoothed') {
       _chartStrategyId = _displayedId;
       if (_displayedId === 'tax-optimized-search' && _lastStrategyResults && _lastStrategyResults.rows) {
