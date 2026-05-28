@@ -89,11 +89,11 @@ test('027 case 1 — backwards compat: option absent ⇔ option false ⇔ legacy
 
   for (const f of fixtures) {
     const noOpt = apiGeneric.taxOptimizedWithdrawal(
-      f.spend, f.ssIncome, f.pTrad, f.pRoth, f.pStocks, f.pCash,
+      f.spend, f.ssIncome, f.pTrad, f.pRoth, 0, f.pStocks, f.pCash,
       f.age, MFJ_BRACKETS, 0.6, { endAge: 100 }
     );
     const optFalse = apiGeneric.taxOptimizedWithdrawal(
-      f.spend, f.ssIncome, f.pTrad, f.pRoth, f.pStocks, f.pCash,
+      f.spend, f.ssIncome, f.pTrad, f.pRoth, 0, f.pStocks, f.pCash,
       f.age, MFJ_BRACKETS, 0.6, { endAge: 100, aggressiveSmoothingMultiplier: 1 }
     );
     // Output objects must compare deeply — every numeric field equal.
@@ -110,8 +110,9 @@ test('027 case 1 — backwards compat: option absent ⇔ option false ⇔ legacy
 // ---------------------------------------------------------------------------
 
 test('027 case 2 — aggressive: age 65, SS=0, quadruples smoothing cap (4× pTrad/yearsRemaining)', () => {
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const result = apiGeneric.taxOptimizedWithdrawal(
-    78000, 0, 660000, 167000, 1200000, 0,
+    78000, 0, 660000, 167000, 0, 1200000, 0,
     65, MFJ_BRACKETS, 0.6, { endAge: 100, aggressiveSmoothingMultiplier: 4 }
   );
   // smoothedTarget = 660000 / 35 = 18857; 4× = 75428. Bracket headroom $118K is much higher.
@@ -128,8 +129,9 @@ test('027 case 2 — aggressive: age 65, SS=0, quadruples smoothing cap (4× pTr
 // ---------------------------------------------------------------------------
 
 test('027 case 3 — aggressive: age 70 with SS active falls back to unscaled smoothed cap', () => {
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const result = apiGeneric.taxOptimizedWithdrawal(
-    78000, 58896, 400000, 167000, 1500000, 0,
+    78000, 58896, 400000, 167000, 0, 1500000, 0,
     70, MFJ_BRACKETS, 0.6, { endAge: 100, aggressiveSmoothingMultiplier: 4 }
   );
   // smoothedTarget = 400000/30 = ~13333. Unscaled.
@@ -143,8 +145,9 @@ test('027 case 3 — aggressive: age 70 with SS active falls back to unscaled sm
 // ---------------------------------------------------------------------------
 
 test('027 case 4 — pre-unlock: age 55 with multiplier=2 still pulls wTrad=0', () => {
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const result = apiGeneric.taxOptimizedWithdrawal(
-    78000, 0, 300000, 100000, 800000, 50000,
+    78000, 0, 300000, 100000, 0, 800000, 50000,
     55, MFJ_BRACKETS, 0.6, { endAge: 100, aggressiveSmoothingMultiplier: 4 }
   );
   assert.strictEqual(result.wTrad, 0, 'pre-unlock must return wTrad=0');
@@ -162,8 +165,9 @@ test('027 case 4 — pre-unlock: age 55 with multiplier=2 still pulls wTrad=0', 
 
 test('027 case 5 — spending-floor pass still runs when other pools are empty', () => {
   // Age 65, only Trad available, spend $60K, SS=0 → floor pass must close gap.
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const result = apiGeneric.taxOptimizedWithdrawal(
-    60100, 0, 325000, 0, 0, 0,
+    60100, 0, 325000, 0, 0, 0, 0,
     65, MFJ_BRACKETS, 0.6, { endAge: 100, aggressiveSmoothingMultiplier: 4 }
   );
   // Without floor pass, wTrad would equal bracketHeadroom (~$118K).
@@ -197,9 +201,10 @@ function simulateAggressiveSC026A() {
 
   for (let age = 55; age <= 95; age++) {
     const ssIncome = age >= SS_CLAIM_AGE ? SS_NOMINAL_BASE : 0;
+    // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
     const mix = apiGeneric.taxOptimizedWithdrawal(
       annualSpend, ssIncome,
-      pTrad, pRoth, pStocks, pCash,
+      pTrad, pRoth, 0, pStocks, pCash,
       age, MFJ_BRACKETS, 0.6,
       { endAge: 100, safetyMargin: 0.05, aggressiveSmoothingMultiplier: 4 }
     );
@@ -254,11 +259,11 @@ test('027 lockstep — RR and Generic taxOptimizedWithdrawal byte-identical for 
   for (const f of fixtures) {
     for (const flag of [false, true]) {
       const r1 = apiGeneric.taxOptimizedWithdrawal(
-        f.spend, f.ssIncome, f.pTrad, f.pRoth, f.pStocks, f.pCash,
+        f.spend, f.ssIncome, f.pTrad, f.pRoth, 0, f.pStocks, f.pCash,
         f.age, MFJ_BRACKETS, 0.6, { endAge: 100, disableSmoothingCap: flag }
       );
       const r2 = apiRR.taxOptimizedWithdrawal(
-        f.spend, f.ssIncome, f.pTrad, f.pRoth, f.pStocks, f.pCash,
+        f.spend, f.ssIncome, f.pTrad, f.pRoth, 0, f.pStocks, f.pCash,
         f.age, MFJ_BRACKETS, 0.6, { endAge: 100, disableSmoothingCap: flag }
       );
       assert.deepStrictEqual(r1, r2, `RR vs Generic mismatch at age ${f.age}, aggressiveSmoothingMultiplier=${flag}`);

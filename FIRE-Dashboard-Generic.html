@@ -9736,7 +9736,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       }
       if (!mix) {
         mix = taxOptimizedWithdrawal(
-          grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
+          grossSpend, ssThisYear, pTrad, pRoth, pRothIra, pStocks, pCash,
           age, brackets, inp.stockGainPct, bfOpts
         );
       }
@@ -9745,8 +9745,10 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       // MUST run these four steps in this exact order so signed intermediate
       // state is identical across simulators (FR-063 cross-surface consistency).
       // Step 1: subtract normal withdrawals from each pool
+      // Feature 032 hotfix: pRothIra decremented by mix.wRothIra (DWZ + parity).
       pTrad -= mix.wTrad;
       pRoth -= mix.wRoth;
+      pRothIra -= (mix.wRothIra || 0);
       pStocks -= mix.wStocks;
       pCash -= mix.wCash;
       // Step 2: subtract shortfall from stocks (signed) if any
@@ -10346,7 +10348,8 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
           age,
           grossSpend,
           ssIncome: ssThisYear,
-          pools: { pTrad, pRoth, pStocks, pCash },
+          // Feature 032 hotfix: pRothIra threaded so registered policies see the new pool.
+          pools: { pTrad, pRoth, pRothIra, pStocks, pCash },
           brackets: bracketsSim,
           stockGainPct: inp.stockGainPct,
           rmdThisYear: _rmd,
@@ -10357,12 +10360,14 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     }
     if (!mixSim) {
       mixSim = taxOptimizedWithdrawal(
-        grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash,
+        grossSpend, ssThisYear, pTrad, pRoth, pRothIra, pStocks, pCash,
         age, bracketsSim, inp.stockGainPct
       );
     }
+    // Feature 032 hotfix: pRothIra decremented by mix.wRothIra.
     pTrad   -= mixSim.wTrad;
     pRoth   -= mixSim.wRoth;
+    pRothIra -= (mixSim.wRothIra || 0);
     pStocks -= mixSim.wStocks;
     pCash   -= mixSim.wCash;
     if (mixSim.shortfall > 0) pStocks -= mixSim.shortfall;
@@ -11261,7 +11266,9 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
             age,
             grossSpend: grossSpendLC,
             ssIncome: ssThisYear,
-            pools: { pTrad: portfolio401kTrad, pRoth: portfolio401kRoth, pStocks: portfolioStocks, pCash: portfolioCash },
+            // Feature 032 hotfix: pRothIra threaded so the active strategy can
+            // include it in pool-ordering. portfolioRothIra is tracked locally.
+            pools: { pTrad: portfolio401kTrad, pRoth: portfolio401kRoth, pRothIra: portfolioRothIra, pStocks: portfolioStocks, pCash: portfolioCash },
             brackets: bracketsLC,
             stockGainPct: inp.stockGainPct,
             rmdThisYear: _rmd,
@@ -11274,7 +11281,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       if (!mix) {
         mix = taxOptimizedWithdrawal(
           grossSpendLC, ssThisYear,
-          portfolio401kTrad, portfolio401kRoth, portfolioStocks, portfolioCash,
+          portfolio401kTrad, portfolio401kRoth, portfolioRothIra, portfolioStocks, portfolioCash,
           age, bracketsLC, inp.stockGainPct, bfOpts
         );
       }
@@ -11282,8 +11289,12 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // pool-operation ordering (NON-NEGOTIABLE). Identical to the other two
       // consumers so signed intermediate state matches before the clamp below.
       // Step 1: subtract normal withdrawals from each pool
+      // Feature 032 hotfix: portfolioRothIra decremented by mix.wRothIra. THE
+      // ROOT CAUSE of the "DWZ doesn't DWZ" bug — pre-fix pRothIra compounded
+      // untouched from $59K to $1M+ across the retirement horizon.
       portfolio401kTrad -= mix.wTrad;
       portfolio401kRoth -= mix.wRoth;
+      portfolioRothIra  -= (mix.wRothIra || 0);
       portfolioStocks   -= mix.wStocks;
       portfolioCash     -= mix.wCash;
       // Step 2: subtract shortfall from stocks (signed) if any
@@ -11328,6 +11339,9 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         lastRow.irmaaBreached = mix.irmaaBreached;
         lastRow.rule55Active = mix.rule55Active;
         lastRow.magi = mix.magi;
+        // Feature 032 hotfix — surface wRothIra on the row so the lifecycle
+        // tooltip + audit consumers can read per-year Roth IRA draws.
+        lastRow.wRothIra = mix.wRothIra || 0;
         // Feature 015 US1 — shortfall flag. True when the active strategy could
         // not fund spending from any allowed pool this year (mix.shortfall > 0
         // means stocks were debited beyond zero, then clamped). Consumers:
@@ -11577,10 +11591,15 @@ function onPreviewChange(fn) { _previewListeners.push(fn); return () => {
 //     ssIncome, pool inputs, brackets all real-$; output `taxes` real-$).
 //   Frame-conversion sites: NONE — IRS brackets treated as today's $ per
 //     feature 021 spec § A6.
-function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCash, age, brackets, stockGainPct, options) {
+function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pRothIra, pStocks, pCash, age, brackets, stockGainPct, options) {
   // Feature 007 bracket-fill algorithm. Fills the 12% bracket with Trad draws every
   // accessible year, routes excess above spend into stocks as a synthetic conversion,
   // and detects the four transparency caveats (SS, IRMAA, Rule of 55, Roth 5y).
+  // Feature 032 hotfix (2026-05-28): added `pRothIra` parameter between `pRoth`
+  // and `pStocks`. Withdrawal step inserted in `computeSpendMix` between the
+  // Roth-401K step and the Stocks step. Tax-free draw (Invariant I1), gated by
+  // canAccess401k (Invariant I3 — pre-59.5 lock). Per contract roth-ira-pool.contract.md.
+  // Backward-compat callers MUST be updated to insert pRothIra in the new slot.
   const opts = options || {};
   const safetyMargin = (typeof opts.safetyMargin === 'number' && opts.safetyMargin >= 0 && opts.safetyMargin <= 0.10)
     ? opts.safetyMargin : 0.05;
@@ -11662,6 +11681,17 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
       needed -= wRothLocal;
     }
 
+    // Step 4.5 (Feature 032 hotfix): Remaining spend → Roth IRA (tax-free).
+    // Inserted between Roth 401K and Stocks per FR-021a poolOrder. Tax-free
+    // per Invariant I1 — does NOT add to ordIncomeLocal. Locked pre-59.5 per
+    // Invariant I3 — gated on canAccess401k like Roth 401K. RMD-exempt
+    // (Invariant I2 — never forced).
+    let wRothIraLocal = 0;
+    if (canAccess401k && pRothIra > 0 && needed > 0) {
+      wRothIraLocal = Math.min(pRothIra, needed);
+      needed -= wRothIraLocal;
+    }
+
     // Step 5: Remaining spend → Taxable stocks (with LTCG, iterative fixed-point solve)
     let wStocksLocal = 0;
     let ltcgTaxLocal = 0;
@@ -11692,6 +11722,7 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
 
     return {
       wRoth: wRothLocal,
+      wRothIra: wRothIraLocal,
       wStocks: wStocksLocal,
       wCash: wCashLocal,
       ltcgTax: ltcgTaxLocal,
@@ -11707,12 +11738,14 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     const mixPre = computeSpendMix(0); // wTrad = 0
     // Under pre-unlock, wRoth should also be zero per invariant; computeSpendMix
     // already gates wRoth on canAccess401k so it returns 0 naturally.
+    // Feature 032 hotfix: wRothIra also 0 pre-unlock (Invariant I3 — locked < 59.5).
     const totalTaxPre = mixPre.taxOwed + mixPre.ltcgTax;
     const grossReceivedPre = ssIncome + mixPre.wStocks + mixPre.wCash;
     const magiPre = 0 + taxableSS + mixPre.wStocks * gainPct;
     return {
       wTrad: 0,
       wRoth: 0,
+      wRothIra: 0,
       wStocks: mixPre.wStocks,
       wCash: mixPre.wCash,
       rmd: 0,
@@ -11734,9 +11767,10 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
     };
   }
 
-  // === Steps 3-6: compute tax + fill remaining spend from Roth / Stocks / Cash ===
+  // === Steps 3-6: compute tax + fill remaining spend from Roth / Roth IRA / Stocks / Cash ===
   let phase = computeSpendMix(wTrad);
   let wRoth = phase.wRoth;
+  let wRothIra = phase.wRothIra;
   let wStocks = phase.wStocks;
   let wCash = phase.wCash;
   let ltcgTax = phase.ltcgTax;
@@ -11760,6 +11794,7 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
       // Re-run Steps 3-5 with the reduced wTrad
       phase = computeSpendMix(wTrad);
       wRoth = phase.wRoth;
+      wRothIra = phase.wRothIra;
       wStocks = phase.wStocks;
       wCash = phase.wCash;
       ltcgTax = phase.ltcgTax;
@@ -11800,6 +11835,7 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
       wTrad += additionalTradForFloor;
       phase = computeSpendMix(wTrad);
       wRoth = phase.wRoth;
+      wRothIra = phase.wRothIra;
       wStocks = phase.wStocks;
       wCash = phase.wCash;
       ltcgTax = phase.ltcgTax;
@@ -11818,8 +11854,9 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
   }
 
   // === Step 8: Synthetic conversion — excess of net receipts over gross spend ===
+  // Feature 032 hotfix: wRothIra added to grossReceived (tax-free per Invariant I1).
   const totalTax = taxOwed + ltcgTax;
-  const grossReceived = ssIncome + wTrad + wRoth + wStocks + wCash;
+  const grossReceived = ssIncome + wTrad + wRoth + wRothIra + wStocks + wCash;
   const netReceived = grossReceived - totalTax;
   const syntheticConversion = (netReceived > grossSpend) ? (netReceived - grossSpend) : 0;
 
@@ -11828,8 +11865,9 @@ function taxOptimizedWithdrawal(grossSpend, ssIncome, pTrad, pRoth, pStocks, pCa
   const roth5YearWarning = false; // reserved for future true-Roth-conversion feature
 
   // === Step 10: Return ===
+  // Feature 032 hotfix: wRothIra surfaced so callers can decrement pRothIra.
   return {
-    wTrad, wRoth, wStocks, wCash, rmd,
+    wTrad, wRoth, wRothIra, wStocks, wCash, rmd,
     taxOwed: totalTax,
     ordIncome,
     shortfall: stillNeeded,
@@ -12002,14 +12040,17 @@ const BRACKET_FILL_SMOOTHED = Object.freeze({
   eligibility: {},
   computePerYearMix(ctx) {
     // Byte-identical to the current taxOptimizedWithdrawal (FR-001 parity).
+    // Feature 032 hotfix: thread pRothIra via the new positional parameter
+    // and surface wRothIra in the normalized PerYearMix return.
     const mix = taxOptimizedWithdrawal(
       ctx.grossSpend, ctx.ssIncome,
-      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pStocks, ctx.pools.pCash,
+      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pRothIra || 0, ctx.pools.pStocks, ctx.pools.pCash,
       ctx.age, ctx.brackets, ctx.stockGainPct, ctx.bfOpts
     );
     // Normalize the return shape to match PerYearMix with caveats.
     return {
-      wTrad: mix.wTrad, wRoth: mix.wRoth, wStocks: mix.wStocks, wCash: mix.wCash,
+      wTrad: mix.wTrad, wRoth: mix.wRoth, wRothIra: mix.wRothIra || 0,
+      wStocks: mix.wStocks, wCash: mix.wCash,
       syntheticConversion: mix.syntheticConversion || 0,
       rmd: mix.rmd,
       taxOwed: mix.taxOwed,
@@ -12044,14 +12085,16 @@ const AGGRESSIVE_BRACKET_FILL = Object.freeze({
   color: '#fb923c',
   eligibility: {},
   computePerYearMix(ctx) {
+    // Feature 032 hotfix: thread pRothIra positional + surface wRothIra.
     const aggressiveOpts = Object.assign({}, ctx.bfOpts, { aggressiveSmoothingMultiplier: 4 });
     const mix = taxOptimizedWithdrawal(
       ctx.grossSpend, ctx.ssIncome,
-      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pStocks, ctx.pools.pCash,
+      ctx.pools.pTrad, ctx.pools.pRoth, ctx.pools.pRothIra || 0, ctx.pools.pStocks, ctx.pools.pCash,
       ctx.age, ctx.brackets, ctx.stockGainPct, aggressiveOpts
     );
     return {
-      wTrad: mix.wTrad, wRoth: mix.wRoth, wStocks: mix.wStocks, wCash: mix.wCash,
+      wTrad: mix.wTrad, wRoth: mix.wRoth, wRothIra: mix.wRothIra || 0,
+      wStocks: mix.wStocks, wCash: mix.wCash,
       syntheticConversion: mix.syntheticConversion || 0,
       rmd: mix.rmd,
       taxOwed: mix.taxOwed,
@@ -12081,7 +12124,8 @@ const TRAD_FIRST = Object.freeze({
   color: '#ff6b6b',
   eligibility: {},
   computePerYearMix(ctx) {
-    return _drawByPoolOrder(ctx, ['trad', 'stocks', 'cash', 'roth']);
+    // Feature 032 hotfix / FR-021a / Invariant I6: 'rothIra' immediately after 'roth'.
+    return _drawByPoolOrder(ctx, ['trad', 'stocks', 'cash', 'roth', 'rothIra']);
   }
 });
 
@@ -12093,7 +12137,8 @@ const ROTH_LADDER = Object.freeze({
   color: '#846cff',
   eligibility: {},
   computePerYearMix(ctx) {
-    return _drawByPoolOrder(ctx, ['roth', 'stocks', 'cash', 'trad']);
+    // Feature 032 hotfix / FR-021a / Invariant I6: 'rothIra' immediately after 'roth'.
+    return _drawByPoolOrder(ctx, ['roth', 'rothIra', 'stocks', 'cash', 'trad']);
   }
 });
 
@@ -12105,7 +12150,8 @@ const TRAD_LAST_PRESERVE = Object.freeze({
   color: '#ffd93d',
   eligibility: {},
   computePerYearMix(ctx) {
-    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'roth', 'trad']);
+    // Feature 032 hotfix / FR-021a / Invariant I6: 'rothIra' immediately after 'roth'.
+    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'roth', 'rothIra', 'trad']);
   }
 });
 
@@ -12118,7 +12164,8 @@ const CONVENTIONAL = Object.freeze({
   eligibility: {},
   computePerYearMix(ctx) {
     // Textbook Fidelity/Vanguard order: Taxable → Trad → Roth; cash alongside taxable.
-    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'trad', 'roth']);
+    // Feature 032 hotfix / FR-021a / Invariant I6: 'rothIra' immediately after 'roth'.
+    return _drawByPoolOrder(ctx, ['stocks', 'cash', 'trad', 'roth', 'rothIra']);
   }
 });
 
@@ -12137,19 +12184,21 @@ const PROPORTIONAL = Object.freeze({
     // for v1: approximate proportionality by cycling pools in the order of
     // largest-balance-first each iteration.
     const canAccess401k = ctx.age >= _effectiveUnlockAge(ctx.bfOpts);
+    // Feature 032 hotfix / Invariant I6: include rothIra in the dynamic order.
     const balances = {
       trad: canAccess401k ? Math.max(0, ctx.pools.pTrad) : 0,
       roth: canAccess401k ? Math.max(0, ctx.pools.pRoth) : 0,
+      rothIra: canAccess401k ? Math.max(0, ctx.pools.pRothIra || 0) : 0,
       stocks: Math.max(0, ctx.pools.pStocks),
       cash: Math.max(0, ctx.pools.pCash),
     };
-    const total = balances.trad + balances.roth + balances.stocks + balances.cash;
+    const total = balances.trad + balances.roth + balances.rothIra + balances.stocks + balances.cash;
     const order = Object.entries(balances)
       .filter(([_, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([k]) => k);
     // Fill remaining slots with fallback order to avoid gaps when one pool depletes.
-    for (const p of ['stocks', 'trad', 'cash', 'roth']) {
+    for (const p of ['stocks', 'trad', 'cash', 'roth', 'rothIra']) {
       if (!order.includes(p)) order.push(p);
     }
     return _drawByPoolOrder(ctx, order);
@@ -12185,9 +12234,12 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
       const additionalTrad = Math.min(Math.max(0, pools.pTrad - rmd), bracketHeadroom * theta);
       wTrad += additionalTrad;
     }
-    let wRoth = 0, wStocks = 0, wCash = 0;
+    // Feature 032 hotfix: pRothIra parallel to pRoth. Locked pre-59.5 (I3),
+    // tax-free (I1), RMD-exempt (I2).
+    let wRoth = 0, wRothIra = 0, wStocks = 0, wCash = 0;
     const avail = {
       pRoth: canAccess401k ? Math.max(0, pools.pRoth) : 0,
+      pRothIra: canAccess401k ? Math.max(0, pools.pRothIra || 0) : 0,
       pStocks: Math.max(0, pools.pStocks),
       pCash: Math.max(0, pools.pCash),
     };
@@ -12198,7 +12250,8 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
       const gainLocal = wStocks * stockGainPct;
       const ltcgLocal = calcLTCGTax(gainLocal, taxableLocal, brackets);
       const totalTaxLocal = ordTaxLocal + ltcgLocal;
-      const grossReceivedLocal = ssIncome + wTrad + wRoth + wStocks + wCash;
+      // wRothIra is tax-free per Invariant I1 — added to grossReceived only.
+      const grossReceivedLocal = ssIncome + wTrad + wRoth + wRothIra + wStocks + wCash;
       return { ordIncomeLocal, taxableLocal, ordTaxLocal, ltcgLocal, totalTaxLocal, grossReceivedLocal };
     }
     for (let iter = 0; iter < 12; iter++) {
@@ -12206,7 +12259,7 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
       const netReceived = r.grossReceivedLocal - r.totalTaxLocal;
       const gap = grossSpend - netReceived;
       if (gap <= 10) break;
-      // Priority: stocks (LTCG) → cash → roth → stop. NEVER more Trad (respects θ cap).
+      // Priority: stocks (LTCG) → cash → roth → rothIra → stop. NEVER more Trad (respects θ cap).
       if (avail.pStocks > 0) {
         const add = Math.min(gap * 1.2, avail.pStocks);
         wStocks += add; avail.pStocks -= add;
@@ -12216,6 +12269,10 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
       } else if (avail.pRoth > 0) {
         const add = Math.min(gap, avail.pRoth);
         wRoth += add; avail.pRoth -= add;
+      } else if (avail.pRothIra > 0) {
+        // Feature 032 hotfix: Roth IRA gap-fill after Roth 401K depleted.
+        const add = Math.min(gap, avail.pRothIra);
+        wRothIra += add; avail.pRothIra -= add;
       } else {
         break; // exhausted non-Trad pools — fall through to floor pass
       }
@@ -12247,7 +12304,7 @@ const TAX_OPTIMIZED_SEARCH = Object.freeze({
     const shortfall = Math.max(0, grossSpend - (final.grossReceivedLocal - final.totalTaxLocal));
     const magi = wTrad + taxableSS + wStocks * stockGainPct;
     return {
-      wTrad, wRoth, wStocks, wCash,
+      wTrad, wRoth, wRothIra, wStocks, wCash,
       syntheticConversion: 0,
       rmd,
       taxOwed: final.totalTaxLocal,
@@ -12377,7 +12434,9 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
     // CANONICAL ACCUMULATION — see calc/accumulateToFire.js
     // T019 (feature 019): replace buggy inline accumulation (no buy-in, no college,
     // no Home #2, no mtgSavingsAdjust) with the canonical shared helper.
-    let pTrad, pRoth, pStocks, pCash;
+    // Feature 032 hotfix: track pRothIra so per-strategy lifecycle includes the
+    // new pool — required for endBalance parity with the chart's age-100 total.
+    let pTrad, pRoth, pRothIra, pStocks, pCash;
     if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
       try {
         const _activeMortgageStrategy = (typeof getActiveMortgageStrategyOptions === 'function')
@@ -12387,6 +12446,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
         const _accumResult = accumulateToFire(_qInpForAccum, _qFireAge, _accumOpts);
         pTrad = _accumResult.end.pTrad;
         pRoth = _accumResult.end.pRoth;
+        pRothIra = _accumResult.end.pRothIra || 0;
         pStocks = _accumResult.end.pStocks;
         pCash = _accumResult.end.pCash;
       } catch (_e) {
@@ -12426,7 +12486,9 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
 
       // Start-of-year total (pre-withdrawal) — matches projectFullLifecycle's
       // `row.total` semantics used by isFireAgeFeasible's chart-consistent gate.
-      const _totalStart = pTrad + pRoth + pStocks + pCash;
+      // Feature 032 hotfix: include pRothIra in totalStart so buffer-floor
+      // checks count the new pool (Invariant I7 — effBal completeness).
+      const _totalStart = pTrad + pRoth + pRothIra + pStocks + pCash;
       if (age < _unlockAgeGate) {
         if (_totalStart < _minTotalPreUnlock) _minTotalPreUnlock = _totalStart;
       } else {
@@ -12450,7 +12512,10 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
         age,
         grossSpend: _f029_grossSpend_,
         ssIncome: ssThisYear,
-        pools: { pTrad, pRoth, pStocks, pCash },
+        // Feature 032 hotfix: pRothIra threaded so the active strategy
+        // (especially BRACKET_FILL_SMOOTHED / AGGRESSIVE_BRACKET_FILL, which
+        // call taxOptimizedWithdrawal) sees the new pool.
+        pools: { pTrad, pRoth, pRothIra, pStocks, pCash },
         brackets,
         stockGainPct,
         rmdThisYear,
@@ -12478,13 +12543,19 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       }
 
       // Update pools for next year (clamp ≥ 0; signed sim not needed here)
+      // Feature 032 hotfix: pRothIra decremented by mix.wRothIra. THE ROOT
+      // CAUSE — pre-fix this line was missing → pRothIra compounded untouched
+      // across retirement, breaking DWZ and ranker/chart parity.
       pTrad = Math.max(0, pTrad - mix.wTrad - (mix.syntheticConversion || 0));
       pRoth = Math.max(0, pRoth - mix.wRoth);
+      pRothIra = Math.max(0, pRothIra - (mix.wRothIra || 0));
       pStocks = Math.max(0, pStocks - mix.wStocks + (mix.syntheticConversion || 0));
       pCash = Math.max(0, pCash - mix.wCash);
       // Compound
       pTrad *= (1 + realReturn401k);
       pRoth *= (1 + realReturn401k);
+      // Feature 032 hotfix: pRothIra compounds at realReturn401k (Invariant I4).
+      pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
       pCash *= 1.005;
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
@@ -12500,16 +12571,20 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       }
       // End-of-year pool snapshot — consumed by renderGrowthChart to show the
       // winning strategy's portfolio trajectory during retirement years.
+      // Feature 032 hotfix: pRothIraEnd + include in totalEnd (parity with chart).
       rowToPush.pTradEnd = pTrad;
       rowToPush.pRothEnd = pRoth;
+      rowToPush.pRothIraEnd = pRothIra;
       rowToPush.pStocksEnd = pStocks;
       rowToPush.pCashEnd = pCash;
-      rowToPush.totalEnd = pTrad + pRoth + pStocks + pCash;
+      rowToPush.totalEnd = pTrad + pRoth + pRothIra + pStocks + pCash;
     }
 
     // End-of-plan net worth (net of Trad tax per data-model.md §4)
+    // Feature 032 hotfix: include pRothIra (tax-free per Invariant I1) so the
+    // ranker's endBalance agrees with the chart's age-100 row.total.
     const endOfPlanNetWorthReal = Math.max(0, pTrad) * (1 - taxTrad)
-      + Math.max(0, pRoth) + Math.max(0, pStocks) + Math.max(0, pCash);
+      + Math.max(0, pRoth) + Math.max(0, pRothIra) + Math.max(0, pStocks) + Math.max(0, pCash);
     const avgEffRate = perYearRows.length > 0
       ? perYearRows.reduce((s, r) => s + (r.effRate || 0), 0) / perYearRows.length
       : 0;
@@ -12909,7 +12984,8 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   // CANONICAL ACCUMULATION — see calc/accumulateToFire.js
   // T019 (feature 019): replace buggy inline accumulation (no buy-in, no college,
   // no Home #2, no mtgSavingsAdjust) with the canonical shared helper.
-  let pTrad, pRoth, pStocks, pCash;
+  // Feature 032 hotfix: track pRothIra parallel to pRoth.
+  let pTrad, pRoth, pRothIra, pStocks, pCash;
   if (typeof accumulateToFire === 'function' && typeof resolveAccumulationOptions === 'function') {
     try {
       // T019 hotfix: mirror the typeof guard from _simulateStrategyLifetime —
@@ -12923,6 +12999,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
       const _accumResult = accumulateToFire(inp, fireAge, _accumOpts);
       pTrad = _accumResult.end.pTrad;
       pRoth = _accumResult.end.pRoth;
+      pRothIra = _accumResult.end.pRothIra || 0;
       pStocks = _accumResult.end.pStocks;
       pCash = _accumResult.end.pCash;
     } catch (_e) {
@@ -12954,7 +13031,8 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
 
     // Pass GROSS spend (SS netting happens inside the helper to avoid double-counting).
     // Feature 007: forward bracket-fill options.
-    const mix = taxOptimizedWithdrawal(grossSpend, ssThisYear, pTrad, pRoth, pStocks, pCash, age, brackets, inp.stockGainPct, bfOpts);
+    // Feature 032 hotfix: thread pRothIra positional + decrement post-call.
+    const mix = taxOptimizedWithdrawal(grossSpend, ssThisYear, pTrad, pRoth, pRothIra, pStocks, pCash, age, brackets, inp.stockGainPct, bfOpts);
 
     let tag = null;
     if (age < 59.5) tag = '🔒 401K locked — drawing from taxable';
@@ -12966,17 +13044,19 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     if (isFlip) prevStrategyTag = tag;
 
     totalLifetimeTax += mix.taxOwed;
-    totalLifetimeDraw += (mix.wTrad + mix.wRoth + mix.wStocks + mix.wCash);
+    // Feature 032 hotfix: include wRothIra in lifetime draw total.
+    totalLifetimeDraw += (mix.wTrad + mix.wRoth + (mix.wRothIra || 0) + mix.wStocks + mix.wCash);
 
     // Pool-operation ordering per bracket-fill-algorithm.contract.md §Caller
     // pool-operation ordering (NON-NEGOTIABLE). Steps 1-3 run BEFORE we read
     // the post-draw pool balances into pTradAfter/etc so those values reflect
     // the same signed intermediate state as the other two consumers (pre-clamp).
     // Step 1: subtract normal withdrawals from each pool
-    let postTrad   = pTrad   - mix.wTrad;
-    let postRoth   = pRoth   - mix.wRoth;
-    let postStocks = pStocks - mix.wStocks;
-    let postCash   = pCash   - mix.wCash;
+    let postTrad    = pTrad    - mix.wTrad;
+    let postRoth    = pRoth    - mix.wRoth;
+    let postRothIra = pRothIra - (mix.wRothIra || 0);
+    let postStocks  = pStocks  - mix.wStocks;
+    let postCash    = pCash    - mix.wCash;
     // Step 2: subtract shortfall from stocks (signed) if any
     if (mix.shortfall > 0) postStocks -= mix.shortfall;
     // Step 3: add synthetic conversion to stocks (signed) if any
@@ -12987,6 +13067,8 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
       ssIncome: Math.round(ssThisYear),
       wTrad: Math.round(mix.wTrad),
       wRoth: Math.round(mix.wRoth),
+      // Feature 032 hotfix: surface wRothIra + pRothIraAfter.
+      wRothIra: Math.round(mix.wRothIra || 0),
       wStocks: Math.round(mix.wStocks),
       wCash: Math.round(mix.wCash),
       rmd: Math.round(mix.rmd),
@@ -12995,6 +13077,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
       ordIncome: Math.round(mix.ordIncome),
       pTradAfter: Math.round(Math.max(0, postTrad)),
       pRothAfter: Math.round(Math.max(0, postRoth)),
+      pRothIraAfter: Math.round(Math.max(0, postRothIra)),
       pStocksAfter: Math.round(Math.max(0, postStocks)),
       pCashAfter: Math.round(Math.max(0, postCash)),
       grossSpend: Math.round(grossSpend),
@@ -13015,10 +13098,12 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     // projectFullLifecycle; divergence would violate FR-063 cross-surface
     // consistency). signedLifecycleEndBalance is the authoritative infeasibility
     // detector; this consumer displays floored values.
-    pTrad   = Math.max(0, postTrad)   * (1 + realReturn401k);
-    pRoth   = Math.max(0, postRoth)   * (1 + realReturn401k);
-    pStocks = Math.max(0, postStocks) * (1 + realReturnStocks);
-    pCash   = Math.max(0, postCash);
+    // Feature 032 hotfix: pRothIra compounds at realReturn401k (Invariant I4).
+    pTrad    = Math.max(0, postTrad)    * (1 + realReturn401k);
+    pRoth    = Math.max(0, postRoth)    * (1 + realReturn401k);
+    pRothIra = Math.max(0, postRothIra) * (1 + realReturn401k);
+    pStocks  = Math.max(0, postStocks)  * (1 + realReturnStocks);
+    pCash    = Math.max(0, postCash);
     pCash *= 1.005;
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     // No `options` param in this function; trace push omitted (helper call only).
