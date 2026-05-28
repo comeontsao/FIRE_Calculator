@@ -4200,6 +4200,8 @@
             <th><span data-i18n="snap.k401">401K</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
             <th><span data-i18n="snap.rogerStocks">Roger Stocks</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
             <th><span data-i18n="snap.rebeccaStocks">Rebecca Stocks</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
+            <th><span data-i18n="snap.rogerRothIra">Roger's Roth IRA</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
+            <th><span data-i18n="snap.rebeccaRothIra">Rebecca's Roth IRA</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
             <th><span data-i18n="snap.cash">Cash</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
             <th><span data-i18n="snap.income">Income</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
             <th><span data-i18n="snap.monthlySpend">Monthly Spend</span> <span class="obj-tag obj" data-i18n="badge.obj">OBJ</span></th>
@@ -4211,7 +4213,7 @@
           </tr>
         </thead>
         <tbody id="snapshotBody">
-          <tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:30px">No snapshots yet. Save your first one below!</td></tr>
+          <tr><td colspan="16" style="text-align:center;color:var(--text-dim);padding:30px">No snapshots yet. Save your first one below!</td></tr>
         </tbody>
       </table>
     </div>
@@ -5598,6 +5600,8 @@ const TRANSLATIONS = {
     'snap.k401': '401K',
     'snap.rogerStocks': 'Roger Stocks',
     'snap.rebeccaStocks': 'Rebecca Stocks',
+    'snap.rogerRothIra': "Roger's Roth IRA",
+    'snap.rebeccaRothIra': "Rebecca's Roth IRA",
     'snap.cash': 'Cash',
     'snap.income': 'Income',
     'snap.monthlySpend': 'Monthly Spend',
@@ -6725,6 +6729,8 @@ const TRANSLATIONS = {
     'snap.k401': '401K',
     'snap.rogerStocks': 'Roger 股票',
     'snap.rebeccaStocks': 'Rebecca 股票',
+    'snap.rogerRothIra': 'Roger 的 Roth IRA',
+    'snap.rebeccaRothIra': 'Rebecca 的 Roth IRA',
     'snap.cash': '現金',
     'snap.income': '收入',
     'snap.monthlySpend': '月支出',
@@ -18206,12 +18212,17 @@ recalcAll = function() {
 const SNAPSHOT_KEY = 'fire_dashboard_snapshots';
 const CSV_FILENAME = 'FIRE-snapshots.csv';
 
-// CSV column definitions — order matters for file format
+// CSV column definitions — order matters for file format.
+// Feature 032 (US5, T042): appended 'Roger Roth IRA' + 'Rebecca Roth IRA' at
+// the end. Append-only per DB Engineer constitution; never insert mid-array.
+// Legacy 19-column rows remain readable via short-row tolerance in
+// csvToSnapshots (parseFloat(cols[N]) || 0 where N >= cols.length).
 const CSV_HEADERS = [
   'Date','Net Worth','Accessible','401K','Roger Stocks','Rebecca Stocks',
   'Cash','Other Assets','Annual Income','Monthly Spend','401K Contrib',
   'Employer Match','Monthly Savings','Savings Rate %','FIRE Target',
-  'Years to FIRE','Target Country','Target Country ID','Locked'
+  'Years to FIRE','Target Country','Target Country ID','Locked',
+  'Roger Roth IRA','Rebecca Roth IRA'  // Feature 032 — appended, never inserted.
 ];
 
 // ---------- localStorage (fast cache) ----------
@@ -18237,7 +18248,9 @@ function snapshotsToCSV(all) {
       s.fireTarget, s.yearsToFire,
       '"' + (s.targetCountry || '').replace(/"/g, '""') + '"',
       s.targetCountryId || '',
-      s.locked || 0
+      s.locked || 0,
+      s.rogerRothIra || 0,    // Feature 032 — appended, never inserted.
+      s.rebeccaRothIra || 0
     ].join(',') + '\n';
   });
   return csv;
@@ -18279,6 +18292,11 @@ function csvToSnapshots(csvText) {
       targetCountry: cols[16] || '',
       targetCountryId: cols[17] || '',
       locked: parseFloat(cols[18]) || 0,
+      // Feature 032 — short-row tolerance: legacy 19-column rows have
+      // cols[19]/cols[20] === undefined; parseFloat(undefined) === NaN;
+      // (NaN || 0) === 0. Row is NOT dropped. See tests/unit/snapshotCsv.test.js.
+      rogerRothIra:   parseFloat(cols[19]) || 0,
+      rebeccaRothIra: parseFloat(cols[20]) || 0,
     };
   }).filter(s => s.date); // filter out empty rows
 }
@@ -18449,6 +18467,9 @@ async function saveSnapshot() {
     targetCountry: scenario.name,
     targetCountryId: scenario.id,
     mortgageEnabled: mortgageEnabled,
+    // Feature 032 (US5) — Roth IRA snapshot fields.
+    rogerRothIra: inp.rogerRothIra || 0,
+    rebeccaRothIra: inp.rebeccaRothIra || 0,
   };
 
   const all = getSnapshots();
@@ -18614,7 +18635,7 @@ function renderSnapshotHistory() {
   const tbody = document.getElementById('snapshotBody');
 
   if (all.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:30px">${t('snap.empty')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;color:var(--text-dim);padding:30px">${t('snap.empty')}</td></tr>`;
     return;
   }
 
@@ -18629,6 +18650,13 @@ function renderSnapshotHistory() {
     const d401k = prev ? deltaHTML(snap.roger401k, prev.roger401k, true) : '';
     const dRogerStocks = prev ? deltaHTML(snap.rogerStocks, prev.rogerStocks, true) : '';
     const dRebeccaStocks = prev ? deltaHTML(snap.rebeccaStocks, prev.rebeccaStocks, true) : '';
+    // Feature 032 (US5, T044) — Roth IRA deltas; legacy rows default to 0.
+    const snapRogerRothIra = snap.rogerRothIra || 0;
+    const snapRebeccaRothIra = snap.rebeccaRothIra || 0;
+    const prevRogerRothIra = prev ? (prev.rogerRothIra || 0) : 0;
+    const prevRebeccaRothIra = prev ? (prev.rebeccaRothIra || 0) : 0;
+    const dRogerRothIra = prev ? deltaHTML(snapRogerRothIra, prevRogerRothIra, true) : '';
+    const dRebeccaRothIra = prev ? deltaHTML(snapRebeccaRothIra, prevRebeccaRothIra, true) : '';
     const dCash = prev ? deltaHTML(snap.cashSavings, prev.cashSavings, true) : '';
     const dNW = prev ? deltaHTML(snap.netWorth, prev.netWorth, true) : '';
     const dAccessible = prev ? deltaHTML(snap.accessible, prev.accessible, true) : '';
@@ -18645,6 +18673,8 @@ function renderSnapshotHistory() {
       <td>${fmtMoney(snap.roger401k)}${d401k}</td>
       <td>${fmtMoney(snap.rogerStocks)}${dRogerStocks}</td>
       <td>${fmtMoney(snap.rebeccaStocks)}${dRebeccaStocks}</td>
+      <td>${fmtMoney(snapRogerRothIra)}${dRogerRothIra}</td>
+      <td>${fmtMoney(snapRebeccaRothIra)}${dRebeccaRothIra}</td>
       <td>${fmtMoney(snap.cashSavings)}${dCash}</td>
       <td>${fmtMoney(snap.annualIncome)}${dIncome}</td>
       <td>$${snap.monthlySpend.toLocaleString()}${t('snap.perMo')}${dSpend}</td>

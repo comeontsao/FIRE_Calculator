@@ -5942,6 +5942,10 @@ const TRANSLATIONS = {
     'snap.k401': '401K',
     'snap.person1Stocks': 'Person 1 Stocks',
     'snap.person2Stocks': 'Person 2 Stocks',
+    // Feature 032 — defensive defs; Generic UI does not render these columns
+    // (FR-018) but the keys exist for lockstep with RR translation catalog.
+    'snap.rogerRothIra': "Roger's Roth IRA",
+    'snap.rebeccaRothIra': "Rebecca's Roth IRA",
     'snap.cash': 'Cash',
     'snap.income': 'Income',
     'snap.monthlySpend': 'Monthly Spend',
@@ -7052,6 +7056,9 @@ const TRANSLATIONS = {
     'snap.k401': '401K',
     'snap.person1Stocks': '成員 1 股票',
     'snap.person2Stocks': '成員 2 股票',
+    // Feature 032 — defensive defs (Generic UI does not render these).
+    'snap.rogerRothIra': 'Roger 的 Roth IRA',
+    'snap.rebeccaRothIra': 'Rebecca 的 Roth IRA',
     'snap.cash': '現金',
     'snap.income': '收入',
     'snap.monthlySpend': '月支出',
@@ -18458,7 +18465,11 @@ const CSV_HEADERS = [
   'Cash','Other Assets','Annual Income','Monthly Spend','401K Contrib',
   'Employer Match','Monthly Savings','Savings Rate %','FIRE Target',
   'Years to FIRE','Target Country','Target Country ID','Locked',
-  'Adults'   // Feature 009 - appended, never inserted.
+  'Adults',  // Feature 009 - appended, never inserted.
+  // Feature 032 (US5, T042) — Roth IRA columns appended for CSV-format
+  // lockstep with RR (FR-018 keeps Generic UI unchanged; calc/CSV layer
+  // matches RR). Generic has no Roth IRA inputs so values are always 0.
+  'Person 1 Roth IRA','Person 2 Roth IRA'
 ];
 
 // ---------- localStorage (fast cache) ----------
@@ -18485,7 +18496,9 @@ function snapshotsToCSV(all) {
       '"' + (s.targetCountry || '').replace(/"/g, '""') + '"',
       s.targetCountryId || '',
       s.locked || 0,
-      s.adults ?? 2   // Feature 009 - default 2 for legacy in-memory snapshots.
+      s.adults ?? 2,  // Feature 009 - default 2 for legacy in-memory snapshots.
+      s.person1RothIra || 0,  // Feature 032 — Generic has no inputs; always 0.
+      s.person2RothIra || 0
     ].join(',') + '\n';
   });
   return csv;
@@ -18532,6 +18545,11 @@ function csvToSnapshots(csvText) {
         var _raw = parseInt(cols[19]);
         return Number.isInteger(_raw) ? Math.max(1, Math.min(2, _raw)) : 2;
       })(),
+      // Feature 032 — short-row tolerance: legacy 19/20-column rows have
+      // cols[20]/cols[21] === undefined; parseFloat(undefined) === NaN;
+      // (NaN || 0) === 0. Row is NOT dropped.
+      person1RothIra: parseFloat(cols[20]) || 0,
+      person2RothIra: parseFloat(cols[21]) || 0,
     };
   }).filter(s => s.date); // filter out empty rows
 }

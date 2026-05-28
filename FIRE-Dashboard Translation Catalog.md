@@ -1024,6 +1024,15 @@ All 11 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-D
 | `snap.adults` | Adults | 成人 |
 | `snap.adultsTip` | Number of adults modeled at the time the snapshot was taken. | 快照當時計入計算的成人數。 |
 
+### Feature 032 — Snapshots Roth IRA columns (2 keys, both files)
+
+RR (`FIRE-Dashboard.html`) renders these as visible table columns on the History tab; Generic (`FIRE-Dashboard-Generic.html`) keeps the keys as defensive defs only (FR-018 — Generic UI unchanged). Both files append `rogerRothIra` + `rebeccaRothIra` to CSV_HEADERS for CSV-format lockstep (US5, T042).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `snap.rogerRothIra` | Roger's Roth IRA | Roger 的 Roth IRA |
+| `snap.rebeccaRothIra` | Rebecca's Roth IRA | Rebecca 的 Roth IRA |
+
 ## Feature 010 — Country budget scaling
 
 All 4 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-Dashboard-Generic.html` only (per FR-021 — the RR dashboard `FIRE-Dashboard.html` is explicitly untouched on this branch). Sourced from `specs/010-country-budget-scaling/contracts/i18n.contract.md`.
