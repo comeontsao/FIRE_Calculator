@@ -9432,7 +9432,15 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
             age,
             grossSpend,
             ssIncome: ssThisYear,
-            pools: { pTrad, pRoth, pStocks, pCash },
+            // debug-displaybug-32a — Bug C: pRothIra MUST be threaded so the
+            // signed-sim's strategy dispatch sees the SAME pool set the chart
+            // sim does (projectFullLifecycle :11007 / simulateRetirementOnlySigned
+            // :10070). Without it, registered policies that consult pRothIra
+            // (e.g. rothIra-aware orderings or DWZ pool sweeps) saw a smaller
+            // portfolio in the signed sim — the cross-validation warning
+            // `endBalance-mismatch` (Invariant A) flagged this as a 9.4 % drift
+            // between signed and chart end balances for the SAME winner.
+            pools: { pTrad, pRoth, pRothIra, pStocks, pCash },
             brackets,
             stockGainPct: inp.stockGainPct,
             rmdThisYear: _rmd,
@@ -20287,16 +20295,21 @@ function copyDebugInfo() {
     const lc = Array.isArray(ds.lifecycle) ? ds.lifecycle : [];
     const fa = ds.fireAge;
     const post = (typeof fa === 'number') ? lc.filter(d => d.age >= fa) : [];
-    const pickActiveBtn = (id) => {
-      const el = document.getElementById(id);
-      if (!el) return false;
-      const bg = el.style.background || '';
-      return bg.includes('var(--accent)') || bg.includes('rgb(108');
-    };
-    const fireMode = pickActiveBtn('btnSafeFire') ? 'safe'
-                   : pickActiveBtn('btnExact') ? 'exact'
-                   : pickActiveBtn('btnDieWithZero') ? 'dieWithZero'
-                   : 'unknown';
+    // debug-displaybug-32a — Bug B: read fireMode from the canonical
+    // module-scope global instead of inspecting inline `style.background`
+    // for `var(--accent)`. The legacy heuristic returned `'unknown'` in
+    // production because Chrome resolves the CSS variable at compute time
+    // and never serializes it back into the inline-style string the
+    // heuristic was sniffing — so the copy-debug snapshot reported
+    // `"fireMode": "unknown"` regardless of which gate button was active.
+    // window.fireMode is the SAME value `setFireMode()` mutates whenever
+    // the user clicks a gate button (line 7711) and the verdict / chart
+    // pipeline reads (line 13343+), so this is byte-identical to the
+    // currently displayed mode.
+    const fireMode = (typeof window !== 'undefined' && typeof window.fireMode === 'string')
+      ? window.fireMode
+      : (typeof globalThis !== 'undefined' && typeof globalThis.fireMode === 'string'
+          ? globalThis.fireMode : 'unknown');
     const inputs = {};
     document.querySelectorAll('input[id], select[id]').forEach(el => {
       if (el.type === 'button' || el.type === 'submit') return;

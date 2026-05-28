@@ -9725,7 +9725,12 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
             age,
             grossSpend,
             ssIncome: ssThisYear,
-            pools: { pTrad, pRoth, pStocks, pCash },
+            // debug-displaybug-32a — Bug C: pRothIra threaded so signed-sim's
+            // strategy dispatch sees the SAME pool set as the chart sim
+            // (lockstep with FIRE-Dashboard.html:11007 + :10070). Closes
+            // Invariant A endBalance-mismatch warnings between signed-sim
+            // and chart-sim under registered non-default winners.
+            pools: { pTrad, pRoth, pRothIra, pStocks, pCash },
             brackets,
             stockGainPct: inp.stockGainPct,
             rmdThisYear: _rmd,
@@ -20559,16 +20564,14 @@ function copyDebugInfo() {
     const lc = Array.isArray(ds.lifecycle) ? ds.lifecycle : [];
     const fa = ds.fireAge;
     const post = (typeof fa === 'number') ? lc.filter(d => d.age >= fa) : [];
-    const pickActiveBtn = (id) => {
-      const el = document.getElementById(id);
-      if (!el) return false;
-      const bg = el.style.background || '';
-      return bg.includes('var(--accent)') || bg.includes('rgb(108');
-    };
-    const fireMode = pickActiveBtn('btnSafeFire') ? 'safe'
-                   : pickActiveBtn('btnExact') ? 'exact'
-                   : pickActiveBtn('btnDieWithZero') ? 'dieWithZero'
-                   : 'unknown';
+    // debug-displaybug-32a — Bug B (lockstep with FIRE-Dashboard.html):
+    // read fireMode from window.fireMode instead of the brittle inline-
+    // style.background CSS-variable heuristic that returned 'unknown' in
+    // production. See sibling file for the full rationale.
+    const fireMode = (typeof window !== 'undefined' && typeof window.fireMode === 'string')
+      ? window.fireMode
+      : (typeof globalThis !== 'undefined' && typeof globalThis.fireMode === 'string'
+          ? globalThis.fireMode : 'unknown');
     const inputs = {};
     document.querySelectorAll('input[id], select[id]').forEach(el => {
       if (el.type === 'button' || el.type === 'submit') return;
