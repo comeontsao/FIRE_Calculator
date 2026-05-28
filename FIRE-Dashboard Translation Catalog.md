@@ -1358,3 +1358,13 @@ when it actually meant time-distance to FIRE. New copy makes the time
 dimension explicit ("FIRE in N+ years") and frames the situation as
 factual rather than judgmental ("Distant target" vs "Behind Schedule").
 
+## Feature 032 — Roth IRA Accounts (US2 Lifecycle chart series)
+
+New keys added in both `TRANSLATIONS.en` and `TRANSLATIONS.zh` of
+`FIRE-Dashboard.html` AND `FIRE-Dashboard-Generic.html` (lockstep — acronym
+treated identically in both languages per Principle VII Exemption rule).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `chart.lifecycle.rothIraLine` (NEW) | Roth IRA | Roth IRA |
+

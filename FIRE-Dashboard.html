@@ -89,6 +89,7 @@
     /* Asset palette — canonical values matched to the Lifecycle chart. */
     --chart-trad:         #00d4aa;  /* teal-green */
     --chart-roth:         #846cff;  /* purple */
+    --chart-rothIra:      #a890ff;  /* lighter purple — feature 032 US2 */
     --chart-taxable:      #ffd93d;  /* yellow */
     --chart-cash:         #aab4c8;  /* grey */
     --chart-ss:           #4a9eff;  /* blue */
@@ -127,6 +128,7 @@
     /* Asset palette — canonical values matched to the Lifecycle chart. */
     --chart-trad:         #00d4aa;  /* teal-green */
     --chart-roth:         #846cff;  /* purple */
+    --chart-rothIra:      #a890ff;  /* lighter purple — feature 032 US2 */
     --chart-taxable:      #ffd93d;  /* yellow */
     --chart-cash:         #aab4c8;  /* grey */
     --chart-ss:           #4a9eff;  /* blue */
@@ -4420,6 +4422,7 @@
       case 'phase3':       return _css('--chart-phase3', '#00d4aa');
       case 'trad':         return _css('--chart-trad', '#00d4aa');
       case 'roth':         return _css('--chart-roth', '#846cff');
+      case 'rothIra':      return _css('--chart-rothIra', '#a890ff');
       case 'taxable':      return _css('--chart-taxable', '#ffd93d');
       case 'taxable2':     return _css('--chart-taxable', '#e6c233'); // softer amber for second stocks holder
       case 'cash':         return _css('--chart-cash', '#aab4c8');
@@ -6321,6 +6324,7 @@ const TRANSLATIONS = {
     'chart.lifecycle.p401k': '401K',
     'chart.lifecycle.tradLine': 'Trad 401K',
     'chart.lifecycle.rothLine': 'Roth 401K',
+    'chart.lifecycle.rothIraLine': 'Roth IRA',
     'chart.lifecycle.cashLine': 'Cash',
     'chart.lifecycle.stocks': 'Stocks/Brokerage',
     'chart.lifecycle.stocksShort': 'Stocks',
@@ -7412,6 +7416,7 @@ const TRANSLATIONS = {
     'chart.lifecycle.p401k': '401K',
     'chart.lifecycle.tradLine': '傳統 401K',
     'chart.lifecycle.rothLine': 'Roth 401K',
+    'chart.lifecycle.rothIraLine': 'Roth IRA',
     'chart.lifecycle.cashLine': '現金',
     'chart.lifecycle.stocks': '股票／應稅帳戶',
     'chart.lifecycle.stocksShort': '股票',
@@ -8606,6 +8611,8 @@ function renderLifecycleSidebarChart(_state) {
   const totals = lifecycle.map(function (r) { return _bvOrReal(r, 'total'); });
   const pTrad = lifecycle.map(function (r) { return _bvOrReal(r, 'p401kTrad'); });
   const pRoth = lifecycle.map(function (r) { return _bvOrReal(r, 'p401kRoth'); });
+  // Feature 032 (US2) — Roth IRA series for the sidebar lifecycle mirror.
+  const pRothIra = lifecycle.map(function (r) { return _bvOrReal(r, 'pRothIra'); });
   const pStocks = lifecycle.map(function (r) { return _bvOrReal(r, 'pStocks'); });
   const pCash = lifecycle.map(function (r) { return _bvOrReal(r, 'pCash'); });
   const fireMarker = lifecycle.map(function (_d, i) { return i === fireIdx ? totals[i] : null; });
@@ -8662,6 +8669,18 @@ function renderLifecycleSidebarChart(_state) {
       label: t('chart.lifecycle.rothLine'),
       data: pRoth,
       borderColor: __fireChartColorAlpha('roth', 0.55),
+      borderDash: [4, 4],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.2,
+      fill: false,
+    },
+    // Feature 032 (US2) — Roth IRA pool mirror line in the sidebar chart.
+    {
+      label: t('chart.lifecycle.rothIraLine'),
+      data: pRothIra,
+      borderColor: __fireChartColorAlpha('rothIra', 0.55),
       borderDash: [4, 4],
       tension: 0,
       cubicInterpolationMode: 'monotone',
@@ -10412,6 +10431,14 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
 
   let portfolio401kTrad = inp.roger401kTrad;
   let portfolio401kRoth = inp.roger401kRoth;
+  // Feature 032 (US2) — Roth IRA pool. Seeded from canonical `rothIraReal` if
+  // exposed by the dashboard inp; otherwise summed from raw DOM fields.
+  // Generic dashboard has no UI inputs → naturally 0. Locked semantics
+  // (pre-59.5 inaccessible) are enforced by the withdrawal layer (US3+),
+  // not by suppressing the pool's accumulation/growth here.
+  let portfolioRothIra = (typeof inp.rothIraReal === 'number')
+    ? inp.rothIraReal
+    : ((inp.rogerRothIra || 0) + (inp.rebeccaRothIra || 0));
   let portfolioStocks = inp.rogerStocks + inp.rebeccaStocks;
   let portfolioCash = inp.cashSavings + inp.otherAssets;
   let income = inp.annualIncome;
@@ -10550,14 +10577,23 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // Push per-year accumulation rows (v1 + v2 fields).
     for (const _ay of _accumResult.perYearRows) {
       const _ayYear = 2026 + (_ay.age - inp.ageRoger);
+      // Feature 032 (US2) — Roth IRA pool flows into accumulation total alongside
+      // the 401K and accessible pools. Same locked-pool treatment as Roth 401K
+      // for age < 59.5; the chart series is added unconditionally and the
+      // value reflects the helper's per-year growth (Invariant I4).
       const _ayP401k = Math.max(0, _ay.pTrad) + Math.max(0, _ay.pRoth);
+      const _ayRothIra = Math.max(0, _ay.pRothIra || 0);
       const _ayAccessible = Math.max(0, _ay.pStocks) + Math.max(0, _ay.pCash);
       data.push({
         year: _ayYear, age: _ay.age,
-        total: _ayP401k + _ayAccessible,
+        total: _ayP401k + _ayRothIra + _ayAccessible,
         p401k: _ayP401k,
         p401kTrad: Math.max(0, _ay.pTrad),
         p401kRoth: Math.max(0, _ay.pRoth),
+        // Feature 032 (US2) — Roth IRA pool field on lifecycle row.
+        // Consumers: Lifecycle chart dataset, FIRE feasibility gate effBal()
+        // (FR-021e), copy-debug snapshot, audit composition (lockedRothIra).
+        pRothIra: _ayRothIra,
         pStocks: Math.max(0, _ay.pStocks),
         pCash: Math.max(0, _ay.pCash),
         accessible: _ayAccessible,
@@ -10584,6 +10620,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // Sync pools to helper's end-state (post-accumulation, entering FIRE year).
     portfolio401kTrad = _accumResult.end.pTrad;
     portfolio401kRoth = _accumResult.end.pRoth;
+    // Feature 032 (US2) — Roth IRA pool entering retirement loop.
+    portfolioRothIra  = _accumResult.end.pRothIra || 0;
     portfolioStocks   = _accumResult.end.pStocks;
     portfolioCash     = _accumResult.end.pCash;
     // Advance income to FIRE year (income is not returned by helper).
@@ -10804,7 +10842,11 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // total === p401k + pStocks + pCash (each pool clamped to >= 0 first).
     const accessibleSnap = Math.max(0, portfolioStocks) + Math.max(0, portfolioCash);
     const portfolio401k = Math.max(0, portfolio401kTrad) + Math.max(0, portfolio401kRoth);
-    const total = portfolio401k + accessibleSnap;
+    // Feature 032 (US2) — Roth IRA pool snapshot. Adds to total alongside
+    // 401K + accessible. Pool participates in totals; withdrawal-layer
+    // logic (US3+) enforces 59.5 lock when draws are computed.
+    const rothIraSnap = Math.max(0, portfolioRothIra);
+    const total = portfolio401k + rothIraSnap + accessibleSnap;
 
     data.push({
       year, age,
@@ -10812,6 +10854,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       p401k: portfolio401k,
       p401kTrad: Math.max(0, portfolio401kTrad),
       p401kRoth: Math.max(0, portfolio401kRoth),
+      // Feature 032 (US2) — Roth IRA pool field (real-$).
+      pRothIra: rothIraSnap,
       pStocks: Math.max(0, portfolioStocks),
       pCash: Math.max(0, portfolioCash),
       accessible: Math.max(0, accessibleSnap),
@@ -10827,6 +10871,11 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       income *= (1 + inp.raiseRate);
       portfolio401kTrad = portfolio401kTrad * (1 + realReturn401k) + tradContrib;
       portfolio401kRoth = portfolio401kRoth * (1 + realReturn401k) + rothContrib;
+      // Feature 032 (US2) — Roth IRA accumulation growth in the fallback
+      // path (when accumulateToFire helper is unavailable). Mirrors helper's
+      // growth equation; contribution = 0 here because non-helper path has
+      // no contribution-input handle (US4b ships that).
+      portfolioRothIra = portfolioRothIra * (1 + realReturn401k);
       portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
       portfolioCash *= 1.005;
     } else {
@@ -10891,6 +10940,10 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // `signedLifecycleEndBalance` is the authoritative detector of that case).
       portfolio401kTrad = Math.max(0, portfolio401kTrad) * (1 + realReturn401k);
       portfolio401kRoth = Math.max(0, portfolio401kRoth) * (1 + realReturn401k);
+      // Feature 032 (US2) — Roth IRA grows in retirement at realReturn401k.
+      // Withdrawal layer (US3+) is responsible for any wRothIra subtraction;
+      // until it lands, the pool simply compounds tax-free (FR-019).
+      portfolioRothIra  = Math.max(0, portfolioRothIra)  * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
       portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
@@ -16525,7 +16578,9 @@ function renderGrowthChart(inp) {
   try {
     if (typeof _extendRowsWithBookValues === 'function') {
       _extendRowsWithBookValues(lifecycle, inp.ageRoger, inp.inflationRate,
-        ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth']);
+        // Feature 032 (US2) — 'pRothIra' added so pRothIraBookValue companion is
+        // auto-populated for the new Roth IRA chart dataset above.
+        ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth','pRothIra']);
     }
   } catch (_e) { /* defensive — render real-$ if helper unavailable */ }
   // Feature 023 follow-up — FIRE NUMBER target line uses projected total at
@@ -16635,6 +16690,20 @@ function renderGrowthChart(inp) {
       label: t('chart.lifecycle.rothLine'),
       data: lifecycle.map(d => Math.round(_bvOrReal(d.p401kRothBookValue, d.p401kRoth))),
       borderColor: __fireChartColorAlpha('roth', 0.55),
+      borderDash: [5,5],
+      tension: 0,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      borderWidth: 1.5,
+    },
+    // Feature 032 (US2) — Roth IRA pool. Mirrors the Roth 401K line dataset
+    // pattern; color from --chart-rothIra (lighter purple). The BookValue
+    // companion is populated by _extendRowsWithBookValues below (pRothIra
+    // appears in the legend-keys list).
+    {
+      label: t('chart.lifecycle.rothIraLine'),
+      data: lifecycle.map(d => Math.round(_bvOrReal(d.pRothIraBookValue, d.pRothIra))),
+      borderColor: __fireChartColorAlpha('rothIra', 0.55),
       borderDash: [5,5],
       tension: 0,
       cubicInterpolationMode: 'monotone',

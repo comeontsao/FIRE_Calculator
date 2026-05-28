@@ -2164,3 +2164,148 @@ test('v5-spend-8: options.accumulationSpend correctly drives conservation invari
       `v5-spend-8: annualSpending == options.accumulationSpend`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// T016 (feature 032 US2) — accumulateToFire perYearRows expose pRothIra
+// (real-$) field when input rothIraReal > 0. This is the calc-layer half of
+// projectFullLifecycle's row contract; the HTML inline projectFullLifecycle
+// reads _accumResult.perYearRows and forwards pRothIra into its data.push.
+// The `pRothIraBookValue` companion is auto-computed by
+// _extendRowsWithBookValues at chart-render time (line 16528 in
+// FIRE-Dashboard.html) and is not part of accumulateToFire's contract.
+//
+// Fixture: rothIraReal = 59021, FIRE age 50, current age 40, accumulation
+// 10 years. return401k = 0.05, inflationRate = 0 → realReturn401k = 0.05.
+// No contribution. Expect pRothIra at end of accumulation to be approximately
+// 59021 * (1.05)^10 ≈ 96,143.41.
+// ---------------------------------------------------------------------------
+test('T016: perYearRows expose pRothIra (real-$) when input rothIraReal > 0', () => {
+  const inp = baseInp({
+    ageRoger: 40,
+    rothIraReal: 59021,
+    rothIraContribReal: 0,
+    return401k: 0.05,
+    inflationRate: 0,
+  });
+  const fireAge = 50;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const rows = result.perYearRows;
+
+  // Every row MUST expose pRothIra field.
+  for (const row of rows) {
+    assert.ok(
+      typeof row.pRothIra === 'number' && Number.isFinite(row.pRothIra),
+      `T016: row at age ${row.age} must expose pRothIra (got ${row.pRothIra})`
+    );
+    assert.ok(
+      row.pRothIra > 0,
+      `T016: row at age ${row.age} pRothIra should be > 0 when seed=59021 (got ${row.pRothIra})`
+    );
+  }
+
+  // Year-0 snapshot equals seed.
+  assert.strictEqual(rows[0].pRothIra, 59021,
+    `T016: row 0 pRothIra should be 59021, got ${rows[0].pRothIra}`);
+
+  // End pool ≈ 59021 * 1.05^10
+  const expected = 59021 * Math.pow(1.05, 10);
+  assert.ok(
+    Math.abs(result.end.pRothIra - expected) < 1,
+    `T016: end.pRothIra ≈ ${expected.toFixed(2)}, got ${result.end.pRothIra.toFixed(2)}`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T017 (feature 032 US2) — Invariant I4: Roth IRA pool growth equation.
+// Per specs/032-roth-ira-accounts/contracts/roth-ira-pool.contract.md §Invariant I4:
+//   pRothIra[y+1] = pRothIra[y] * (1 + return401k) + rothIraContrib_thisYear
+//
+// Fixture: starting Roth IRA = 0, contribution 7000/yr, return401k = 0.07,
+// inflation = 0 (so realReturn401k = 0.07), 10 years.
+// Annuity FV formula: 7000 * ((1.07^10 - 1) / 0.07) ≈ 96,715.43.
+// ---------------------------------------------------------------------------
+test('T017: Invariant I4 — pRothIra grows by (1+return401k) + rothIraContrib_thisYear each year', () => {
+  // Use the minimal inp that drops all other pools to zero so we can isolate
+  // pRothIra arithmetic.
+  const inp = baseInp({
+    ageRoger: 40,
+    roger401kTrad: 0,
+    roger401kRoth: 0,
+    rogerStocks: 0,
+    rebeccaStocks: 0,
+    cashSavings: 0,
+    otherAssets: 0,
+    monthlySavings: 0,
+    contrib401kTrad: 0,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    annualIncome: 0,           // no cash-flow residual to muddy things
+    taxRate: 0,                // auto path — but annualIncome=0 → tax=0
+    inflationRate: 0,          // realReturn401k === return401k === 0.07
+    return401k: 0.07,
+    returnRate: 0.07,
+    // Feature 032 (US2) — Roth IRA seed + contribution. Test treats the
+    // canonical-field shape (`rothIraReal` + `rothIraContribReal`) as the
+    // primary source per data-model.md §3 (Canonical-input shape).
+    rothIraReal: 0,
+    rothIraContribReal: 7000,
+  });
+  const fireAge = 50;
+  const result = accumulateToFire(inp, fireAge, baseOptions());
+  const rows = result.perYearRows;
+
+  assert.strictEqual(rows.length, 10, 'should have 10 accumulation rows');
+
+  // Verify year-over-year growth equation pRothIra[y+1] = pRothIra[y]*1.07 + 7000.
+  for (let i = 1; i < rows.length; i++) {
+    const expected = rows[i - 1].pRothIra * 1.07 + 7000;
+    const actual = rows[i].pRothIra;
+    assert.ok(
+      Math.abs(actual - expected) < 0.01,
+      `I4: at age ${rows[i].age}, expected pRothIra ≈ ${expected.toFixed(2)}, got ${actual.toFixed(2)}`
+    );
+  }
+
+  // End-state check: annuity FV closed form.
+  // pRothIra after 10 contributions of 7000 at 7%: 7000 * ((1.07^10 - 1) / 0.07) ≈ 96715
+  // But note: the row snapshot is BEFORE the year's growth+contribution arithmetic
+  // (per accumulateToFire.js line 672-705). So rows[9] = year-9 pre-arithmetic.
+  // The post-loop end pool reflects all 10 years of growth+contribution.
+  const endRothIra = result.end && result.end.pRothIra;
+  const expectedEnd = 7000 * ((Math.pow(1.07, 10) - 1) / 0.07);
+  assert.ok(
+    typeof endRothIra === 'number',
+    `I4: result.end.pRothIra should be a number, got ${endRothIra}`
+  );
+  assert.ok(
+    Math.abs(endRothIra - expectedEnd) < 1,
+    `I4: end.pRothIra annuity-FV closed form: expected ≈ ${expectedEnd.toFixed(2)}, got ${endRothIra.toFixed(2)}`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// T017b — seeding from rothIraReal: pool starts at the canonical seed value.
+// ---------------------------------------------------------------------------
+test('T017b: pRothIra seeds from inp.rothIraReal at year 0', () => {
+  const inp = baseInp({
+    inflationRate: 0,
+    return401k: 0.05,
+    rothIraReal: 59021,
+    rothIraContribReal: 0,
+  });
+  const result = accumulateToFire(inp, inp.ageRoger + 10, baseOptions());
+  const rows = result.perYearRows;
+
+  // Year 0 snapshot is taken BEFORE the year's growth — should equal seed.
+  assert.strictEqual(
+    rows[0].pRothIra, 59021,
+    `T017b: row 0 pRothIra should equal seed (59021), got ${rows[0].pRothIra}`
+  );
+
+  // With no contribution, pure compound: 59021 * 1.05^10 ≈ 96,143.40
+  const expectedEnd = 59021 * Math.pow(1.05, 10);
+  assert.ok(
+    Math.abs(result.end.pRothIra - expectedEnd) < 1,
+    `T017b: end.pRothIra after 10y pure-compound: expected ≈ ${expectedEnd.toFixed(2)}, got ${result.end.pRothIra.toFixed(2)}`
+  );
+});
