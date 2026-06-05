@@ -201,12 +201,16 @@ function _buildWithdrawalTooltipFallback(row, conv) {
 // Mirror calc/cashSweep.js. Constitution Principle V.
 // ---------------------------------------------------------------------------
 
-const _api = {
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the entire module
+// (pre-fix: `_api` here collided with calcAudit.js's `_api`).
+const _withdrawalTooltipFrameApi = {
   _buildWithdrawalTooltipLines: _buildWithdrawalTooltipLines,
   _buildWithdrawalTooltipFallback: _buildWithdrawalTooltipFallback,
 };
 if (typeof module !== 'undefined' && module && module.exports) {
-  module.exports = _api;
+  module.exports = _withdrawalTooltipFrameApi;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis._buildWithdrawalTooltipLines = _buildWithdrawalTooltipLines;

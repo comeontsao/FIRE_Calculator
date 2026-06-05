@@ -3784,7 +3784,9 @@
       </div>
     </div>
   </div>
-        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
+        <!-- Healthcare is the LAST geography pill since feature 015 removed
+             country-deep-dive — Next must be disabled (router contract §Next). -->
+        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next" disabled>Next →</button>
       </div>
       <!-- Feature 015 follow-up — country-deep-dive pill-host removed; content is now inline in the scenarios pill-host above. -->
     </section>
@@ -8615,7 +8617,12 @@ function renderCompactHeaderStats(_state) { /* no-op */ }
 let _sidebarLifecycleChart = null; // lazy-created Chart.js instance (MC-3/BH-12)
 function renderLifecycleSidebarChart(_state) {
   // MC-5 — no-op when sidebar is closed. Caption stays whatever it last was.
-  if (typeof sidebarMode !== 'undefined' && sidebarMode === 'hidden') return;
+  // TDZ fix: `sidebarMode` is declared with `var` (hoisted-undefined) far below
+  // this function; during boot (switchLanguage → recalcAll) it is still
+  // undefined, which means "sidebar hidden" (the default) → no-op. A `let`
+  // here previously threw "Cannot access 'sidebarMode' before initialization"
+  // on every cold load (typeof does NOT protect lexical bindings from TDZ).
+  if (typeof sidebarMode === 'undefined' || sidebarMode === 'hidden') return;
   const canvas = document.getElementById('lifecycleSidebarCanvas');
   if (!canvas) return;
   const ds = _lastLifecycleDataset;
@@ -19553,7 +19560,10 @@ renderCompactHeaderStats(null);
 // Focus management per A11y-5: opening moves focus to pin button; closing
 // restores focus to the element that triggered the open.
 // =============================================================================
-let sidebarMode = 'hidden';
+// `var` (not `let`): renderLifecycleSidebarChart reads this during boot, before
+// this line executes. var hoists to undefined (treated as 'hidden' by the
+// guard); `let` left a TDZ that threw ReferenceError on every cold load.
+var sidebarMode = 'hidden';
 const SIDEBAR_KEY = 'fire_dashboard_sidebar_pinned';
 let _lastSidebarTrigger = null; // element focus is restored to on close (A11y-5)
 

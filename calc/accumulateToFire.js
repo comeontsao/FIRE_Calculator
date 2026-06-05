@@ -166,8 +166,25 @@ const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
 const _cashSweepMod = (typeof require !== 'undefined')
   ? (() => { try { return require('./cashSweep.js'); } catch (_e) { return null; } })()
   : null;
-const _applyCashSweep = (_cashSweepMod && _cashSweepMod._applyCashSweep)
-  || (typeof globalThis !== 'undefined' ? globalThis._applyCashSweep : null);
+// Lazy resolver (browser-boot fix, 2026-06-05). The previous
+// `const _applyCashSweep = … || globalThis._applyCashSweep` was doubly broken
+// in the browser:
+//   1. The top-level `const` collided with cashSweep.js's
+//      `function _applyCashSweep` declaration (shared global lexical scope) →
+//      SyntaxError killed cashSweep.js entirely.
+//   2. Even without the collision, this module loads BEFORE cashSweep.js
+//      (script-tag order), so globalThis._applyCashSweep was still undefined
+//      at evaluation time — the const captured null forever.
+// Resolving at CALL time fixes both. Node tests are unaffected (the require
+// branch resolves immediately).
+function _resolveApplyCashSweep() {
+  if (_cashSweepMod && typeof _cashSweepMod._applyCashSweep === 'function') {
+    return _cashSweepMod._applyCashSweep;
+  }
+  return (typeof globalThis !== 'undefined' && typeof globalThis._applyCashSweep === 'function')
+    ? globalThis._applyCashSweep
+    : null;
+}
 
 /**
  * v3 tax computation helper (feature 021). Pure: no I/O.
@@ -765,6 +782,10 @@ function accumulateToFire(inp, fireAge, options) {
     pCash *= 1.005;
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
+      // Resolve lazily (see _resolveApplyCashSweep above). The block-scoped
+      // const keeps the canonical `_applyCashSweep(` call-site pattern from
+      // contracts/cash-sweep.contract.md intact.
+      const _applyCashSweep = _resolveApplyCashSweep();
       const _f030_sweep_ = (typeof _applyCashSweep === 'function')
         ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
             age, currentAge, !!inp.cashSweepEnabled)

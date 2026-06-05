@@ -206,6 +206,10 @@ const STRATEGIES = ['pviStrategyPrepay', 'pviStrategyInvestKeep', 'pviStrategyIn
 
 for (const dash of DASHBOARDS) {
   test(`matrix: strategy × slider value sweep, no errors (${dash.key})`, async ({ page }) => {
+    // 3 strategies × 3 slider values × full recalc each ≈ 19-25s standalone —
+    // brushes the 30s budget under parallel full-suite load (observed flaking
+    // 2026-06-05). slow() triples the timeout.
+    test.slow();
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

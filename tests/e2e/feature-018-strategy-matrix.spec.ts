@@ -197,6 +197,9 @@ for (const dash of DASHBOARDS) {
     });
 
     test(`KPI / sidebar update on every strategy radio toggle`, async ({ page }) => {
+      // ≈ 15-21s standalone — brushes the 30s budget under parallel full-suite
+      // load (observed flaking 2026-06-05). slow() triples the timeout.
+      test.slow();
       // Live-in path — purest strategy-only signal, no sale interference.
       await setHomeDestiny(page, 'no');
 
@@ -287,6 +290,10 @@ for (const dash of DASHBOARDS) {
     });
 
     test(`full matrix sweep — no console errors across all 6 cells`, async ({ page }) => {
+      // 2 destinies × 3 strategies × full recalc ≈ 22-30s standalone — brushes
+      // the 30s budget under parallel full-suite load (observed flaking
+      // 2026-06-05). slow() triples the timeout.
+      test.slow();
       for (const destiny of HOME_DESTINIES) {
         await setHomeDestiny(page, destiny.selectValue);
         for (const strat of STRATEGIES) {

@@ -257,7 +257,10 @@ function _newWinnerBeats(prevWinner, newContender, mode, objective, annualSpend,
 
 // ---- Module exports ----
 
-const _api = {
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the later module.
+const _strategyRankerApi = {
   computeCumulativeFederalTax,
   computeResidualArea,
   _newWinnerBeats,
@@ -268,7 +271,7 @@ const _api = {
 
 // CommonJS export (Node `require`)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = _api;
+  module.exports = _strategyRankerApi;
 }
 
 // Browser global registration (UMD-style classic-script load)
@@ -278,5 +281,5 @@ if (typeof globalThis !== 'undefined') {
   globalThis._newWinnerBeats = _newWinnerBeats;
   globalThis._scoreDeltaToYears = _scoreDeltaToYears;
   globalThis.HYSTERESIS_YEARS = HYSTERESIS_YEARS;
-  globalThis.strategyRankerModule = _api;
+  globalThis.strategyRankerModule = _strategyRankerApi;
 }

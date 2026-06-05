@@ -1264,13 +1264,16 @@ function assembleAuditSnapshot(options) {
 // Feature 029 (US4 / FR-005) — expose _invariantE so its behavior can be
 // unit-tested directly with synthetic simulatorTraces input. Internal helper;
 // dashboard code consumes assembleAuditSnapshot only.
-const _api = {
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the later module.
+const _calcAuditApi = {
   assembleAuditSnapshot: assembleAuditSnapshot,
   _invariantE_test_only_: _invariantE,
   _invariantF_test_only_: _invariantF,
 };
 if (typeof module !== 'undefined' && module && module.exports) {
-  module.exports = _api;
+  module.exports = _calcAuditApi;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis.assembleAuditSnapshot = assembleAuditSnapshot;

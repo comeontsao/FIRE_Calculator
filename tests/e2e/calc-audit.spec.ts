@@ -234,14 +234,19 @@ for (const dash of DASHBOARDS) {
       // synchronously and removes it after 1500ms.
       await page.click('.audit-flow__stage[data-target="audit-section-gates"]');
 
-      // Within ~100ms: highlight class applied AND section near top of viewport.
+      // Highlight class applied AND section scrolled into the viewport.
+      // (Stale-fixture postmortem 2026-06-05: the original `rect.top < 200`
+      // assumed enough content BELOW the gates section to scroll it to the
+      // top; the document bottoms out with the section settling at ~417px on
+      // a 720px viewport, so the old condition was unsatisfiable. The real
+      // contract is "section visible while highlighted", not "near top".)
       await page.waitForFunction(
         () => {
           const el = document.getElementById('audit-section-gates');
           if (!el) return false;
           if (!el.classList.contains('audit-section--highlight')) return false;
           const rect = el.getBoundingClientRect();
-          return rect.top < 200; // smooth scroll has finished or near-finished
+          return rect.top < window.innerHeight * 0.7 && rect.bottom > 0;
         },
         null,
         { timeout: 3_000 },

@@ -142,13 +142,16 @@ function simulateLifecycle(options) {
 
 // ---- Module exports ----
 
-const _api = { simulateLifecycle };
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the later module.
+const _simulateLifecycleApi = { simulateLifecycle };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = _api;
+  module.exports = _simulateLifecycleApi;
 }
 
 if (typeof globalThis !== 'undefined') {
   globalThis.simulateLifecycle = simulateLifecycle;
-  globalThis.simulateLifecycleModule = _api;
+  globalThis.simulateLifecycleModule = _simulateLifecycleApi;
 }
