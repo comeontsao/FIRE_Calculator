@@ -1,9 +1,9 @@
 <!-- SPECKIT START -->
-**Active feature**: 032 (roth-ira-accounts) — **PLAN COMPLETE — AWAITING /speckit-tasks** on branch `032-roth-ira-accounts` (2026-05-28). Adds a dedicated `rothIra` withdrawal pool (sibling of `roth`/Roth-401K) plus four new RR-only inputs: Roger's Roth IRA balance ($0 default — account opening 2026), Rebecca's Roth IRA balance ($59,021 default), and two adjustable annual-contribution fields ($7,000 default each). All 3 clarifications locked A/B/B; full caller-audit at [`audit.md`](./specs/032-roth-ira-accounts/audit.md) enumerates 57 touch points across 19 categories. Spec docs: [`spec.md`](./specs/032-roth-ira-accounts/spec.md), [`plan.md`](./specs/032-roth-ira-accounts/plan.md), [`research.md`](./specs/032-roth-ira-accounts/research.md), [`data-model.md`](./specs/032-roth-ira-accounts/data-model.md), [`contracts/roth-ira-pool.contract.md`](./specs/032-roth-ira-accounts/contracts/roth-ira-pool.contract.md), [`quickstart.md`](./specs/032-roth-ira-accounts/quickstart.md). Key locked decisions: full lock until 59.5 (matches Roth 401K); rename canonical `rothIraReal` → `roth401kReal` (introduce new `rothIraReal` for actual Roth IRA); RR-only UI but calc-layer lockstep preserved in both HTML files; CSV append-only schema bump; separate Lifecycle chart series for visual distinction. Constitution Check: Principle I tension documented in Complexity Tracking (UI is personal content; calc layer remains lockstep). Critical safety FR-021e: `effBal()` formula at `FIRE-Dashboard.html:9141` MUST sum `pRothIra` to prevent feature-031-class verdict drift. Merge gate: browser smoke per [`quickstart.md`](./specs/032-roth-ira-accounts/quickstart.md).
+**Active feature**: none — 033 (math-assumptions cleanup) is next: single `cashRealReturn` constant replacing the 9 hardcoded `×1.005` cash-growth sites, honest funding for negative accumulation residuals (cut stock contribution → draw cash, never floor-to-zero), optionally the Fisher `realRate()` helper for the 22 rate-subtraction sites. Scope BOTH HTML files + calc modules + gold-standard fixture updates + before/after FIRE-age documentation. Origin: external review 2026-06-05 (BUG-2/3/4; its BUG-1 sim-drift claim did NOT reproduce post-032-hotfix — zero non-expected crossValidationWarnings in all three modes on RR live defaults).
 
-**Prior feature**: 031 (lifecycle-strategy-parity) — merged to main 2026-05-28 (`acd2b23`, browser smoke skipped per user). Made the Lifecycle chart, FIRE verdict gate, drag-preview, and tooltip all consume the single resolved withdrawal-strategy winner (Constitution III), plus closed the `projectFullLifecycle` cash-sweep gap and fixed a Book-Value tooltip frame mix. Tests 622/622 unit + 6/6 Playwright drag E2E; lockstep byte-identical to Generic. Deferred to backlog: B-031-1/2/3. Detail in spec docs under [`specs/031-lifecycle-strategy-parity/`](./specs/031-lifecycle-strategy-parity/). The displayed-strategy gate rule is codified under Process Lessons below.
+**Prior feature**: 032 (roth-ira-accounts) — merged to main 2026-06-05. Dedicated `rothIra` withdrawal pool (sibling of Roth-401K) + four RR-only inputs (Roger $0 / Rebecca $59,021 balances, $7,000 annual contributions each); full lock until 59.5; CSV append-only schema bump; separate Lifecycle series; RR-only UI with calc-layer lockstep in both HTML files. Tests 682/682 unit + **163/163 full Playwright E2E** + automated browser smoke 15/15 (`tools/smoke-032.mjs`). Merge includes the **2026-06-05 hotfix wave**: fixed pre-existing global-scope collisions that had silently prevented `calc/cashSweep.js` (feature 030!) and `calc/withdrawalTooltipFrame.js` from ever loading in a real browser, a `sidebarMode` TDZ ReferenceError on every cold load, and six stale-fixture E2E groups red since ~feature 015/016 (see `tests/unit/globalScopeCollision.test.js` + Process Lessons). Spec docs under [`specs/032-roth-ira-accounts/`](./specs/032-roth-ira-accounts/).
 
-**Predecessor**: 030 (cash-sweep-stocks) — merged to main 2026-05-27 (`0f0c67b`). Opt-in cash-sweep (cash → stocks above a threshold) closing the unrealistic age-100 cash pile-up. Locked semantics: default OFF, year-0 cash preserved, one-way, real-$ frame, $10K default threshold, sweep AFTER all flows. Tests 587/587. Detail in [`CLOSEOUT.md`](./specs/030-cash-sweep-stocks/CLOSEOUT.md).
+**Predecessor**: 031 (lifecycle-strategy-parity) — merged to main 2026-05-28 (`acd2b23`, browser smoke skipped per user). Made the Lifecycle chart, FIRE verdict gate, drag-preview, and tooltip all consume the single resolved withdrawal-strategy winner (Constitution III), plus closed the `projectFullLifecycle` cash-sweep gap and fixed a Book-Value tooltip frame mix. Tests 622/622 unit + 6/6 Playwright drag E2E; lockstep byte-identical to Generic. Deferred to backlog: B-031-1/2/3. Detail in spec docs under [`specs/031-lifecycle-strategy-parity/`](./specs/031-lifecycle-strategy-parity/). The displayed-strategy gate rule is codified under Process Lessons below.
 
 - Constitution: [.specify/memory/constitution.md](./.specify/memory/constitution.md)
 - Backlog: [BACKLOG.md](./BACKLOG.md)
@@ -333,6 +333,48 @@ touches the HTML boot path or anything `window`-exposed:
 Skip this and you risk feature-004-class failures where the runner is green
 but the dashboard is visibly broken. Treat this as a Manager-executed gate
 BEFORE merging.
+
+**UPDATE 2026-06-05 — the smoke is now automatable from CLI.** Run
+`node tools/console-probe.mjs <abs-path-to-html>` (console errors + module-load
+flags), `node tools/smoke-032.mjs` (KPI numerics, persistence, audit warnings,
+Generic regression), and `node tools/bug1-repro-probe.mjs` (per-mode
+crossValidationWarnings). "Browser smoke skipped per user" is no longer an
+acceptable merge note — only genuinely visual checks (drag feel, aesthetics)
+still need a human.
+
+### Classic-script global scope is ONE shared lexical scope
+
+All `<script src="calc/X.js">` modules and both HTML files' inline scripts
+share a single global lexical environment. A duplicate top-level `const`/`let`
+across any two of them throws SyntaxError at load and SILENTLY kills the
+entire second script — every caller then degrades through its `typeof`
+fallback, which is invisible in Node tests (separate module scopes).
+
+**This actually shipped broken:** `calc/cashSweep.js` and
+`calc/withdrawalTooltipFrame.js` never executed in any real browser between
+feature 030's merge and 2026-06-05 (duplicate `const _api` + a
+`const _applyCashSweep` eval-time-capture in accumulateToFire.js), so the
+cash sweep was a browser no-op while 587 unit tests stayed green.
+
+**How to apply:** (1) every calc module's UMD-export const gets a unique
+per-module name (`_cashSweepApi`, not `_api`); (2) cross-module references
+resolve lazily at call time, never at eval time (script-tag order matters);
+(3) `tests/unit/globalScopeCollision.test.js` statically guards every
+browser-loaded calc script — keep it passing; (4) `typeof x` does NOT protect
+`let`/`const` TDZ — boot-path-reachable module state uses `var`.
+
+### The FULL Playwright suite is the gate, not feature-specific specs
+
+The full E2E suite was quietly red from ~feature 015/016 until 2026-06-05
+(24 failures on main) because CLOSEOUTs cited unit counts plus only the new
+feature's specs ("6/6 drag tests"). Stale fixtures accumulated: pill lists
+missing feature-016's `payoff-invest`, retired `.kpi-row` selectors,
+born-red contract tests never revisited after integration landed.
+
+**How to apply:** before merging any feature, `npm run test:e2e` (full suite)
+must be green. When a test goes stale because the product legitimately moved,
+fix the FIXTURE in the same commit as the feature that moved it — and when a
+TDD-style spec ships expected-red, file a follow-up task to flip it green.
 
 ### FIRE-mode gates (Safe / Exact / DWZ) MUST evaluate the displayed strategy
 
