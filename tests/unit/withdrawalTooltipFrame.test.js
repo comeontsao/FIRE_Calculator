@@ -310,3 +310,38 @@ test('fallback case F: degrades to real-$ pools without crashing when converter 
   assert.ok(Number.isFinite(out.totalDrawn), 'totalDrawn must stay finite');
   assert.ok(Number.isFinite(out.ordIncome), 'ordIncome must stay finite');
 });
+
+// ===========================================================================
+// Feature 032 — User Story 4 (T028): Roth IRA tooltip line.
+// The tooltip's per-pool breakdown must include a `rothIra` Book-Value field,
+// reading from `wRothIraBookValue` and falling back to raw real-$ `wRothIra`
+// when the companion is non-finite (mirrors the existing pool patterns).
+// ===========================================================================
+
+test('feature 032: tooltip includes rothIra line in Book-Value frame', () => {
+  // Row with explicit Roth IRA draw companions (typical post-Book-Value augmentation).
+  const r = makeRow({ wRothIra: 5000, wRothIraBookValue: 5500 });
+  const out = _buildWithdrawalTooltipLines(r, FRAME_OPTS);
+
+  assert.ok(out.pools, 'pools object must exist');
+  assert.strictEqual(
+    out.pools.rothIra,
+    5500,
+    `pools.rothIra must equal wRothIraBookValue (Book-Value frame); got ${out.pools.rothIra}`,
+  );
+});
+
+test('feature 032: tooltip rothIra falls back to real-$ wRothIra when Book-Value companion missing', () => {
+  // Mirrors existing pool patterns: when the Book-Value companion is
+  // non-finite (or absent), the tooltip falls back to the raw real-$ field
+  // so the line still renders rather than producing NaN.
+  const r = makeRow({ wRothIra: 4200 });
+  delete r.wRothIraBookValue;
+  const out = _buildWithdrawalTooltipLines(r, FRAME_OPTS);
+
+  assert.strictEqual(
+    out.pools.rothIra,
+    4200,
+    `pools.rothIra must fall back to wRothIra real-$ when companion missing; got ${out.pools.rothIra}`,
+  );
+});

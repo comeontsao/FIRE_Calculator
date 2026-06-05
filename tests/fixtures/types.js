@@ -43,7 +43,14 @@
 /**
  * @typedef {Object} Portfolio
  * @property {number} trad401kReal               real dollars
- * @property {number} rothIraReal
+ * @property {number} roth401kReal               Roth 401K balance (feature 032 rename
+ *                                               from the misleading legacy
+ *                                               `rothIraReal`); separate from the
+ *                                               new actual Roth IRA pool.
+ * @property {number} [rothIraReal]              Roth IRA balance (NEW in feature 032 —
+ *                                               actual individual Roth IRA pool).
+ *                                               Defaults to 0 when not supplied.
+ * @property {number} [rothIraContribReal]       Annual Roth IRA contribution (feature 032).
  * @property {number} taxableStocksReal
  * @property {number} cashReal
  * @property {number} annualContributionReal     current annual savings
@@ -153,7 +160,7 @@
  * 60/20/20 trad/roth/taxable split for accumulation-phase contributions.
  *
  * @property {number} trad401kFraction       decimal 0..1 — share routed to trad401k
- * @property {number} rothFraction           decimal 0..1 — share routed to rothIra
+ * @property {number} rothFraction           decimal 0..1 — share routed to roth401k
  * @property {number} taxableFraction        decimal 0..1 — share routed to taxableStocks
  *
  * Invariant: fractions sum to 1.0 within 1e-9. Default when omitted:
@@ -251,10 +258,14 @@
  * @property {Phase} phase
  * @property {number} totalReal           sum of all pools, real dollars
  * @property {number} trad401kReal        Traditional 401(k) balance only (pre-tax)
- * @property {number} rothIraReal         Roth 401(k) + Roth IRA balance (post-tax, merged)
+ * @property {number} roth401kReal        Roth 401(k) balance (feature 032 rename from
+ *                                        the legacy misnomer `rothIraReal`)
+ * @property {number} [rothIraReal]       Roth IRA balance (NEW in feature 032 — actual
+ *                                        individual Roth IRA pool, separate from
+ *                                        Roth 401K). Present only when wired.
  * @property {number} [p401kTradReal]     US2b — alias of trad401kReal for HTML-renderer parity
  *                                        with the inline engine's 'p401kTrad' field name
- * @property {number} [p401kRothReal]     US2b — alias of rothIraReal (same transitional rationale)
+ * @property {number} [p401kRothReal]     US2b — alias of roth401kReal (same transitional rationale)
  * @property {number} taxableStocksReal
  * @property {number} cashReal
  * @property {number} contributionReal    (accumulation only)

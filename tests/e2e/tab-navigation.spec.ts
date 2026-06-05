@@ -63,7 +63,10 @@ const ROW_TOLERANCE_PX = 2;
 // geography; #scenarioInsight now renders inline under the country grid in
 // the Scenarios pill-host instead of jumping to a separate pill.
 const TAB_PILLS: Record<string, readonly string[]> = {
-  plan:       ['profile', 'assets', 'investment', 'mortgage', 'expenses', 'summary'],
+  // NOTE: must mirror `TABS` in calc/tabRouter.js (single source of truth).
+  // Stale-fixture postmortem 2026-06-05: 'payoff-invest' (added by feature 016)
+  // was missing here, silently failing T026(a)/T027(b) on every run since.
+  plan:       ['profile', 'assets', 'investment', 'mortgage', 'payoff-invest', 'expenses', 'summary'],
   geography:  ['scenarios', 'country-chart', 'healthcare'],
   retirement: ['ss', 'withdrawal', 'drawdown', 'lifecycle', 'milestones'],
   history:    ['snapshots'],
@@ -337,7 +340,7 @@ async function expectNextDisabled(
 
 for (const dash of DASHBOARDS) {
   test.describe(`T026 next-button workflow [${dash.key}]`, () => {
-    test('a) Plan walkthrough — 5 clicks advances Profile → Summary', async ({ page }) => {
+    test('a) Plan walkthrough — 6 clicks advances Profile → Summary', async ({ page }) => {
       await loadFresh(page, dash.fileName);
 
       const order = TAB_PILLS.plan;
@@ -669,11 +672,24 @@ for (const dash of DASHBOARDS) {
  */
 for (const dash of DASHBOARDS) {
   test.describe(`SC-010 persistent chrome [${dash.key}]`, () => {
-    test('KPI row, gate selector, and Lifecycle sidebar remain visible across all tabs', async ({ page }) => {
+    test('KPI row, gate selector, and (opened) Lifecycle sidebar remain visible across all tabs', async ({ page }) => {
       await loadFresh(page, dash.fileName);
 
+      // Stale-fixture postmortem 2026-06-05: the Lifecycle sidebar defaults to
+      // HIDDEN (`sidebarMode = 'hidden'`) on first visit — boundingBox() on a
+      // hidden element blocks until test timeout, so this test failed on every
+      // run. SC-010's intent is that persistent chrome STAYS rendered across
+      // tab switches, not that the sidebar auto-opens; open it first via the
+      // header toggle, then walk the tabs.
+      await page.locator('#sidebarToggle').click();
+      await page.waitForTimeout(SETTLE_MS / 2);
+
+      // Stale-fixture postmortem 2026-06-05 (part 2): `.kpi-row` was retired by
+      // the feature-011 responsive-header redesign — KPI values now live in the
+      // header's inline pairs (`.header__inline-kpis`). The old selector matched
+      // NOTHING, so boundingBox() blocked until test timeout on every run.
       const persistent = [
-        '.kpi-row',
+        '.header__inline-kpis',
         '#gateSelector',
         '#lifecycleSidebar',
       ];

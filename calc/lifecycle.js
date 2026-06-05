@@ -53,7 +53,7 @@
  *   - is401kUnlocked === (agePrimary >= 60)
  *
  * US2b contribution split during accumulation:
- *   Default: 60% → trad401kReal, 20% → rothIraReal, 20% → taxableStocksReal.
+ *   Default: 60% → trad401kReal, 20% → roth401kReal, 20% → taxableStocksReal.
  *   Override via inputs.contributionSplit (three fractions sum to 1.0). The
  *   cash pool does not receive new contributions — it is only spent down in
  *   retirement and earns returnRateCashReal. `employerMatchReal`, when > 0,
@@ -177,7 +177,7 @@ function validateInputs(inp) {
   }
   const portfolios = [inp.portfolioPrimary, inp.portfolioSecondary].filter(Boolean);
   for (const p of portfolios) {
-    for (const field of ['trad401kReal', 'rothIraReal', 'taxableStocksReal', 'cashReal', 'annualContributionReal']) {
+    for (const field of ['trad401kReal', 'roth401kReal', 'taxableStocksReal', 'cashReal', 'annualContributionReal']) {
       if (!(p[field] >= 0)) {
         throw new Error(`lifecycle: portfolio.${field} must be >= 0, got ${p[field]}`);
       }
@@ -259,11 +259,11 @@ function resolvePhase(age, fireAge, ssStartAge) {
 /**
  * Sum the four pool fields of a pool object using the internal short-key shape.
  *
- * @param {{trad401k:number, rothIra:number, taxable:number, cash:number}} p
+ * @param {{trad401k:number, roth401k:number, taxable:number, cash:number}} p
  * @returns {number}
  */
 function sumPools(p) {
-  return p.trad401k + p.rothIra + p.taxable + p.cash;
+  return p.trad401k + p.roth401k + p.taxable + p.cash;
 }
 
 /**
@@ -500,8 +500,11 @@ export function runLifecycle(args) {
   const pools = {
     trad401k: inputs.portfolioPrimary.trad401kReal
       + (hasSecondary ? inputs.portfolioSecondary.trad401kReal : 0),
-    rothIra: inputs.portfolioPrimary.rothIraReal
-      + (hasSecondary ? inputs.portfolioSecondary.rothIraReal : 0),
+    // Feature 032 rename: `roth401k` (Roth 401K) — formerly the misleading
+    // `rothIra` key. The NEW Roth IRA pool will be added by feature 032
+    // user-story 2 (T018+) as a separate `pools.rothIra` entry.
+    roth401k: inputs.portfolioPrimary.roth401kReal
+      + (hasSecondary ? inputs.portfolioSecondary.roth401kReal : 0),
     taxable: inputs.portfolioPrimary.taxableStocksReal
       + (hasSecondary ? inputs.portfolioSecondary.taxableStocksReal : 0),
     cash: inputs.portfolioPrimary.cashReal
@@ -550,7 +553,7 @@ export function runLifecycle(args) {
     // Year-0 record is the starting state (i=0 → no growth applied yet).
     if (i > 0) {
       pools.trad401k *= (1 + returnStocks);
-      pools.rothIra  *= (1 + returnStocks);
+      pools.roth401k *= (1 + returnStocks);
       pools.taxable  *= (1 + returnStocks);
       pools.cash     *= (1 + returnCash);
     }
@@ -594,7 +597,7 @@ export function runLifecycle(args) {
       if (i > 0) {
         contributionReal = totalAnnualContribution;
         pools.trad401k += contributionReal * split.trad401kFraction;
-        pools.rothIra  += contributionReal * split.rothFraction;
+        pools.roth401k += contributionReal * split.rothFraction;
         pools.taxable  += contributionReal * split.taxableFraction;
         // Employer match stacks on top of split — goes to trad401k only.
         if (employerMatchReal > 0) {
@@ -643,11 +646,14 @@ export function runLifecycle(args) {
       }
 
       // Withdraw from pools via the tax-aware strategy.
+      // Feature 032 rename: pass `roth401kReal` (Roth 401K) — formerly
+      // `rothIraReal` under the legacy misnomer.
       const wd = withdrawalFn({
         annualSpendReal: adjustedSpend,
         pools: {
           trad401kReal: pools.trad401k,
-          rothIraReal: pools.rothIra,
+          roth401kReal: pools.roth401k,
+          rothIraReal: 0, // Roth IRA pool — wired in feature 032 user-story 2 (T018+).
           taxableStocksReal: pools.taxable,
           cashReal: pools.cash,
         },
@@ -661,7 +667,7 @@ export function runLifecycle(args) {
       // Decrement pools by the actual draws (never negative — withdrawal module
       // guarantees it caps draws at balance).
       pools.trad401k = Math.max(0, pools.trad401k - wd.fromTradReal);
-      pools.rothIra  = Math.max(0, pools.rothIra  - wd.fromRothReal);
+      pools.roth401k = Math.max(0, pools.roth401k - wd.fromRothReal);
       pools.taxable  = Math.max(0, pools.taxable  - wd.fromTaxableReal);
       pools.cash     = Math.max(0, pools.cash     - wd.fromCashReal);
 
@@ -720,13 +726,16 @@ export function runLifecycle(args) {
       totalReal,
       effBalReal,
       trad401kReal: pools.trad401k,
-      rothIraReal: pools.rothIra,
+      // Feature 032 rename: `roth401kReal` (Roth 401K balance) replaces
+      // the legacy misnomer `rothIraReal`. The new actual Roth IRA pool
+      // field will be wired in user-story 2 (T018+).
+      roth401kReal: pools.roth401k,
       taxableStocksReal: pools.taxable,
       cashReal: pools.cash,
       // Transitional aliases — removed when T048/T049 retires the inline
       // engine's 'p401kTrad' / 'p401kRoth' field names.
       p401kTradReal: pools.trad401k,
-      p401kRothReal: pools.rothIra,
+      p401kRothReal: pools.roth401k,
       contributionReal,
       withdrawalReal,
       ssIncomeReal,

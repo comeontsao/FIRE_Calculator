@@ -81,9 +81,15 @@ function _applyCashSweep(pCash, pStocks, threshold, age, currentAge, enabled) {
 // Mirror calc/calcAudit.js lines ~1067-1073. Constitution Principle V.
 // ---------------------------------------------------------------------------
 
-const _api = { _applyCashSweep: _applyCashSweep };
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the entire module.
+// (Pre-fix bug: this file and withdrawalTooltipFrame.js both declared `_api`,
+// colliding with calcAudit.js — _applyCashSweep NEVER loaded in the browser
+// and the cash sweep no-op'd through its typeof fallback.)
+const _cashSweepApi = { _applyCashSweep: _applyCashSweep };
 if (typeof module !== 'undefined' && module && module.exports) {
-  module.exports = _api;
+  module.exports = _cashSweepApi;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis._applyCashSweep = _applyCashSweep;

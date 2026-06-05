@@ -32,7 +32,7 @@
  *     backwards compatibility — see _computeYearTax() override branch.
  *
  * Inputs: inp (dashboard state record), fireAge (number), options (object)
- *   Key inp fields (v2 + v3):
+ *   Key inp fields (v2 + v3 + v6):
  *   - ageRoger / agePerson1          — current age (dual fallback for RR vs Generic)
  *   - roger401kTrad / person1_401kTrad
  *   - roger401kRoth / person1_401kRoth
@@ -46,9 +46,15 @@
  *   - adultCount — 1 (single) or 2 (mfj); v3 uses for filing status detection
  *   - annualSpend / monthlySpend — annual spending (inflation-adjusted)
  *   - pviCashflowOverrideEnabled / pviCashflowOverride
+ *   - rothIraReal (feature 032 / US2) — Roth IRA starting balance (real-$);
+ *     dashboard fallback: (rogerRothIra + rebeccaRothIra) for RR or
+ *     (person1RothIra + person2RothIra) for Generic; default 0.
+ *   - rothIraContribReal (feature 032 / US2) — annual Roth IRA contribution
+ *     (real-$/yr); dashboard fallback similar; default 0 until US4b ships
+ *     the contribution-input UI.
  *   options fields: see Predecessor v2 contract.
  *
- * Outputs: { end: { pTrad, pRoth, pStocks, pCash }, perYearRows: [...] }
+ * Outputs: { end: { pTrad, pRoth, pStocks, pCash, pRothIra }, perYearRows: [...] }
  *   perYearRows v3 fields (additive over v2):
  *     v1 fields (unchanged):
  *       { age, pTrad, pRoth, pStocks, pCash, mtgPurchasedThisYear, h2PurchasedThisYear,
@@ -59,15 +65,26 @@
  *         empMatchToTrad, stockContribution, cashFlowToCash, cashFlowWarning }
  *     v3 fields (NEW — feature 021):
  *       { ficaTax, federalTaxBreakdown, ficaBreakdown }
+ *     v6 fields (NEW — feature 032 US2):
+ *       { pRothIra }
  *
  * Consumers:
- *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch).
+ *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch) —
+ *      reads perYearRows.pRothIra into per-year row.pRothIra, plus end.pRothIra
+ *      seeds the retirement-phase portfolioRothIra (feature 032 US2).
  *   2. FIRE-Dashboard.html → _simulateStrategyLifetime. Consumes end only.
  *   3. FIRE-Dashboard.html → computeWithdrawalStrategy. Consumes end only.
  *   4. FIRE-Dashboard.html → signedLifecycleEndBalance. Consumes end only.
  *   5. FIRE-Dashboard.html → copyDebugInfo() audit dump — perYearRows v2 + v3 fields.
  *   6. FIRE-Dashboard.html → Plan-tab Expenses pill "Income tax" sub-row (US1, T036+).
  *      Reads (federalTax + ficaTax) / 12 → monthly $ for the row.
+ *   7. FIRE-Dashboard.html → Lifecycle chart (feature 032 US2) — per-year
+ *      pRothIra series rendered as a new stacked-area dataset with color
+ *      --chart-rothIra (#a890ff).
+ *   8. FIRE-Dashboard.html → FIRE feasibility gate effBal() (FR-021e) — sums
+ *      pRothIra alongside pRoth/pTrad/pStocks/pCash. Missing this term silently
+ *      de-syncs the verdict from the chart.
+ *   9. calc/calcAudit.js composition snapshot — lockedRothIra audit field.
  *   (and the corresponding lines in FIRE-Dashboard-Generic.html — lockstep mirror)
  *
  * Policy:
@@ -149,8 +166,25 @@ const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
 const _cashSweepMod = (typeof require !== 'undefined')
   ? (() => { try { return require('./cashSweep.js'); } catch (_e) { return null; } })()
   : null;
-const _applyCashSweep = (_cashSweepMod && _cashSweepMod._applyCashSweep)
-  || (typeof globalThis !== 'undefined' ? globalThis._applyCashSweep : null);
+// Lazy resolver (browser-boot fix, 2026-06-05). The previous
+// `const _applyCashSweep = … || globalThis._applyCashSweep` was doubly broken
+// in the browser:
+//   1. The top-level `const` collided with cashSweep.js's
+//      `function _applyCashSweep` declaration (shared global lexical scope) →
+//      SyntaxError killed cashSweep.js entirely.
+//   2. Even without the collision, this module loads BEFORE cashSweep.js
+//      (script-tag order), so globalThis._applyCashSweep was still undefined
+//      at evaluation time — the const captured null forever.
+// Resolving at CALL time fixes both. Node tests are unaffected (the require
+// branch resolves immediately).
+function _resolveApplyCashSweep() {
+  if (_cashSweepMod && typeof _cashSweepMod._applyCashSweep === 'function') {
+    return _cashSweepMod._applyCashSweep;
+  }
+  return (typeof globalThis !== 'undefined' && typeof globalThis._applyCashSweep === 'function')
+    ? globalThis._applyCashSweep
+    : null;
+}
 
 /**
  * v3 tax computation helper (feature 021). Pure: no I/O.
@@ -444,6 +478,25 @@ function accumulateToFire(inp, fireAge, options) {
   // (no adultCount), so its branch sums both unconditionally.
   let pTrad = (inp.person1_401kTrad != null ? inp.person1_401kTrad : inp.roger401kTrad) || 0;
   let pRoth = (inp.person1_401kRoth != null ? inp.person1_401kRoth : inp.roger401kRoth) || 0;
+  // Feature 032 (US2) — Roth IRA pool. Prefer canonical `rothIraReal` if present
+  // (set by calc/getCanonicalInputs.js); else fall back to summing the raw DOM
+  // fields (rogerRothIra+rebeccaRothIra for RR, person1RothIra+person2RothIra
+  // for Generic). Generic has no UI inputs so this naturally evaluates to 0.
+  // FRAME: real-$ — seed in today's-$ frame, grows at realReturn401k below.
+  let pRothIra;
+  if (typeof inp.rothIraReal === 'number') {
+    pRothIra = inp.rothIraReal;
+  } else {
+    pRothIra = ((inp.rogerRothIra || inp.person1RothIra || 0)
+              + (inp.rebeccaRothIra || inp.person2RothIra || 0));
+  }
+  // Feature 032 (US2) — Roth IRA annual contribution. Same fallback pattern.
+  // Will be 0 until US4b ships the contribution-input UI; that's expected.
+  // FRAME: real-$/yr — constant in today's-$ across accumulation.
+  const rothIraContrib = (typeof inp.rothIraContribReal === 'number')
+    ? inp.rothIraContribReal
+    : ((inp.rogerRothIraContrib || inp.person1RothIraContrib || 0)
+     + (inp.rebeccaRothIraContrib || inp.person2RothIraContrib || 0));
   let pStocks;
   if (inp.person1Stocks != null) {
     // Generic dashboard — gate person2 on adultCount.
@@ -675,6 +728,10 @@ function accumulateToFire(inp, fireAge, options) {
       age,
       pTrad: Math.max(0, pTrad),
       pRoth: Math.max(0, pRoth),
+      // Feature 032 (US2) — Roth IRA pool snapshot (real-$).
+      // FRAME: real-$ — chart consumer converts to nominal-$ via
+      // _extendRowsWithBookValues at the FIRE-Dashboard.html chart-render site.
+      pRothIra: Math.max(0, pRothIra),
       pStocks: Math.max(0, pStocks),
       pCash: Math.max(0, pCash),
       mtgPurchasedThisYear,
@@ -710,6 +767,11 @@ function accumulateToFire(inp, fireAge, options) {
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
     // FRAME: real-$ — pRoth grows at realReturn401k; contributions in real-$
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
+    // Feature 032 (US2) — pRothIra growth equation (contract Invariant I4).
+    // FRAME: real-$ — pRothIra grows at the SAME real-return rate as the
+    // Roth 401K pool (per data-model.md §5: "uses the SAME real return
+    // assumption as the 401K pools"). Contribution in real-$.
+    pRothIra = pRothIra * (1 + realReturn401k) + rothIraContrib;
     // FRAME: real-$ — pStocks grows at realReturnStocks; contributions in real-$
     pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
     pCash = pCash + cashFlowToCash;
@@ -720,6 +782,10 @@ function accumulateToFire(inp, fireAge, options) {
     pCash *= 1.005;
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
+      // Resolve lazily (see _resolveApplyCashSweep above). The block-scoped
+      // const keeps the canonical `_applyCashSweep(` call-site pattern from
+      // contracts/cash-sweep.contract.md intact.
+      const _applyCashSweep = _resolveApplyCashSweep();
       const _f030_sweep_ = (typeof _applyCashSweep === 'function')
         ? _applyCashSweep(pCash, pStocks, inp.cashSweepThreshold,
             age, currentAge, !!inp.cashSweepEnabled)
@@ -740,6 +806,10 @@ function accumulateToFire(inp, fireAge, options) {
     end: {
       pTrad: Math.max(0, pTrad),
       pRoth: Math.max(0, pRoth),
+      // Feature 032 (US2) — Roth IRA pool end-state. Consumed by
+      // FIRE-Dashboard.html projectFullLifecycle (line ~10588) to seed
+      // portfolioRothIra entering the retirement-phase loop.
+      pRothIra: Math.max(0, pRothIra),
       pStocks: Math.max(0, pStocks),
       pCash: Math.max(0, pCash),
     },

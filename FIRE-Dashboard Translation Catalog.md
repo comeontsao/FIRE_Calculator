@@ -593,11 +593,23 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | `assets.person1_401kTrad` | Person 1 Traditional 401K | 成員 1 傳統 401K (稅前) |
 | `assets.person1_401kRoth` | Person 1 Roth 401K | 成員 1 Roth 401K (稅後) |
 
+**Assets (`assets.*`) — Feature 032 Roth IRA accounts (RR-only per FR-018)**
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `assets.rothIraGroup` | 🔒 Roth IRA | 🔒 Roth IRA |
+| `assets.rogerRothIra` | Roger's Roth IRA | Roger 的 Roth IRA (個人退休帳戶) |
+| `assets.rebeccaRothIra` | Rebecca's Roth IRA | Rebecca 的 Roth IRA (個人退休帳戶) |
+
 **Investment & Savings (`invest.*`) — new keys**
 
 | Key | EN | zh-TW |
 |-----|----|----|
 | `invest.contrib401kRoth` | 401K: Roth Contribution (after-tax) | 401K：Roth 提撥（稅後） |
+| `invest.rothIraSection` (feature 032 US4b) | Roth IRA Contributions (annual) | Roth IRA 年度供款 |
+| `invest.rogerRothIraContrib` (feature 032 US4b) | Roger's Roth IRA Contribution | Roger 的 Roth IRA 供款 |
+| `invest.rebeccaRothIraContrib` (feature 032 US4b) | Rebecca's Roth IRA Contribution | Rebecca 的 Roth IRA 供款 |
+| `invest.rothIraLimitTooltip2026` (feature 032 US4b) | 2026 IRS limit: $7,000 base / $8,000 catch-up (age 50+). | 2026 IRS 上限：$7,000 / 50 歲以上 $8,000 |
 | `invest.taxTrad` | Effective Tax on Trad 401K Withdrawals | 傳統 401K 提領的有效稅率 |
 | `invest.monthlySavings` (relabeled, feature 020 T038/T039) | Monthly Stock Contribution | 每月股票投入 |
 | `invest.monthlySavingsTooltip` (feature 020) | Post-tax dollars deposited monthly into your taxable brokerage. Separate from 401(k) contributions and from leftover residual cash flow. | 稅後每月存入應稅券商帳戶的金額。獨立於 401(k) 提撥與剩餘現金流。 |
@@ -823,7 +835,7 @@ Toggle labels: `mtg.toggleOff` / `mtg.toggleOn`.
 **Prose + glossary** (10 terms × 2 parts each = 20 keys): `tw.prose`, `tw.summary`, `tw.stratTitle`, `tw.stratP1`, `tw.rulebookTitle`, `tw.rule1/2/3`, `tw.glossaryTitle`, `tw.mfjTerm/Desc`, `tw.stdDedTerm/Desc`, `tw.top12Term/Desc`, `tw.top22Term/Desc`, `tw.ltcgTerm/Desc`, `tw.rmdTerm/Desc`, `tw.amtTerm/Desc`, `tw.rothVsTradTerm/Desc`, `tw.niitTerm/Desc`, `tw.ssTerm/Desc`, `tw.whyTitle`, `tw.whyP1/P2`.
 **Tax-bracket inputs**: `tw.filingStatus/Tip`, `tw.stdDedLabel/Tip`, `tw.top12Label/Tip`, `tw.top22Label/Tip`, `tw.mfjRR` (RR only — "MFJ (R + R)"), `tw.mfjLabel`, `tw.singleLabel`, `tw.stockGainPct/Tip`, `tw.calculating`.
 **Summary cards + strategy banner**: `tw.dyn.lifetimeTax/Sub`, `tw.dyn.avgEffRate/Sub`, `tw.dyn.bridge/Sub/Yrs`, `tw.dyn.assetsFire/Sub`, `tw.dyn.strategyBanner`, `tw.dyn.bridgeFeasible`, `tw.dyn.bridgeInfeasible`, `tw.dyn.keyYears`, `tw.dyn.ageTag`, `tw.dyn.tagLocked/Ss/Rmd`.
-**Chart legend + tooltip**: `tw.legend.ss/trad/roth/ltcg/cash/effTax`, `tw.tooltip.totalDrawn/purchasingPower/taxOwed/ordIncome/rmd/shortfall`, `tw.howToRead`. `tw.tooltip.purchasingPower` (feature 031 / US4): the Withdrawal Strategy tooltip's per-pool bars, "Total drawn", "Tax owed" and "Ordinary income" all read Book-Value (nominal) so they reconcile within rounding; `tw.tooltip.purchasingPower` is a clearly-labeled today's-spending comparison line — EN `≈ ${0}K in today's spending power`, zh-TW `≈ ${0}K（換算成今日購買力）`.
+**Chart legend + tooltip**: `tw.legend.ss/trad/roth/ltcg/cash/effTax`, `tw.tooltip.totalDrawn/purchasingPower/taxOwed/ordIncome/rmd/shortfall`, `tw.howToRead`. `tw.tooltip.purchasingPower` (feature 031 / US4): the Withdrawal Strategy tooltip's per-pool bars, "Total drawn", "Tax owed" and "Ordinary income" all read Book-Value (nominal) so they reconcile within rounding; `tw.tooltip.purchasingPower` is a clearly-labeled today's-spending comparison line — EN `≈ ${0}K in today's spending power`, zh-TW `≈ ${0}K（換算成今日購買力）`. `tooltip.withdraw.rothIraLabel` (feature 032 / US4): label for the new Roth IRA pool line in the Withdrawal Strategy tooltip — EN `Roth IRA`, zh-TW `Roth IRA` (no translation; "Roth IRA" is a proper-noun product name).
 
 ### Category J — SS section
 Prose wired via `ss.introFull` (HTML-carrying, so `data-i18n-html`). JS rendering: `ss.notQualified`, `ss.needMoreCredits`, `ss.recordSummary`, `ss.credits`, `ss.earningsAtFire`, `ss.earningsAtFireSub`, `ss.zerosInTop35`, `ss.aime`, `ss.aimePerMo`, `ss.rogerPia` (RR) / `ss.person1Pia` (Generic), `ss.rebeccaSpousal` (RR) / `ss.person2Spousal` (Generic), `ss.combinedAtFra`, `ss.combinedValue`, `ss.tableAge/Monthly/Annual`, `ss.threePhaseSaves`.
@@ -1011,6 +1023,15 @@ All 11 new keys below land in `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in `FIRE-D
 |---|---|---|
 | `snap.adults` | Adults | 成人 |
 | `snap.adultsTip` | Number of adults modeled at the time the snapshot was taken. | 快照當時計入計算的成人數。 |
+
+### Feature 032 — Snapshots Roth IRA columns (2 keys, both files)
+
+RR (`FIRE-Dashboard.html`) renders these as visible table columns on the History tab; Generic (`FIRE-Dashboard-Generic.html`) keeps the keys as defensive defs only (FR-018 — Generic UI unchanged). Both files append `rogerRothIra` + `rebeccaRothIra` to CSV_HEADERS for CSV-format lockstep (US5, T042).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `snap.rogerRothIra` | Roger's Roth IRA | Roger 的 Roth IRA |
+| `snap.rebeccaRothIra` | Rebecca's Roth IRA | Rebecca 的 Roth IRA |
 
 ## Feature 010 — Country budget scaling
 
@@ -1349,4 +1370,14 @@ clarification. Both EN + zh-TW keys live in `TRANSLATIONS.en` +
 when it actually meant time-distance to FIRE. New copy makes the time
 dimension explicit ("FIRE in N+ years") and frames the situation as
 factual rather than judgmental ("Distant target" vs "Behind Schedule").
+
+## Feature 032 — Roth IRA Accounts (US2 Lifecycle chart series)
+
+New keys added in both `TRANSLATIONS.en` and `TRANSLATIONS.zh` of
+`FIRE-Dashboard.html` AND `FIRE-Dashboard-Generic.html` (lockstep — acronym
+treated identically in both languages per Principle VII Exemption rule).
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `chart.lifecycle.rothIraLine` (NEW) | Roth IRA | Roth IRA |
 

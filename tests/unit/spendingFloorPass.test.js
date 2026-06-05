@@ -56,9 +56,10 @@ const BRACKETS = {
 test('floor pass: only-Trad pre-SS scenario funds spending (was a $50k shortfall pre-fix)', () => {
   const { taxOptimizedWithdrawal } = buildApi();
   // User's exact scenario: age 65, pTrad=$325k, no other pools, $60.1k spend, no SS
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
     /*grossSpend*/ 60100, /*ssIncome*/ 0,
-    /*pTrad*/ 325000, /*pRoth*/ 0, /*pStocks*/ 0, /*pCash*/ 0,
+    /*pTrad*/ 325000, /*pRoth*/ 0, /*pRothIra*/ 0, /*pStocks*/ 0, /*pCash*/ 0,
     /*age*/ 65, BRACKETS, /*stockGainPct*/ 0.6,
     { safetyMargin: 0.05, endAge: 100, irmaaThreshold: 212000 }
   );
@@ -73,8 +74,9 @@ test('floor pass: Roth available pre-SS — Roth is consumed BEFORE the floor pa
   const { taxOptimizedWithdrawal } = buildApi();
   // pTrad small ($50k); pRoth large ($200k). The original mix should fund from
   // Roth without needing the floor pass to grow wTrad.
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60100, 0, 50000, 200000, 0, 0, 65, BRACKETS, 0.6,
+    60100, 0, 50000, 200000, 0, 0, 0, 65, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.strictEqual(r.shortfall, 0, 'shortfall must be 0 when Roth is sufficient');
@@ -85,8 +87,9 @@ test('floor pass: respects pTrad ceiling — cannot draw more than available', (
   const { taxOptimizedWithdrawal } = buildApi();
   // pTrad=$10k only — not enough to fund $60k spend. Floor pass draws ALL of pTrad
   // and the residual remains as shortfall.
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60100, 0, 10000, 0, 0, 0, 65, BRACKETS, 0.6,
+    60100, 0, 10000, 0, 0, 0, 0, 65, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.ok(r.wTrad <= 10000, `wTrad must respect pTrad ceiling, got ${r.wTrad}`);
@@ -98,8 +101,9 @@ test('floor pass: deactivated when stocks are sufficient (no Trad over-draw)', (
   // Plenty of stocks AND plenty of Trad. The original mix funds entirely from
   // stocks + bracket-fill Trad — floor pass should NOT activate, wTrad should
   // stay at the smoothed bracket-fill level (~$9-12k for this scenario).
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60100, 0, 325000, 0, 500000, 50000, 65, BRACKETS, 0.6,
+    60100, 0, 325000, 0, 0, 500000, 50000, 65, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.strictEqual(r.shortfall, 0, 'shortfall must be 0 when stocks are sufficient');
@@ -113,8 +117,9 @@ test('floor pass: pre-unlock case unchanged — cannot draw Trad before unlock a
   const { taxOptimizedWithdrawal } = buildApi();
   // Age 50 (pre-unlock), pTrad locked, all other pools empty. Shortfall stands;
   // no Trad floor pass because canAccess401k === false.
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60100, 0, 325000, 0, 0, 0, 50, BRACKETS, 0.6,
+    60100, 0, 325000, 0, 0, 0, 0, 50, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.strictEqual(r.wTrad, 0, 'pre-unlock: wTrad must remain 0');
@@ -126,8 +131,9 @@ test('floor pass: SS-active scenario (age 70+) — SS reduces the shortfall befo
   const { taxOptimizedWithdrawal } = buildApi();
   // Age 75, SS=$40k/yr, pTrad=$325k, no other pools. The floor pass needs to
   // cover only ~$20k of remaining spend (60.1 − 40 = 20.1).
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60100, 40000, 325000, 0, 0, 0, 75, BRACKETS, 0.6,
+    60100, 40000, 325000, 0, 0, 0, 0, 75, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.strictEqual(r.shortfall, 0, 'shortfall must be 0 with SS + Trad available');
@@ -139,8 +145,9 @@ test('floor pass: idempotent — running on a fully-funded scenario does not ove
   const { taxOptimizedWithdrawal } = buildApi();
   // No shortfall scenario (lots of stocks). wTrad should match what
   // bracket-fill smoothing would compute — not inflated by floor pass.
+  // Feature 032 hotfix: positional pRothIra=0 inserted between pRoth and pStocks.
   const r = taxOptimizedWithdrawal(
-    60000, 0, 200000, 100000, 1_000_000, 100000, 65, BRACKETS, 0.6,
+    60000, 0, 200000, 100000, 0, 1_000_000, 100000, 65, BRACKETS, 0.6,
     { safetyMargin: 0.05, endAge: 100 }
   );
   assert.strictEqual(r.shortfall, 0);

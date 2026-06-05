@@ -104,12 +104,22 @@ const ALL_STRATEGY_IDS = [
 
 // Build a per-year context for testing each strategy in isolation. Mirrors
 // what _simulateStrategyLifetime constructs.
+//
+// Feature 032 (T029): `pRothIra` threaded into ctx.pools so strategies that
+// reference the new pool can be exercised without breaking pre-032 callers
+// (default 0 when omitted, matching the no-Roth-IRA scenario).
 function makeCtx(scenario) {
   return {
     age: scenario.age,
     grossSpend: scenario.grossSpend,
     ssIncome: scenario.ssIncome,
-    pools: { pTrad: scenario.pTrad, pRoth: scenario.pRoth, pStocks: scenario.pStocks, pCash: scenario.pCash },
+    pools: {
+      pTrad: scenario.pTrad,
+      pRoth: scenario.pRoth,
+      pRothIra: scenario.pRothIra || 0,
+      pStocks: scenario.pStocks,
+      pCash: scenario.pCash,
+    },
     brackets: {
       stdDed: 30000, top10: 23200, top12: 94300, top22: 201050,
       top24: 383900, top32: 487450, top35: 731200,
@@ -218,6 +228,40 @@ test('matrix: SS-active scenarios — strategy + SS together fund spending', () 
     const mix = policy.computePerYearMix(ctx);
     assert.ok(mix.shortfall < 100,
       `${policyId}: SS + Trad must fund spending; shortfall=${mix.shortfall}, wTrad=${mix.wTrad}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Feature 032 — User Story 4 (T029) — Roth IRA pool participates in the
+// spending-floor pass. Locks Contract Invariant I5: when pRothIra > 0 is
+// available alongside untapped pTrad, the strategy MUST fund the year's
+// spending (shortfall < $100 — Principle VIII Spending Funded First).
+// ---------------------------------------------------------------------------
+test('feature 032 I5: every strategy funds spending with rothIra available alongside trad', () => {
+  const { getStrategies } = buildApi();
+  const policies = getStrategies();
+  // Fixture: starvation-locus + Roth IRA. At age 65 with $325k Trad + $50k
+  // Roth IRA and zero other pools, every strategy must fund the $60.1k spend.
+  // Roth-ladder strategies will drain rothIra first; trad-first will hit Trad
+  // first; the result must be the same: shortfall < $100.
+  const STARVATION_PLUS_ROTH_IRA = {
+    age: 65, grossSpend: 60100, ssIncome: 0,
+    pTrad: 325000, pRoth: 0, pRothIra: 50000, pStocks: 0, pCash: 0,
+  };
+  for (const policyId of ALL_STRATEGY_IDS) {
+    const policy = policies.find(p => p.id === policyId);
+    assert.ok(policy, `${policyId}: strategy not found`);
+    const ctx = makeCtx(STARVATION_PLUS_ROTH_IRA);
+    const mix = policy.computePerYearMix(ctx);
+    assert.ok(mix, `${policyId}: computePerYearMix returned no mix`);
+    assert.ok(
+      mix.shortfall < 100,
+      `${policyId} I5 violation: shortfall=$${Math.round(mix.shortfall)} when pTrad=$325k AND ` +
+      `pRothIra=$50k are available. Strategy must fund spending (Principle VIII Spending Funded First). ` +
+      `wTrad=${Math.round(mix.wTrad||0)}, wRoth=${Math.round(mix.wRoth||0)}, ` +
+      `wRothIra=${Math.round(mix.wRothIra||0)}, wStocks=${Math.round(mix.wStocks||0)}, ` +
+      `wCash=${Math.round(mix.wCash||0)}`,
+    );
   }
 });
 

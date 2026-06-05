@@ -217,3 +217,116 @@ test('US4: residualAreaReal monotone with end-balance preservation (semantic che
       'highest endBalance and lowest residualArea should NOT be the same strategy under Preserve');
   }
 });
+
+// ============================================================================
+// T051a (feature 032) — Roth IRA orthogonality: pool data MUST NOT couple
+// into the sort-key resolution logic. Per Constitution Principle IX, the
+// (Mode, Objective) → sort-key mapping is a pure 6-row table; introducing a
+// new pool ($pRothIra$) cannot change which scalar field the ranker sorts on
+// for any of the 6 cells.
+//
+// Two-pronged assertion:
+//   (a) `_resolvePrimarySortKey(mode, objective)` returns BYTE-IDENTICAL
+//       `{key, dir}` for every (mode, objective) combination — proven by
+//       calling the resolver directly (it takes no pool data, so this also
+//       documents the contract).
+//   (b) The row-ordering FIELD chosen by `scoreAndRank` for each cell stays
+//       identical between the zero-rothIra baseline and a fixture variant
+//       that adds rogerRothIra=$50K + rebeccaRothIra=$75K. The ordering
+//       VALUES change (more wealth → different scalar values) but the SORT
+//       SEMANTIC (which field is primary, and its direction) does not.
+// ============================================================================
+
+const REPO_ROOT_T051A = path.resolve(__dirname, '..', '..');
+const { _resolvePrimarySortKey: _resolveSortKey } = require(
+  path.resolve(REPO_ROOT_T051A, 'calc', 'strategyRanker.js'),
+);
+
+const ALL_MODE_OBJECTIVE_COMBOS = Object.freeze([
+  { mode: 'safe',        objective: 'leave-more-behind' },
+  { mode: 'safe',        objective: 'retire-sooner-pay-less-tax' },
+  { mode: 'exact',       objective: 'leave-more-behind' },
+  { mode: 'exact',       objective: 'retire-sooner-pay-less-tax' },
+  { mode: 'dieWithZero', objective: 'leave-more-behind' },
+  { mode: 'dieWithZero', objective: 'retire-sooner-pay-less-tax' },
+]);
+
+test('T051a (feature 032): _resolvePrimarySortKey is pure (mode, objective) — pool data cannot leak in', () => {
+  // The resolver is by definition pure on its 2 args, but we lock the EXACT
+  // (key, dir) for each of the 6 cells so any future change to add a third
+  // axis (e.g., "if pRothIra > 0 then …") would fail this test immediately.
+  const EXPECTED = {
+    'safe|leave-more-behind':                      { key: 'endBalance',           dir: 'desc' },
+    'safe|retire-sooner-pay-less-tax':             { key: 'cumulativeFederalTax', dir: 'asc'  },
+    'exact|leave-more-behind':                     { key: 'endBalance',           dir: 'desc' },
+    'exact|retire-sooner-pay-less-tax':            { key: 'cumulativeFederalTax', dir: 'asc'  },
+    'dieWithZero|leave-more-behind':               { key: 'residualArea',         dir: 'desc' },
+    'dieWithZero|retire-sooner-pay-less-tax':      { key: 'cumulativeFederalTax', dir: 'asc'  },
+  };
+  for (const { mode, objective } of ALL_MODE_OBJECTIVE_COMBOS) {
+    const got = _resolveSortKey(mode, objective);
+    const expected = EXPECTED[`${mode}|${objective}`];
+    assert.deepStrictEqual(
+      got, expected,
+      `_resolvePrimarySortKey('${mode}', '${objective}') must return ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`,
+    );
+  }
+});
+
+test('T051a (feature 032): scoreAndRank sort semantic unchanged by introducing Roth IRA pool', () => {
+  const api = buildApi();
+  // Fixture variant adds Roth IRA balances to the baseline INP. The variant
+  // appears in BOTH the canonical Generic field shape (person1RothIra /
+  // person2RothIra) AND the canonical rothIraReal sum — both for safety
+  // since the calc engine reads whichever is present.
+  const INP_WITH_ROTH_IRA = Object.assign({}, INP, {
+    rogerRothIra: 50000,
+    rebeccaRothIra: 75000,
+    person1RothIra: 50000,
+    person2RothIra: 75000,
+    rothIraReal: 125000,
+  });
+
+  // For each of the 6 (mode, objective) cells, the sort-direction semantic
+  // (asc vs desc on a primary field) must match between the baseline and
+  // the Roth-IRA variant. We assert this by checking that adjacent feasible
+  // rows respect the SAME inequality direction in both rankings.
+  //
+  // The exact strategy ORDER may legitimately differ (scalar values move
+  // when a new pool of capital enters the simulation), but if the SORT KEY
+  // semantics leaked pool data the inequality direction would invert on the
+  // primary field. That's the regression we're guarding against.
+  for (const { mode, objective } of ALL_MODE_OBJECTIVE_COMBOS) {
+    const sortKey = _resolveSortKey(mode, objective);
+    const fieldByKey = {
+      endBalance: 'endOfPlanNetWorthReal',
+      cumulativeFederalTax: 'lifetimeFederalTaxReal',
+      residualArea: 'residualAreaReal',
+    };
+    const field = fieldByKey[sortKey.key];
+
+    for (const inpVariant of [INP, INP_WITH_ROTH_IRA]) {
+      const ranking = api.scoreAndRank(inpVariant, FIRE_AGE, mode, objective);
+      const feasible = ranking.rows.filter(r => r.feasibleUnderCurrentMode);
+      if (feasible.length < 2) continue; // too few rows to test ordering
+      for (let i = 0; i + 1 < feasible.length; i++) {
+        const a = feasible[i][field];
+        const b = feasible[i + 1][field];
+        if (sortKey.dir === 'desc') {
+          // Generous tolerance ($1) absorbs intra-strategy rounding noise.
+          assert.ok(
+            a + 1 >= b,
+            `${mode}+${objective} (${inpVariant === INP ? 'baseline' : 'rothIra-variant'}) ` +
+              `must sort ${field} desc; got ${feasible[i].strategyId}=${a} before ${feasible[i + 1].strategyId}=${b}`,
+          );
+        } else {
+          assert.ok(
+            a <= b + 1,
+            `${mode}+${objective} (${inpVariant === INP ? 'baseline' : 'rothIra-variant'}) ` +
+              `must sort ${field} asc; got ${feasible[i].strategyId}=${a} before ${feasible[i + 1].strategyId}=${b}`,
+          );
+        }
+      }
+    }
+  }
+});

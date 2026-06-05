@@ -7,7 +7,14 @@
  *
  * Inputs:
  *   - options: an object with these required keys:
- *       inputs                       — resolved-input snapshot (from getInputs())
+ *       inputs                       — resolved-input snapshot (from getInputs()).
+ *                                      Feature 032 (US6): `inputs.pRothIra` is
+ *                                      the new individual-Roth-IRA pool total
+ *                                      (sum of rogerRothIra + rebeccaRothIra in
+ *                                      RR / person1RothIra + person2RothIra in
+ *                                      Generic). Surfaced as
+ *                                      `resolvedInputs.composition.lockedRothIra`
+ *                                      in the snapshot output.
  *       fireAge                      — number (currently displayed FIRE age)
  *       fireMode                     — 'safe' | 'exact' | 'dieWithZero'
  *       annualSpend                  — number (post-mortgage-adjusted spend)
@@ -33,6 +40,10 @@
  *     generatedAt: ISO 8601 string,
  *     flowDiagram: { stages: [6 stages] },
  *     resolvedInputs: { raw, derivedFrom, composition },
+ *       — composition: { accessibleStocks, cash, locked401kTrad,
+ *         locked401kRoth, lockedRothIra } — `lockedRothIra` (Feature 032 US6)
+ *         mirrors the new Roth IRA pool; sibling-field to `locked401kRoth`
+ *         (Process Lesson: sibling-field beats overloading).
  *     spendingAdjustments: { rawAnnualSpend, mortgageAdjustedAnnualSpend, ...},
  *     gates: [GateEvaluation x3 in order safe/exact/dieWithZero],
  *     fireAgeResolution: { displayedFireAge, searchMethod, candidates, ... },
@@ -172,11 +183,56 @@ function _getActiveStrategyRow(lastStrategyResults, activeId) {
 
 function _buildResolvedInputs(inputs) {
   const raw = inputs && typeof inputs === 'object' ? { ...inputs } : {};
+  // Composition resolves with the following priority (debug-displaybug-32a
+  // hotfix — Bug A root cause):
+  //   1. Canonical pool fields  (pStocksTaxable, pCashTaxable, p401kTrad,
+  //      p401kRoth, pRothIra). These are what the existing test fixtures + a
+  //      future canonical-only caller pass.
+  //   2. Raw RR-shape DOM bag    (rogerStocks + rebeccaStocks, cashSavings +
+  //      otherAssets, roger401kTrad, roger401kRoth, rogerRothIra +
+  //      rebeccaRothIra). The live HTML caller at FIRE-Dashboard.html:14341
+  //      passes `{ ...inp, collegeYears }` straight from getInputs(), which
+  //      uses this shape — so without the fallback, the audit composition
+  //      was a permanent all-zeros (every invariant ran against an empty
+  //      portfolio).
+  //   3. Raw Generic-shape DOM bag (person1Stocks + person2Stocks,
+  //      person1_401kTrad / person1_401kRoth, person1RothIra +
+  //      person2RothIra). The Generic dashboard runs through the SAME
+  //      assembler and was also producing zero composition.
+  //   4. Final fallback: 0 (legacy pre-feature-014 inputs).
+  // Canonical wins to preserve byte-identical behaviour for the 669 existing
+  // tests; raw-shape fallback fires ONLY when the canonical field is
+  // missing / undefined. `_pick` mirrors the nullish-coalesce semantics —
+  // explicit 0 in the canonical slot still beats raw-bag values, matching
+  // the existing test fixture's intent.
+  const _has = (v) => typeof v === 'number' && Number.isFinite(v);
+  const _accessibleStocks = _has(raw.pStocksTaxable)
+    ? raw.pStocksTaxable
+    : ((raw.rogerStocks || raw.person1Stocks || 0)
+       + (raw.rebeccaStocks || raw.person2Stocks || 0));
+  const _cash = _has(raw.pCashTaxable)
+    ? raw.pCashTaxable
+    : ((raw.cashSavings || 0) + (raw.otherAssets || 0));
+  const _locked401kTrad = _has(raw.p401kTrad)
+    ? raw.p401kTrad
+    : (raw.roger401kTrad || raw.person1_401kTrad || 0);
+  const _locked401kRoth = _has(raw.p401kRoth)
+    ? raw.p401kRoth
+    : (raw.roger401kRoth || raw.person1_401kRoth || 0);
+  const _lockedRothIra = _has(raw.pRothIra)
+    ? raw.pRothIra
+    : ((raw.rogerRothIra || raw.person1RothIra || 0)
+       + (raw.rebeccaRothIra || raw.person2RothIra || 0));
   const composition = {
-    accessibleStocks: _round(raw.pStocksTaxable || 0),
-    cash: _round(raw.pCashTaxable || 0),
-    locked401kTrad: _round(raw.p401kTrad || 0),
-    locked401kRoth: _round(raw.p401kRoth || 0),
+    accessibleStocks: _round(_accessibleStocks),
+    cash: _round(_cash),
+    locked401kTrad: _round(_locked401kTrad),
+    locked401kRoth: _round(_locked401kRoth),
+    // Feature 032 (US6 / T047) — surface the new Roth IRA pool in the audit
+    // composition snapshot, parallel to locked401kRoth. Sums the raw RR/
+    // Generic per-person fields when the canonical `pRothIra` is missing.
+    // See specs/032-roth-ira-accounts/audit.md rows #14, #40.
+    lockedRothIra: _round(_lockedRothIra),
   };
   // derivedFrom: surface a few well-known defaults so the user can see when a
   // value came from the default vs an explicit input. The `bufferUnlock`,
@@ -1208,13 +1264,16 @@ function assembleAuditSnapshot(options) {
 // Feature 029 (US4 / FR-005) — expose _invariantE so its behavior can be
 // unit-tested directly with synthetic simulatorTraces input. Internal helper;
 // dashboard code consumes assembleAuditSnapshot only.
-const _api = {
+// NOTE: the const name must be UNIQUE across all browser-loaded calc/*.js —
+// classic <script> tags share ONE global lexical scope, so a duplicate
+// top-level `const` throws SyntaxError and silently kills the later module.
+const _calcAuditApi = {
   assembleAuditSnapshot: assembleAuditSnapshot,
   _invariantE_test_only_: _invariantE,
   _invariantF_test_only_: _invariantF,
 };
 if (typeof module !== 'undefined' && module && module.exports) {
-  module.exports = _api;
+  module.exports = _calcAuditApi;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis.assembleAuditSnapshot = assembleAuditSnapshot;

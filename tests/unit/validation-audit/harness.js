@@ -545,6 +545,17 @@ function getFullEarningsHistory(fireAge) {
       pviStrategyInvestLumpSum: _c('pviStrategyInvestLumpSum', false),
       bufferUnlock:             _v('bufferUnlock', '1.5'),
       bufferSS:                 _v('bufferSS', '1.0'),
+      // Feature 032 (US6 / T047) — Roth IRA pool inputs MUST be served per-
+      // persona (NOT in the static DOC_STUB above) so each persona's individual
+      // Roth IRA balance + contribution flows through any HTML helper that reads
+      // them via `document.getElementById`. Per the feature-020 process lesson
+      // (CLAUDE.md "Audit-harness wiring needs persona-aware DOM stubs"),
+      // a static stub would serve the wrong value for every persona but the
+      // first, silently masking bugs across the matrix.
+      rogerRothIra:             _v('rogerRothIra', '0'),
+      rebeccaRothIra:           _v('rebeccaRothIra', '0'),
+      rogerRothIraContrib:      _v('rogerRothIraContrib', '0'),
+      rebeccaRothIraContrib:    _v('rebeccaRothIraContrib', '0'),
     };
     const _personaDoc = { getElementById: function(id) { return _personaVals[id] || null; } };
     return factory(inp, scenario, _personaDoc, _win, _accumulateToFire);

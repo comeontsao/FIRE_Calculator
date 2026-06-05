@@ -291,11 +291,17 @@ See F1 — this is the single biggest testing gap and the root cause of the U2B-
 
 These are genuine "next features", not backlog items from `001-modular-calc-engine`. Listing here so they don't get lost.
 
-### X1. Real Monte Carlo simulation
+### X1. Real Monte Carlo simulation / sequence-of-returns risk
 
-- **Why**: the dashboard claims Monte Carlo but uses deterministic returns. See B4.
+- **Why**: the dashboard claims Monte Carlo but uses deterministic returns. See B4. Every simulator applies a CONSTANT growth rate per year, so "feasible at N" means "feasible IF returns are perfectly smooth" — the model structurally cannot represent a bad first decade (1966–1982 stagflation, 2000–2013), which is the dominant risk for an early retiree drawing from a taxable account.
 - **Scope**: new `calc/monteCarlo.js` module producing `{p10, p50, p90}` from a stochastic lifecycle. Builds on `calc/lifecycle.js`.
-- **Dependency**: F2 must land first so `calc/lifecycle.js` is authoritative.
+- **Dependency**: F2 must land first so `calc/lifecycle.js` is authoritative. Activation hook already reserved: `calc/simulateLifecycle.js`'s `noiseModel` parameter (B-015-4).
+- **Design input (from external review, 2026-06-05)** — fold into the spec when this feature is picked up:
+  - **Return-sequence mode**: `flat` (current, stays default) | `historical` | `monteCarlo`. Opt-in toggle; flat-return mode unchanged.
+  - **Historical mode**: ship year-by-year sequences in purchasing-power terms (S&P and balanced variants for 1966 and 2000 starts), applied per-year instead of the flat rate, with a configurable start-offset.
+  - **Spending flexibility**: a spending-floor input (an absolute floor you won't cut below) plus an optional Guyton-Klinger guardrail (cut spending X% after down years, raise after good ones) so the model can show how flexibility rescues a bad sequence — and how big the required cut is.
+  - **Cash/short-bond stress series**: in stress modes the cash buffer should be able to LOSE purchasing power (couples with the hardcoded cash `×1.005` assumption — see the math-assumptions cleanup feature).
+  - **Per-sequence reporting**: end balance, depletion age (if any), lowest annual spend forced, number of guardrail cuts.
 
 ### X2. CSV snapshot schema + localStorage migration
 

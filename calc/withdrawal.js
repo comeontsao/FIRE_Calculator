@@ -10,8 +10,11 @@
  *   params: {
  *     annualSpendReal: number — real-dollar target spend for the year.
  *     pools: {
- *       trad401kReal, rothIraReal, taxableStocksReal, cashReal
+ *       trad401kReal, roth401kReal, rothIraReal, taxableStocksReal, cashReal
  *     } — real-dollar START-OF-YEAR balances. Not mutated.
+ *       NOTE: `roth401kReal` is the renamed-in-feature-032 field (formerly
+ *       misleadingly called `rothIraReal`). `rothIraReal` is the NEW
+ *       feature-032 pool representing the actual individual Roth IRA.
  *     phase: 'preUnlock' | 'unlocked' | 'ssActive' — gates trad access and SS income.
  *     ssIncomeReal:    number — 0 unless phase === 'ssActive'.
  *     age:             number — integer years (drives RMD).
@@ -24,7 +27,8 @@
  *   {
  *     feasible:        boolean,
  *     fromTradReal:    number,
- *     fromRothReal:    number,
+ *     fromRothReal:    number,   // draws from Roth 401K pool
+ *     fromRothIraReal: number,   // draws from Roth IRA pool (feature 032)
  *     fromTaxableReal: number,
  *     fromCashReal:    number,
  *     fromSSReal:      number,
@@ -36,15 +40,19 @@
  * Consumers:
  *   - calc/lifecycle.js — invoked once per retirement-phase year.
  *   - rothLadderChart renderer — shows the per-year withdrawal split.
+ *   - Lifecycle chart (FIRE-Dashboard.html stacked-area series, feature 032).
+ *   - Withdrawal Strategy tooltip (FIRE-Dashboard.html pool-by-pool line, feature 032).
  *
  * Invariants:
  *   - feasible=true  ⇒ netSpendReal === annualSpendReal.
  *   - feasible=false ⇒ deficitReal === annualSpendReal - netSpendReal, strictly > 0.
- *   - sum(fromTrad + fromRoth + fromTaxable + fromCash + fromSS) ===
+ *   - sum(fromTrad + fromRoth + fromRothIra + fromTaxable + fromCash + fromSS) ===
  *     annualSpendReal + taxOwedReal  when feasible.
  *   - RMD enforced when age ≥ tax.rmdAgeStart AND trad401kReal > 0 AND trad is
  *     accessible (phase ∈ {'unlocked','ssActive'}): at least the IRS Uniform
  *     Lifetime Table minimum is drawn from trad, regardless of strategy.
+ *     `rothIra` (and `roth`) are EXEMPT from the RMD branch at every age
+ *     (IRS rule — feature 032 FR-021d).
  *   - No pool ever goes negative. Attempts to do so flip feasibility to false.
  *
  * Purity: no DOM, no Chart.js, no globals, no I/O, no module-scope mutation.
@@ -72,15 +80,27 @@ import { computeTax } from './tax.js';
  * @typedef {import('../tests/fixtures/types.js').Phase}     Phase
  */
 
-/** Canonical pool keys. Frozen, ordered so callers can rely on iteration. */
-const POOL_KEYS = Object.freeze(['cash', 'taxable', 'roth', 'trad']);
+/**
+ * Canonical pool keys. Frozen, ordered so callers can rely on iteration.
+ *
+ * Feature 032: `'rothIra'` is inserted immediately after `'roth'`. The two
+ * Roth pools share tax-free withdrawal behavior but are tracked separately
+ * so strategies can treat them differently. Roth 401K (`roth`) depletes
+ * before Roth IRA (`rothIra`) by default ordering (FR-021a).
+ */
+export const POOL_KEYS = Object.freeze(['cash', 'taxable', 'roth', 'rothIra', 'trad']);
 
-/** Strategy → priority order of pool keys. Pools not listed are skipped. */
-const STRATEGY_ORDER = Object.freeze({
-  'roth-ladder':   Object.freeze(['roth', 'taxable', 'cash', 'trad']),
-  'trad-first':    Object.freeze(['trad', 'taxable', 'cash', 'roth']),
-  'tax-optimized': Object.freeze(['cash', 'taxable', 'roth', 'trad']),
-  'trad-last':     Object.freeze(['cash', 'taxable', 'roth', 'trad']),
+/**
+ * Strategy → priority order of pool keys. Pools not listed are skipped.
+ *
+ * Feature 032: every strategy gains `'rothIra'` immediately after `'roth'`
+ * (FR-021a). Pool ordering invariant — Roth 401K depletes before Roth IRA.
+ */
+export const STRATEGY_ORDER = Object.freeze({
+  'roth-ladder':   Object.freeze(['roth', 'rothIra', 'taxable', 'cash', 'trad']),
+  'trad-first':    Object.freeze(['trad', 'taxable', 'cash', 'roth', 'rothIra']),
+  'tax-optimized': Object.freeze(['cash', 'taxable', 'roth', 'rothIra', 'trad']),
+  'trad-last':     Object.freeze(['cash', 'taxable', 'roth', 'rothIra', 'trad']),
 });
 
 /**
@@ -109,6 +129,18 @@ function rmdFactor(age) {
 
 /**
  * Which pools are accessible in a given phase. Trad is locked pre-59.5.
+ *
+ * Feature 032 (Invariant I3 — Locked until 59.5): `'rothIra'` is fully
+ * locked pre-59.5 per the contract (no basis-vs-earnings split in v1 — FR-019).
+ * It is therefore EXCLUDED from the preUnlock accessible set; any pre-59.5
+ * year with `pRothIra > 0` must NOT draw from it. See
+ * specs/032-roth-ira-accounts/contracts/roth-ira-pool.contract.md §I3.
+ *
+ * NOTE: the current code keeps `'roth'` in the pre-unlock set (legacy
+ * shape — `roth` represented Roth 401K with limited pre-59.5 access via
+ * conversion-ladder semantics). Preserving the existing inclusion for
+ * backwards compatibility — feature 032 does NOT change the `roth`
+ * accessibility semantics, only adds the stricter `rothIra` rule.
  *
  * @param {Phase} phase
  * @returns {ReadonlySet<string>}
@@ -151,7 +183,7 @@ function drawFromPools(amount, order, accessible, remaining, drawn) {
  *
  * @param {{
  *   annualSpendReal: number,
- *   pools: { trad401kReal: number, rothIraReal: number, taxableStocksReal: number, cashReal: number },
+ *   pools: { trad401kReal: number, roth401kReal: number, rothIraReal: number, taxableStocksReal: number, cashReal: number },
  *   phase: Phase,
  *   ssIncomeReal: number,
  *   age: number,
@@ -162,6 +194,7 @@ function drawFromPools(amount, order, accessible, remaining, drawn) {
  *   feasible: boolean,
  *   fromTradReal: number,
  *   fromRothReal: number,
+ *   fromRothIraReal: number,
  *   fromTaxableReal: number,
  *   fromCashReal: number,
  *   fromSSReal: number,
@@ -189,13 +222,16 @@ export function computeWithdrawal(params) {
 
   // Remaining balances + running draws. Both mutable locals — ok per Principle II
   // (no module-scope state; each call scope is its own world).
+  // Feature 032: `roth` consumes the RENAMED `roth401kReal` (Roth 401K),
+  // and the NEW `rothIra` pool consumes `rothIraReal`.
   const remaining = {
     cash:    pools.cashReal,
     taxable: pools.taxableStocksReal,
-    roth:    pools.rothIraReal,
+    roth:    pools.roth401kReal,
+    rothIra: pools.rothIraReal,
     trad:    pools.trad401kReal,
   };
-  const drawn = { cash: 0, taxable: 0, roth: 0, trad: 0 };
+  const drawn = { cash: 0, taxable: 0, roth: 0, rothIra: 0, trad: 0 };
 
   // SS income (if any) is "free" cash toward the spend need — phase-gated.
   const fromSSReal = phase === 'ssActive' ? ssIncomeReal : 0;
@@ -214,7 +250,8 @@ export function computeWithdrawal(params) {
   // are piecewise-linear.
   let estimatedTax = 0;
   for (let iter = 0; iter < 8; iter += 1) {
-    const totalDrawnSoFar = drawn.cash + drawn.taxable + drawn.roth + drawn.trad;
+    const totalDrawnSoFar =
+      drawn.cash + drawn.taxable + drawn.roth + drawn.rothIra + drawn.trad;
     const targetTotal = spendNeedAfterSS + estimatedTax;
     const gap = targetTotal - totalDrawnSoFar;
     if (gap > 1e-6) {
@@ -238,7 +275,8 @@ export function computeWithdrawal(params) {
   }
 
   // Final tax (after last loop pass). One more top-up if tax drifted upward.
-  const totalDrawn = drawn.cash + drawn.taxable + drawn.roth + drawn.trad;
+  const totalDrawn =
+    drawn.cash + drawn.taxable + drawn.roth + drawn.rothIra + drawn.trad;
   const required = spendNeedAfterSS + estimatedTax;
   if (totalDrawn + 1e-6 < required) {
     drawFromPools(required - totalDrawn, order, accessible, remaining, drawn);
@@ -256,7 +294,8 @@ export function computeWithdrawal(params) {
   });
   const taxOwedReal = finalTaxResult.totalOwedReal;
 
-  const finalTotalDrawn = drawn.cash + drawn.taxable + drawn.roth + drawn.trad;
+  const finalTotalDrawn =
+    drawn.cash + drawn.taxable + drawn.roth + drawn.rothIra + drawn.trad;
   // netSpendReal is what the household actually got to spend AFTER paying tax,
   // PLUS SS. Portfolio contribution toward spend = finalTotalDrawn - tax.
   const netSpendReal = Math.min(
@@ -269,14 +308,15 @@ export function computeWithdrawal(params) {
 
   /** @type {{
    *   feasible: boolean,
-   *   fromTradReal: number, fromRothReal: number, fromTaxableReal: number,
-   *   fromCashReal: number, fromSSReal: number,
+   *   fromTradReal: number, fromRothReal: number, fromRothIraReal: number,
+   *   fromTaxableReal: number, fromCashReal: number, fromSSReal: number,
    *   taxOwedReal: number, netSpendReal: number, deficitReal?: number,
    * }} */
   const base = {
     feasible,
     fromTradReal:    drawn.trad,
     fromRothReal:    drawn.roth,
+    fromRothIraReal: drawn.rothIra,
     fromTaxableReal: drawn.taxable,
     fromCashReal:    drawn.cash,
     fromSSReal,

@@ -35,7 +35,10 @@ import realNominalCheck from '../fixtures/real-nominal-check.js';
 function sumPools(rec) {
   return (
     rec.trad401kReal +
-    rec.rothIraReal +
+    // Feature 032 rename: `roth401kReal` replaces legacy `rothIraReal`
+    // (which represented Roth 401K). A separate `rothIraReal` field for
+    // the new Roth IRA pool will be added in feature 032 user-story 2.
+    rec.roth401kReal +
     rec.taxableStocksReal +
     rec.cashReal
   );
