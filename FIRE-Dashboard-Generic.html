@@ -13,6 +13,9 @@
 <link rel="icon" type="image/png" href="fire-dashboard-icon-v2.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="calc/tabRouter.js"></script>
+<!-- Feature 033: assumptions.js MUST load before every other calc script and
+     inline simulator — they capture CASH_REAL_RETURN / realRate at eval time. -->
+<script src="calc/assumptions.js"></script>
 <script src="calc/calcAudit.js"></script>
 <script src="calc/payoffVsInvest.js"></script>
 <script src="calc/taxBrackets.js"></script>
