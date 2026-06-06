@@ -15,7 +15,9 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
+const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const HTML = fs.readFileSync(path.join(REPO_ROOT, 'FIRE-Dashboard-Generic.html'), 'utf8');
@@ -52,7 +54,13 @@ function buildSim() {
     'getSelectedRelocationCost',
   ];
   const fnCode = fns.map(n => { try { return extractFn(n); } catch { return ''; } }).join('\n\n');
+  // 033(US1/US3): the extracted HTML simulators now reference the
+  // calc/assumptions.js globals — inject them from the REAL module so the
+  // sandbox can never drift from the engine (feature-020 OVERRIDES lesson).
+  const { CASH_REAL_RETURN: _cashRR } = require(path.join(__dirname, '..', '..', 'calc', 'assumptions.js'));
   const overrides = `
+    var CASH_REAL_RETURN = ${_cashRR};
+    var realRate = function (nominal, inflation) { return (1 + nominal) / (1 + inflation) - 1; };
     function getSSAnnual() { return 40131; }
     function getHealthcareDeltaAnnual() { return 0; }
     function getTotalCollegeCostForYear() { return 0; }

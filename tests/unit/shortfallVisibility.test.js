@@ -56,7 +56,12 @@ function buildSimulator() {
   ];
   const fnCode = fns.map(n => { try { return extractFn(n); } catch { return ''; } }).join('\n\n');
   // Stubs that replace DOM-dependent helpers with deterministic noops.
+  // 033(US1/US3): inject the calc/assumptions.js globals from the REAL module
+  // so the sandbox can never drift from the engine (feature-020 OVERRIDES lesson).
+  const { CASH_REAL_RETURN: _cashRR } = require(path.join(REPO_ROOT, 'calc', 'assumptions.js'));
   const overrides = `
+    var CASH_REAL_RETURN = ${_cashRR};
+    var realRate = function (nominal, inflation) { return (1 + nominal) / (1 + inflation) - 1; };
     function getSSAnnual() { return 48000; }
     function getHealthcareDeltaAnnual() { return 0; }
     function getTotalCollegeCostForYear() { return 0; }

@@ -1,12 +1,35 @@
 /*
  * =============================================================================
- * MODULE: calc/accumulateToFire.js  (v5 — feature 023)
+ * MODULE: calc/accumulateToFire.js  (v7 — feature 033)
  *
- * Feature: 023-accumulation-spend-separation (extends 021 progressive-bracket +
- *          022 frame-fix, which extended 020 v2 cash-flow rewrite + 019
- *          accumulation-drift fix).
- * Spec:    specs/023-accumulation-spend-separation/spec.md US1
- * Contract: specs/023-accumulation-spend-separation/contracts/accumulateToFire-options-bag.contract.md
+ * Feature: 033-math-assumptions-cleanup (US1 cash-growth registry + US2
+ *          shortfall funding ladder). Extends 032 (v6 Roth IRA pool),
+ *          023-accumulation-spend-separation (v5), 021 progressive-bracket,
+ *          022 frame-fix, 020 v2 cash-flow rewrite, 019 accumulation-drift fix.
+ * Spec:    specs/033-math-assumptions-cleanup/spec.md US1 + US2
+ * Contract: specs/033-math-assumptions-cleanup/contracts/assumptions.contract.md
+ *           §"Shortfall funding ladder" (NON-NEGOTIABLE ordering)
+ *           specs/023-accumulation-spend-separation/contracts/accumulateToFire-options-bag.contract.md
+ *
+ * v7 changes vs v6 (feature 033):
+ *   - US1: cash growth derives from calc/assumptions.js CASH_REAL_RETURN
+ *     (single source; was a hardcoded half-percent/yr factor — now 0.0/yr per
+ *     clarification Q1).
+ *   - US2: shortfall funding ladder. When the accumulation-year residual is
+ *     negative AND the cash-flow override is OFF, funding proceeds in EXACTLY:
+ *       (1) cut the discretionary brokerage contribution down to $0;
+ *       (2) draw from the cash pool down to $0;
+ *       (3) draw from the brokerage pool at face value (D4 — no LTCG gross-up);
+ *       (4) any remainder is `unfunded` → cashFlowWarning 'NEGATIVE_RESIDUAL'.
+ *     A year fully funded by rungs 1–3 carries cashFlowWarning
+ *     'CONTRIBUTION_REDUCED' (informational). Pre-tax 401(k) employee
+ *     contributions and employer match are NEVER reduced. This removes the
+ *     old silent-floor bug (`if (residual < 0) cashFlowToCash = 0`) that
+ *     dropped the shortfall without recording how it was funded.
+ *   - `stockContribution` KEEPS its v2 PLANNED meaning (sibling-field lesson,
+ *     feature 018). New sibling row fields: stockContributionActual,
+ *     fundedFromCash, fundedFromStocks (always present, numeric). The ACTUAL
+ *     (post-ladder) contribution is what flows into pStocks each year.
  *
  * v5 changes vs v3 (v4 was the feature-022 internal frame fix):
  *   - Reads new options.accumulationSpend (real-$, optional) for the spending
@@ -67,6 +90,15 @@
  *       { ficaTax, federalTaxBreakdown, ficaBreakdown }
  *     v6 fields (NEW — feature 032 US2):
  *       { pRothIra }
+ *     v7 fields (NEW — feature 033 US2 shortfall funding ladder):
+ *       { stockContributionActual, fundedFromCash, fundedFromStocks }
+ *       stockContribution remains PLANNED; stockContributionActual is the
+ *       post-ladder amount that flows into pStocks. fundedFromCash /
+ *       fundedFromStocks are the ladder draw amounts (≥ 0). In surplus /
+ *       override / no-income years: actual === planned, draws 0 (I5).
+ *       cashFlowWarning gains 'CONTRIBUTION_REDUCED' (informational: ladder
+ *       funded the year) alongside 'NEGATIVE_RESIDUAL' (now: unfunded
+ *       remainder > 0 after all three rungs — genuine infeasibility).
  *
  * Consumers:
  *   1. FIRE-Dashboard.html → projectFullLifecycle (canonical accumulation branch) —
@@ -92,16 +124,22 @@
  *   - Node-importable via CommonJS module.exports.
  *   - Tax brackets + FICA constants imported from calc/taxBrackets.js (require for
  *     Node, globalThis.taxBrackets for browser — see UMD-classic-script pattern).
- *   - Cash growth: 1.005/yr.
+ *   - CASH_REAL_RETURN imported from calc/assumptions.js (same require/globalThis
+ *     pattern; assumptions.js is the FIRST calc <script> tag — feature 033).
+ *   - Cash growth: (1 + CASH_REAL_RETURN)/yr — single source: calc/assumptions.js (feature 033).
  *   - Federal tax: progressive brackets (auto) OR flat rate × (gross − pretax401k).
  *   - FICA: 0 in flat-rate mode; full SS+Medicare+addtlMedicare in auto mode.
  *
- * Conservation invariant (v3, FR-015.2 extended):
- *   For non-clamped years (auto OR flat-rate):
- *   grossIncome − federalTax − ficaTax − annualSpending − pretax401kEmployee
- *     − stockContribution === cashFlowToCash (within ±$1)
- *   (v2 invariant remains valid — ficaTax = 0 in flat-rate mode means the LHS
- *    reduces to the v2 formula automatically.)
+ * Conservation invariant (v7, feature 033 — supersedes the v3 form):
+ *   For EVERY accumulation year (override OFF), the per-year identity (I6):
+ *     grossIncome − federalTax − ficaTax − annualSpending − pretax401kEmployee
+ *       − stockContributionActual − cashFlowToCash
+ *       + fundedFromCash + fundedFromStocks === unfunded
+ *   where `unfunded` is 0 for every non-NEGATIVE_RESIDUAL year and equals the
+ *   still-unfunded remainder (> 0) on a genuinely infeasible year. In surplus
+ *   years fundedFromCash = fundedFromStocks = 0 and stockContributionActual =
+ *   stockContribution, so the LHS reduces to the pre-033 v3 form
+ *   (=== cashFlowToCash) automatically. ficaTax = 0 in flat-rate mode.
  *
  * Constitution Principles:
  *   II  — pure module, contract-documented.
@@ -122,13 +160,14 @@
  *       real-return constants in real-$ frame.
  *     - Line ~370: raiseRate read — used at the income-real conversion site below.
  *     - Income (real-$ at conversion site below): grossIncomeReal computed via
- *       (1 + raiseRate − inflationRate)^t — real wage growth.
+ *       (1 + realRate(raiseRate, inflationRate))^t — real wage growth (Fisher).
  *     - Spending (real-$): annualSpendingReal === baseAnnualSpend (constant in today's $).
  *     - Tax (real-$): _computeYearTax invoked with grossIncomeReal; 2024 brackets
  *       and SSA wage base treated as today's-$ values per FR-015.
  *     - Cash-flow residual (real-$, single-frame): residual = grossIncomeReal
  *       − federalTax − ficaTax − pretax401kEmployee − annualSpendingReal − stockContribution.
- *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at 0.5%/yr.
+ *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at
+ *       CASH_REAL_RETURN/yr (today's-$, from calc/assumptions.js — feature 033).
  * =============================================================================
  */
 
@@ -159,6 +198,30 @@ const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE : 200000;
 const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
+
+// Feature 033 — assumptions registry. Pattern matches `_taxBrackets`:
+// Node `require` in tests; globalThis in browser (calc/assumptions.js is
+// the FIRST calc script tag, so eval-time capture is safe — NOT the
+// failed eval-time-capture _applyCashSweep pattern, which loaded later).
+const _assumptions = (typeof require !== 'undefined')
+  ? require('./assumptions.js')
+  : (typeof globalThis !== 'undefined' ? globalThis : null);
+const _CASH_REAL_RETURN = _assumptions && typeof _assumptions.CASH_REAL_RETURN === 'number'
+  ? _assumptions.CASH_REAL_RETURN
+  : (() => { throw new Error('[accumulateToFire] calc/assumptions.js not loaded — it must be the first calc <script> tag'); })();
+// Feature 033 (US3) — Fisher real-rate helper from the same registry. Hard
+// throw if missing (mirrors _CASH_REAL_RETURN above): a silent fallback would
+// reintroduce the subtraction-form drift this feature removes.
+const _realRate = _assumptions && typeof _assumptions.realRate === 'function'
+  ? _assumptions.realRate
+  : (() => { throw new Error('[accumulateToFire] calc/assumptions.js realRate not loaded — it must be the first calc <script> tag'); })();
+
+// Feature 033 (US2) — half-cent rounding epsilon for the shortfall funding
+// ladder. An unfunded remainder at or below this is treated as fully funded
+// (floating-point dust). Written in exponent form (5e-3) rather than the
+// decimal form so the cash-growth static guard in
+// tests/unit/mathAssumptions.test.js stays clean of false positives.
+const _UNFUNDED_EPSILON = 5e-3;
 
 // Feature 030 — Cash-sweep helper. Pattern matches `_taxBrackets` above:
 // Node `require` in tests; globalThis attachment in browser via UMD wrapper.
@@ -423,10 +486,10 @@ function accumulateToFire(inp, fireAge, options) {
   // FRAME: real-$ — real-frame return constants; pool growth at these
   //        rates keeps balances in today's purchasing power.
   const inflationRate = inp.inflationRate || 0;
-  // FRAME: real-$ — stocks real return (nominal − inflation)
-  const realReturnStocks = inp.returnRate - inflationRate;
-  // FRAME: real-$ — 401k real return (nominal − inflation)
-  const realReturn401k = inp.return401k - inflationRate;
+  // FRAME: real-$ — stocks real return (Fisher: realRate)
+  const realReturnStocks = _realRate(inp.returnRate, inflationRate);
+  // FRAME: real-$ — 401k real return (Fisher: realRate)
+  const realReturn401k = _realRate(inp.return401k, inflationRate);
 
   // --- Contribution constants (line 9320–9322) ---
   // v2: split employee vs employer for cash-flow conservation accounting.
@@ -441,7 +504,7 @@ function accumulateToFire(inp, fireAge, options) {
   const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
   // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); combined
   //        with inflationRate at the income conversion site below to compute
-  //        real wage growth = (1 + raiseRate − inflationRate)^t.
+  //        real wage growth = (1 + realRate(raiseRate, inflationRate))^t (Fisher).
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
   // Feature 023 (FR-006 / US1) — 4-tier fallback chain for accumulation-phase
   // spending baseline. Preferred path is options.accumulationSpend (real-$,
@@ -658,11 +721,12 @@ function accumulateToFire(inp, fireAge, options) {
     const effectiveAnnualSavings = stockContribution;
 
     // --- v4 Cash-flow accounting (feature 022 US3 — single-frame real-$) ---
-    // Step 1: Gross income in real-$ frame. (1 + raiseRate − inflationRate)^t
+    // Step 1: Gross income in real-$ frame. (1 + realRate(raiseRate, inflation))^t
     //        is the real wage growth multiplier. raiseRate == inflationRate →
     //        constant; > → real growth; < → real wage cut. Per FR-012 / FR-013.
     // FRAME: real-$ — income converted from nominal to real before residual.
-    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate - inflationRate, yearsFromNow);
+    // Feature 033 (US3) — real wage growth via Fisher realRate (was subtraction).
+    const grossIncome = annualIncomeBase * Math.pow(1 + _realRate(raiseRate, inflationRate), yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
     // FRAME: real-$ — 401k contribution caps are constant in today's $ (the
@@ -695,8 +759,19 @@ function accumulateToFire(inp, fireAge, options) {
     let cashFlowToCash;
     let cashFlowWarning;
 
+    // Feature 033 (US2) — shortfall funding ladder (v7 sibling fields).
+    // `stockContribution` KEEPS its v2 PLANNED meaning (sibling-field lesson,
+    // feature 018). The ACTUAL contribution that flows into pStocks this year
+    // is `stockContributionActual`; ladder draws are recorded in
+    // `fundedFromCash` / `fundedFromStocks`. Surplus years: actual === planned,
+    // draws 0. See specs/033-math-assumptions-cleanup/research.md §D3.
+    let stockContributionActual = stockContribution; // default (surplus / override / no-income)
+    let fundedFromCash = 0;
+    let fundedFromStocks = 0;
+
     if (cashflowOverrideEnabled) {
-      // Override active: bypass computed residual.
+      // Override active: bypass computed residual AND the ladder entirely
+      // (spec edge case — the override replaces the residual, no draws).
       cashFlowToCash = cashflowOverrideValue;
     } else if (annualIncomeBase > 0 || taxRate > 0) {
       // v4 single-frame residual: gross - federalTax - ficaTax - 401k - spend - stock.
@@ -704,8 +779,33 @@ function accumulateToFire(inp, fireAge, options) {
       const residual = grossIncome - federalTax - ficaTax - pretax401kEmployee
                        - annualSpending - stockContribution;
       if (residual < 0) {
+        // Shortfall: run the NON-NEGOTIABLE funding ladder (contract §"Shortfall
+        // funding ladder"). Order: (1) cut discretionary brokerage contribution
+        // to $0; (2) draw cash to $0; (3) draw brokerage at face value (D4 — no
+        // LTCG gross-up); (4) any remainder is `unfunded`. Pool draws apply HERE
+        // (before this year's growth step), so the row snapshot below reflects
+        // the drained pools and invariant I3 holds. Pre-tax 401(k) employee
+        // contributions and employer match are NEVER reduced.
+        let need = -residual;
+        // Rung 1 — reduce discretionary contribution (down to $0).
+        stockContributionActual = Math.max(0, stockContribution - need);
+        need -= (stockContribution - stockContributionActual);
+        // Rung 2 — draw from the cash pool (down to $0).
+        fundedFromCash = Math.min(Math.max(0, pCash), need);
+        need -= fundedFromCash;
+        pCash -= fundedFromCash;
+        // Rung 3 — draw from the brokerage pool (face value).
+        fundedFromStocks = Math.min(Math.max(0, pStocks), need);
+        need -= fundedFromStocks;
+        pStocks -= fundedFromStocks;
+        // Rung 4 — remainder is genuinely unfunded.
+        const unfunded = need;
         cashFlowToCash = 0;
-        cashFlowWarning = 'NEGATIVE_RESIDUAL';
+        // unfunded above a half-cent rounding epsilon (5e-3 == _UNFUNDED_EPSILON)
+        // → genuine infeasibility (NEGATIVE_RESIDUAL); otherwise the ladder fully
+        // funded the year (CONTRIBUTION_REDUCED, informational). Epsilon written
+        // as 5e-3 to keep the cash-growth static guard (mathAssumptions) clean.
+        cashFlowWarning = (unfunded > _UNFUNDED_EPSILON) ? 'NEGATIVE_RESIDUAL' : 'CONTRIBUTION_REDUCED';
       } else {
         cashFlowToCash = residual;
       }
@@ -748,9 +848,14 @@ function accumulateToFire(inp, fireAge, options) {
       annualSpending,
       pretax401kEmployee,
       empMatchToTrad: empMatchAmt,
-      stockContribution,
+      stockContribution,  // PLANNED discretionary brokerage contribution (v2 semantics)
       cashFlowToCash,
-      cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | 'MISSING_SPEND' (feature 023) | undefined
+      cashFlowWarning,  // 'NEGATIVE_RESIDUAL' | 'MISSING_SPEND' (023) | 'CONTRIBUTION_REDUCED' (033) | undefined
+      // v7 fields (NEW — feature 033 US2 shortfall funding ladder).
+      // FRAME: real-$ — all in today's-$ (siblings of stockContribution).
+      stockContributionActual,  // actual contribution after ladder reduction (=== planned in surplus years)
+      fundedFromCash,           // shortfall amount drawn from cash this year (≥ 0)
+      fundedFromStocks,         // shortfall amount drawn from brokerage this year (≥ 0, face value — D4)
       // v3 fields (NEW — feature 021 progressive-bracket + FICA)
       ficaTax,
       federalTaxBreakdown,
@@ -772,14 +877,23 @@ function accumulateToFire(inp, fireAge, options) {
     // Roth 401K pool (per data-model.md §5: "uses the SAME real return
     // assumption as the 401K pools"). Contribution in real-$.
     pRothIra = pRothIra * (1 + realReturn401k) + rothIraContrib;
-    // FRAME: real-$ — pStocks grows at realReturnStocks; contributions in real-$
-    pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
+    // FRAME: real-$ — pStocks grows at realReturnStocks; contributions in real-$.
+    // Feature 033 (US2): the ACTUAL (post-ladder) contribution flows into pStocks,
+    // not the planned amount. In surplus/override/no-income years
+    // stockContributionActual === stockContribution (=== effectiveAnnualSavings),
+    // so this is byte-identical to pre-033 behavior there. Any rung-3 brokerage
+    // draw was already subtracted from pStocks above (before this growth step).
+    pStocks = pStocks * (1 + realReturnStocks) + stockContributionActual;
     pCash = pCash + cashFlowToCash;
 
-    // Step 9: Pool growth (real return for 401k; nominal 0.5% for cash).
+    // Step 9: Pool growth — cash at CASH_REAL_RETURN (today's-$ frame).
     // Note: pTrad/pRoth/pStocks growth is already applied in step 8 (multiply before add).
-    // pCash grows at 0.5%/yr nominal (FR-016 — hardcoded, locked).
-    pCash *= 1.005;
+    // pCash grows at CASH_REAL_RETURN/yr — a purchasing-power (today's-$) rate,
+    // NOT nominal. The old "0.5%/yr nominal" label mislabeled the frame: the
+    // multiplier always applied to a today's-$ pool. FR-016's "hardcoded,
+    // locked" lock is SUPERSEDED — single source is calc/assumptions.js
+    // (see specs/033-math-assumptions-cleanup/contracts/assumptions.contract.md).
+    pCash *= (1 + _CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
       // Resolve lazily (see _resolveApplyCashSweep above). The block-scoped

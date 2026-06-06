@@ -377,12 +377,30 @@ test('T-019-04: accumulateToFire is deterministic and pCash = 0 at FIRE for audi
     `buy-in at age 44. Got pCash=${run1.end.pCash}`
   );
 
-  // 4. pStocks > 0 (accumulated for 9 years post buy-in).
+  // 4. pStocks at FIRE — 033(US2) delta: was `> 0`, now `=== 0`.
+  // This scenario models $72,700/yr spending with ZERO income. Pre-033 the
+  // engine silently floored the negative residual (NEGATIVE_RESIDUAL warning,
+  // pools untouched) — the person spent ~$800K over 11 years that came from
+  // nowhere while stocks kept compounding. The 033 funding ladder now funds
+  // each year honestly (cut contribution → draw cash → draw stocks), so the
+  // $445K stock pool is genuinely consumed before FIRE. pStocks === 0 IS the
+  // honest answer for this fixture.
+  assert.strictEqual(
+    run1.end.pStocks,
+    0,
+    `[T-019-04] pStocks must be 0 — the 033 funding ladder drains stocks to ` +
+    `fund the zero-income spending years. Got pStocks=${run1.end.pStocks}`
+  );
+  // 4b. The honest-funding evidence trail: at least one year drew from
+  // stocks, and once every pool is empty the remaining gap surfaces as
+  // NEGATIVE_RESIDUAL (genuinely unfunded — never silently absorbed).
   assert.ok(
-    run1.end.pStocks > 0,
-    `[T-019-04] pStocks must be > 0 after accumulation; ` +
-    `stocks survived the buy-in overflow and grew for remaining years. ` +
-    `Got pStocks=${run1.end.pStocks}`
+    run1.perYearRows.some(r => (r.fundedFromStocks || 0) > 0),
+    '[T-019-04] expected ≥1 accumulation year funded from stocks (033 ladder)'
+  );
+  assert.ok(
+    run1.perYearRows.some(r => r.cashFlowWarning === 'NEGATIVE_RESIDUAL'),
+    '[T-019-04] expected ≥1 genuinely-unfunded year flagged NEGATIVE_RESIDUAL after pools empty'
   );
 
   // 5. perYearRows covers exactly (fireAge - ageRoger) = 11 years.

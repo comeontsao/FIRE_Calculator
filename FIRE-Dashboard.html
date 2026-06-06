@@ -8,6 +8,9 @@
 <link rel="icon" type="image/png" href="fire-dashboard-icon-v2.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="calc/tabRouter.js"></script>
+<!-- Feature 033: assumptions.js MUST load before every other calc script and
+     inline simulator — they capture CASH_REAL_RETURN / realRate at eval time. -->
+<script src="calc/assumptions.js"></script>
 <script src="calc/calcAudit.js"></script>
 <script src="calc/payoffVsInvest.js"></script>
 <script src="calc/taxBrackets.js"></script>
@@ -6435,6 +6438,9 @@ const TRANSLATIONS = {
     'audit.cashflow.phase.phase1':              'Retired (pre-401K)',
     'audit.cashflow.phase.phase2':              'Retired (401K open)',
     'audit.cashflow.phase.phase3':              'Retired (with SS)',
+    // Feature 033 (T018) — funding-ladder informational flag + tooltip.
+    'audit.flag.contributionReduced':           'Contribution reduced to fund spending',
+    'audit.tip.fundingLadder':                  "This year's income couldn't cover spending plus planned contributions. The plan cuts the brokerage contribution first, then draws from cash.",
     'audit.section.crossval.title':             'Cross-Validation',
     'audit.flow.stage.inputs':                  'Inputs',
     'audit.flow.stage.spending':                'Spending Adjustments',
@@ -7534,6 +7540,9 @@ const TRANSLATIONS = {
     'audit.cashflow.phase.phase1':              '退休（401K 未解鎖）',
     'audit.cashflow.phase.phase2':              '退休（401K 已解鎖）',
     'audit.cashflow.phase.phase3':              '退休（有社安福利）',
+    // Feature 033 (T018) — funding-ladder informational flag + tooltip.
+    'audit.flag.contributionReduced':           '為支應開銷而調降投資供款',
+    'audit.tip.fundingLadder':                  '該年度收入不足以支應開銷與預定供款。計畫會先調降證券投資供款,再動用現金。',
     'audit.section.crossval.title':             '交叉驗證',
     'audit.flow.stage.inputs':                  '輸入',
     'audit.flow.stage.spending':                '支出調整',
@@ -8887,7 +8896,7 @@ function calcFIRENumber(annualSpend, swr) {
 // Returns function(fireAge) → minimum ACCESSIBLE portfolio needed at FIRE
 
 function calcThreePhaseFireNumber(inp, annualSpend, fireAge) {
-  const realReturn = inp.returnRate - inp.inflationRate;
+  const realReturn = realRate(inp.returnRate, inp.inflationRate);
   const endAge = inp.endAge || 95;
   const unlockAge = 59.5;
   const claimAge = inp.ssClaimAge;
@@ -9042,8 +9051,8 @@ function projectGrowth(inp, years) {
   let portfolioStocks = inp.rogerStocks + inp.rebeccaStocks;
   let portfolioCash = inp.cashSavings + inp.otherAssets;
   let income = inp.annualIncome;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   // Employer match is ALWAYS Traditional
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
@@ -9085,7 +9094,7 @@ function projectGrowth(inp, years) {
     // Monthly savings reduced by mortgage-rent delta
     const effectiveAnnualSavings = Math.max(0, (inp.monthlySavings * 12) - mtgSavingsAdjust);
     portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
-    portfolioCash *= 1.005;
+    portfolioCash *= (1 + CASH_REAL_RETURN);
 
     data.push({
       year: 2026 + y,
@@ -9114,7 +9123,14 @@ function projectGrowth(inp, years) {
 //   DieWithZero: end balance ≥ 0 (targets exactly $0 at plan age)
 function yearsToFIRE(inp, annualSpend) {
   const r = findFireAgeNumerical(inp, annualSpend, fireMode);
-  return r.years;
+  // 033(US2) — round UP to the next integer year when the month-precise DWZ
+  // result carries months. `r.years` alone FLOORS the interpolated result
+  // (6y3m → 6 → FIRE age 49), but every integer-age consumer (chart render,
+  // gates, audit invariant A) then evaluates an age the gate itself calls
+  // infeasible — the documented intent ("chart rounds UP to an integer year
+  // so it stays feasible", recalcAll DWZ display block) was never applied
+  // here. Non-DWZ modes always return months=0, so this is a DWZ-only change.
+  return r.months > 0 ? r.years + 1 : r.years;
 }
 
 // ==================== DWZ NUMERICAL SOLVER (MONTH-PRECISE) ====================
@@ -9153,10 +9169,10 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
-  // FRAME: real-$ — stocks real return (nominal − inflation)
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  // FRAME: real-$ — 401k real return (nominal − inflation)
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  // FRAME: real-$ — stocks real return (Fisher: realRate(nominal, inflation))
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  // FRAME: real-$ — 401k real return (Fisher: realRate(nominal, inflation))
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   // Employer match is always Traditional
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
@@ -9187,7 +9203,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   // Mortgage upfront handling (simplified — mirrors projectFullLifecycle's buying-now path)
   // Feature 020 (C3 fix): use the safe deduction pattern from projectFullLifecycle —
   // subtract from cash up to zero, then take the remainder from stocks. Previously
-  // signed sim let pCash go negative, which then compounded at 1.005 and skewed
+  // signed sim let pCash go negative, which then compounded at the cash growth rate (CASH_REAL_RETURN) and skewed
   // subsequent withdrawal calculations against the chart's cash-clamped behavior,
   // producing systematic ~$575/year drift in `buying-in` and `buying-now` scenarios.
   const mtg = mortgageEnabled ? getMortgageInputs() : null;
@@ -9324,7 +9340,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // Snapshot balances at the START of each phase transition (post-retirement only)
     // + trajectory sampling for Safe-mode "every year" enforcement across all 3 phases.
@@ -9382,7 +9398,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pRothIra = pRothIra * (1 + realReturn401k) + rothIraContrib;
       const effAnnualSavings = Math.max(0, inp.monthlySavings * 12 - mtgAdjust - collegeCostThisYear - h2Carry);
       pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       {
         const _f030_sweep_ = (typeof _applyCashSweep === 'function')
@@ -9490,7 +9506,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       // compounds until US4 wires draws.
       pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // Feature 031 (part 2 — clamp-then-sweep parity): sweep split decision on
       // CLAMPED copies (Math.max(0,…)) — the SAME non-negative basis the chart
@@ -9662,6 +9678,14 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
         const last = chart[chart.length - 1];
         const endBal = last ? last.total : 0;
         if (endBal < 0) return false;
+        // 033(US2) — the clamped chart total can NEVER go negative (pools are
+        // clamped to ≥ 0 before compounding), so the `endBal < 0` check above
+        // is vacuous on its own: a signed −$139K depletion can hide behind a
+        // floor-passing clamped trajectory (pStocks deeply negative offset by
+        // surviving Trad — the feature-015 signed-debt class). The SIGNED sim
+        // is the authoritative depletion detector (CLAUDE.md gates contract);
+        // DWZ requires the genuine end balance ≥ 0.
+        if (sim && typeof sim.endBalance === 'number' && sim.endBalance < 0) return false;
         const unlockAge = 59.5;
         for (let i = 0; i < chart.length; i++) {
           const row = chart[i];
@@ -9853,14 +9877,33 @@ function findFireAgeNumerical(inp, annualSpend, mode) {
         const span = sim.endBalance - prevSim.endBalance; // > 0 (monotonic)
         const f = span > 0 ? Math.max(0, Math.min(1, -prevSim.endBalance / span)) : 0;
         const totalMonths = Math.max(0, Math.min(maxYrs * 12, Math.ceil((y - 1) * 12 + f * 12)));
-        return {
-          totalMonths,
-          years: Math.floor(totalMonths / 12),
-          months: totalMonths % 12,
-          endBalance: sim.endBalance,
-          sim,
-          feasible: true
-        };
+        // 033(US2) fix — verify the interpolated FRACTIONAL age passes the
+        // FULL gate (floor + hasShortfall + endBalance), not just the
+        // endBalance crossover. The previous guard assumed `prevSim.endBalance
+        // < 0` meant the boundary was endBalance-driven ALONE, but a year can
+        // fail BOTH endBalance and the trajectory floor; interpolating then
+        // displayed a FIRE age that every integer-age consumer (audit gates,
+        // cross-validation invariant A) evaluated as infeasible — surfaced as
+        // a genuine endBalance-mismatch warning under active DWZ once the
+        // honest funding ladder lowered the accumulation trajectory.
+        let _fracFeasible = false;
+        try {
+          const _fracAge = ageRoger + totalMonths / 12;
+          const _fracSim = signedLifecycleEndBalance(inp, annualSpend, _fracAge);
+          _fracFeasible = isFireAgeFeasible(_fracSim, inp, annualSpend, mode, _fracAge);
+        } catch (_e) { _fracFeasible = false; }
+        if (_fracFeasible) {
+          return {
+            totalMonths,
+            years: Math.floor(totalMonths / 12),
+            months: totalMonths % 12,
+            endBalance: sim.endBalance,
+            sim,
+            feasible: true
+          };
+        }
+        // Interpolated point fails the full gate → fall through to the
+        // integer-year return (the first age the gate actually accepts).
       }
       return {
         totalMonths: y * 12,
@@ -9940,9 +9983,9 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
   // FRAME: real-$ — stocks real return
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
   // FRAME: real-$ — 401k real return
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const endAge = inp.endAge || 95;
   const unlockAge = 59.5;
   const taxTrad = inp.taxTrad;
@@ -10013,7 +10056,7 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     const is401kUnlocked = age >= unlockAge;
     const ssActive = age >= inp.ssClaimAge;
     // Feature 024 (B-023-5) — SS COLA factor before partial-year scale.
-    const ssThisYearFull = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYearFull = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // FRAME: pure-data — pro-rate scale for the partial FIRE-year row.
     // scale = (1 − mFraction) on first iteration; 1.0 on all subsequent
@@ -10114,7 +10157,7 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     // draws); for now it grows monotonically through retirement.
     pRothIra *= (1 + realReturn401k * scale);
     pStocks *= (1 + realReturnStocks * scale);
-    pCash *= (1 + 0.005 * scale);
+    pCash *= (1 + CASH_REAL_RETURN * scale);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
       const _f030_sweep_ = (typeof _applyCashSweep === 'function')
@@ -10182,7 +10225,7 @@ function findMinAccessibleAtFireNumerical(inp, annualSpend, fireAge, mode) {
   // else compound from inp.rothIraReal locally INCLUDING annual contributions
   // (US4b). Annuity FV formula keeps this fallback in lockstep with the
   // accumulateToFire helper's growth+contribution math.
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const _rothIraStart = (typeof inp.rothIraReal === 'number') ? inp.rothIraReal : 0;
   const _rothIraContrib = (typeof inp.rothIraContribReal === 'number') ? inp.rothIraContribReal : 0;
   const _annuityFV = (realReturn401k === 0)
@@ -10368,11 +10411,11 @@ function coastFIRECheck(inp) {
   const scenario = scenarios.find(s => s.id === selectedScenario);
   const yearsTo60 = 60 - inp.ageRoger;
   const coastSpend = getScenarioEffectiveSpend(scenario);
-  const realReturn = inp.returnRate - inp.inflationRate;
+  const realReturn = realRate(inp.returnRate, inp.inflationRate);
   const mtgAdj = getMortgageAdjustedRetirement(coastSpend, yearsTo60);
   // Grow total assets (accessible + locked) to age 60.
   const futureAccessible = accessible * Math.pow(1 + realReturn, yearsTo60) + mtgAdj.saleProceeds;
-  const futureLocked = locked * Math.pow(1 + (inp.return401k - inp.inflationRate), yearsTo60);
+  const futureLocked = locked * Math.pow(1 + realRate(inp.return401k, inp.inflationRate), yearsTo60);
   const futureTotal = futureAccessible + futureLocked;
   // Total-assets target at age 60 under current FIRE mode (chart-consistent).
   const target = findMinTotalAtFireNumerical(inp, coastSpend, 60, fireMode);
@@ -10398,8 +10441,8 @@ function simulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge,
 
 // Legacy inline drawdown (kept for reference only — not called). DO NOT USE.
 function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge, withSS) {
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const ssAnnual = withSS ? getSSAnnual(inp, inp.ssClaimAge, fireAge) : 0;
   const unlockAge = 59.5;
   const endAge = inp.endAge || 95;
@@ -10414,7 +10457,7 @@ function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, f
 
     const is401kUnlocked = age >= unlockAge;
     // Feature 024 (B-023-5) — SS COLA factor (same formula as other 5 sites).
-    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // Calculate withdrawal amount — fixed target spend for all modes.
     // DWZ distinction is only in FIRE number calculation (no buffers, no terminal value).
@@ -10522,8 +10565,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   //   portfolioStocks (T019).
   const _mortgageStrategy = (options && typeof options.mortgageStrategyOverride === 'string')
     ? options.mortgageStrategyOverride : 'invest-keep-paying';
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const tradContrib = inp.contrib401kTrad + inp.empMatch; // employer match → Trad
   const rothContrib = inp.contrib401kRoth;
   // Feature 032 (US4b) — Roth IRA contribution; mirrors signedLifecycleEndBalance:9126.
@@ -10721,6 +10764,12 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         stockContribution: _ay.stockContribution,
         cashFlowToCash: _ay.cashFlowToCash,
         cashFlowWarning: _ay.cashFlowWarning,
+        // v7 funding-ladder fields (feature 033, US2 — honest shortfall funding).
+        // MUST be copied through: the audit's lifecycleProjection rows and the
+        // conservation identity (data-model I6) read them off THIS row shape.
+        stockContributionActual: _ay.stockContributionActual,
+        fundedFromCash: _ay.fundedFromCash,
+        fundedFromStocks: _ay.fundedFromStocks,
         // v3 cash-flow fields (feature 021, US3 — progressive brackets + FICA)
         ficaTax: _ay.ficaTax,
         federalTaxBreakdown: _ay.federalTaxBreakdown,
@@ -10802,7 +10851,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // At FIRE, settle the home sale.
     // T033 (feature 018 US4) — LH-Inv-3 lifecycle handoff truncation.
@@ -10987,7 +11036,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // (canonical `inp.rothIraContribReal`).
       portfolioRothIra = portfolioRothIra * (1 + realReturn401k) + rothIraContrib;
       portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
-      portfolioCash *= 1.005;
+      portfolioCash *= (1 + CASH_REAL_RETURN);
     } else {
       // === RETIREMENT: tax-optimized withdrawal (matches Lifetime Strategy chart) ===
       // Single unified algorithm: fills cheap Trad bracket first, then Roth, then LTCG stocks.
@@ -11062,7 +11111,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // until it lands, the pool simply compounds tax-free (FR-019).
       portfolioRothIra  = Math.max(0, portfolioRothIra)  * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
-      portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
+      portfolioCash     = Math.max(0, portfolioCash)     * (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // Feature 031 US5 — sixth simulator sweep site; matches the other five.
       {
@@ -12084,8 +12133,8 @@ function getStrategies() { return window.__STRATEGIES_V008__; }
 function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
   const strategies = getStrategies();
   const endAge = inp.endAge || 95;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const ssAnnual = getSSAnnual(inp, inp.ssClaimAge, fireAge);
   // RR is always MFJ (Roger + Rebecca), but Generic has auto-detect. Use the
   // function if present (Generic path), else default to true (RR path).
@@ -12203,7 +12252,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
       const taxableSS = ssThisYear * 0.85;
       const rmdThisYear = (age >= 73 && pTrad > 0) ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
       const targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - bfOpts.safetyMargin);
@@ -12282,7 +12331,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       // Feature 032 hotfix: pRothIra compounds at realReturn401k (Invariant I4).
       pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // No `options` param in this closure; trace push omitted (helper call only).
       {
@@ -12677,8 +12726,8 @@ function rankByObjective(results, objective, mode) {
 //   - future chart annotators reading `strategy[i].irmaaCapped / ssReducedFill / ...`
 function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   const endAge = inp.endAge || 95;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
   const yrsToFire = Math.max(0, fireAge - inp.ageRoger);
@@ -12738,7 +12787,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
     const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
@@ -12821,7 +12870,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     pRothIra = Math.max(0, postRothIra) * (1 + realReturn401k);
     pStocks  = Math.max(0, postStocks)  * (1 + realReturnStocks);
     pCash    = Math.max(0, postCash);
-    pCash *= 1.005;
+    pCash *= (1 + CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     // No `options` param in this function; trace push omitted (helper call only).
     {
@@ -12913,8 +12962,8 @@ function computeRothLadder(inp, retireSpend, fireAge) {
   const fractionalBridge = Math.max(0, unlockAge - fireAge);
   const bridgeYears = Math.ceil(fractionalBridge);
   const lastYearFraction = fractionalBridge - Math.floor(fractionalBridge); // 0 if exact, else 0<f<1
-  const realReturn401k = inp.return401k - inp.inflationRate;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
   const taxTrad = inp.taxTrad;
 
   // Simulate portfolio up to FIRE using accumulation-phase math (mirrors projectFullLifecycle)
@@ -12929,7 +12978,7 @@ function computeRothLadder(inp, retireSpend, fireAge) {
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
     pStocks = pStocks * (1 + realReturnStocks) + inp.monthlySavings * 12;
-    pCash *= 1.005;
+    pCash *= (1 + CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     // No `options` param in this function; trace push omitted (helper call only).
     {
@@ -14095,7 +14144,7 @@ function recalcAll() {
     let opportunityCostHTML = '';
     if ((mtg.ownership === 'buying-now' || (mtg.ownership === 'buying-in' && yrsToFire > mtg.buyInYears))) {
       const upfrontCost = mtg.downPayment + mtg.closingCosts;
-      const realRet = inp.returnRate - inp.inflationRate;
+      const realRet = realRate(inp.returnRate, inp.inflationRate);
       const downGrown = upfrontCost * Math.pow(1 + realRet, yrsToFire);
       const downGrowth = downGrown - upfrontCost;
       let monthlyInvGrown = 0;
@@ -16550,6 +16599,10 @@ function _cashflowUpdateWarning() {
       ? resolveAccumulationOptions(inp, fireAge, 'invest-keep-paying')
       : {};
     const result = accumulateToFire(inp, fireAge, _accumOpts);
+    // Feature 033 (T017b) — semantics narrowed: with the funding ladder,
+    // NEGATIVE_RESIDUAL now means a *genuinely unfunded* remainder (ladder
+    // exhausted); CONTRIBUTION_REDUCED years are funded and intentionally NOT
+    // surfaced by this callout. Key on NEGATIVE_RESIDUAL only.
     const hasWarning = !!(result && result.perYearRows
       && result.perYearRows.some(r => r && r.cashFlowWarning === 'NEGATIVE_RESIDUAL'));
     wrap.hidden = !hasWarning;
@@ -17752,7 +17805,7 @@ function renderTimeline(inp) {
     for (const d of projection) {
       const yearsLeft = 60 - d.age;
       if (yearsLeft > 0) {
-        const realReturn = inp.returnRate - inp.inflationRate;
+        const realReturn = realRate(inp.returnRate, inp.inflationRate);
         const fv = d.total * Math.pow(1 + realReturn, yearsLeft);
         if (fv >= target) {
           milestones.push({ label: t('timeline.coast.future'), year: d.year, desc: t('timeline.coast.desc', d.age), amount: Math.round(d.total), type: 'future' });
@@ -19362,9 +19415,15 @@ window._rebindStickyHeaderObserver();
       const cashDelta = isAccum
         ? (Number.isFinite(r.cashFlowToCash) ? r.cashFlowToCash : 0)
         : ((ssIncome + withdraw) - spent);
+      // Feature 033 (T017a) — CONTRIBUTION_REDUCED is informational (the funding
+      // ladder covered the year), so it renders a distinct ℹ️ marker with the
+      // contributionReduced tooltip — not the ⚠️ used for genuine shortfalls.
       const warnTd = (r.cashFlowWarning === 'NEGATIVE_RESIDUAL')
         ? ' ⚠️'
-        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️' : '';
+        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️'
+        : (r.cashFlowWarning === 'CONTRIBUTION_REDUCED')
+          ? ' <span title="' + _esc(t0('audit.flag.contributionReduced', 'Contribution reduced to fund spending')) + '">ℹ️</span>'
+          : '';
       // Feature 023 follow-up — convert all $ values to Book Value at age
       // for chart-frame consistency.
       return '<tr' + cls + '>'
@@ -20503,6 +20562,11 @@ function copyDebugInfo() {
     const _accumRows = lc.filter(d => d.phase === 'accumulation');
     let _totalCashFlow = 0;
     let _grossSum = 0, _taxSum = 0, _ficaSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
+    // Feature 033 (T016a): conservation block v4. _stockSum now sums the ACTUAL
+    // contribution (after any shortfall-ladder reduction), falling back to the
+    // planned value for stale/v6 rows. _stockPlannedSum keeps the planned total,
+    // and the two ladder-draw totals let the residual reduce to unfundedSum.
+    let _stockPlannedSum = 0, _fundedFromCashSum = 0, _fundedFromStocksSum = 0;
     for (const _r of _accumRows) {
       const _cf = _r.cashFlowToCash || 0;
       _totalCashFlow += _cf;
@@ -20511,9 +20575,16 @@ function copyDebugInfo() {
       _ficaSum += (_r.ficaTax || 0);
       _spendSum += (_r.annualSpending || 0);
       _contribSum += (_r.pretax401kEmployee || 0);
-      _stockSum += (_r.stockContribution || 0);
+      // v7: actual contribution after ladder; defensive fallback to planned.
+      _stockSum += (_r.stockContributionActual != null ? _r.stockContributionActual : (_r.stockContribution || 0));
+      _stockPlannedSum += (_r.stockContribution || 0);
+      _fundedFromCashSum += (_r.fundedFromCash || 0);
+      _fundedFromStocksSum += (_r.fundedFromStocks || 0);
       _cashSum += _cf;
     }
+    // v4 residual: gross − tax − fica − spend − contrib − stockActual − cash
+    //              + fundedFromCash + fundedFromStocks  ⇒  unfundedSum (≈$0 feasible).
+    const _unfundedSum = _grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum + _fundedFromCashSum + _fundedFromStocksSum;
     const lifecycleProjection = {
       rows: _accumRows.map(_r => ({
         age: _r.age,
@@ -20527,6 +20598,10 @@ function copyDebugInfo() {
         pretax401kEmployee: Math.round(_r.pretax401kEmployee || 0),
         empMatchToTrad: Math.round(_r.empMatchToTrad || 0),
         stockContribution: Math.round(_r.stockContribution || 0),
+        // v7 (033): actual contribution + ladder draws (sibling fields).
+        stockContributionActual: Math.round(_r.stockContributionActual != null ? _r.stockContributionActual : (_r.stockContribution || 0)),
+        fundedFromCash: Math.round(_r.fundedFromCash || 0),
+        fundedFromStocks: Math.round(_r.fundedFromStocks || 0),
         cashFlowToCash: Math.round(_r.cashFlowToCash || 0),
         cashFlowWarning: _r.cashFlowWarning || null,
         pCash: Math.round(_r.pCash || 0),
@@ -20546,8 +20621,13 @@ function copyDebugInfo() {
         spendSum: Math.round(_spendSum),
         contribSum: Math.round(_contribSum),
         stockSum: Math.round(_stockSum),
+        // v4 (033): planned-vs-actual + ladder draw totals + unfunded remainder.
+        stockPlannedSum: Math.round(_stockPlannedSum),
+        fundedFromCashSum: Math.round(_fundedFromCashSum),
+        fundedFromStocksSum: Math.round(_fundedFromStocksSum),
+        unfundedSum: Math.round(_unfundedSum),
         cashSum: Math.round(_cashSum),
-        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum),
+        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum + _fundedFromCashSum + _fundedFromStocksSum),
       },
     };
     // v3 (feature 018, T049 US3) — Capture Payoff-vs-Invest state per FR-019:

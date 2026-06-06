@@ -16,6 +16,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const { accumulateToFire } = require(path.resolve(__dirname, '..', '..', 'calc', 'accumulateToFire.js'));
+// 033(US1): cash growth derives from the single assumptions registry so these
+// expectations can never drift from the engine (was hardcoded 1.005).
+const { CASH_REAL_RETURN, realRate } = require(path.resolve(__dirname, '..', '..', 'calc', 'assumptions.js'));
+const CASH_G = 1 + CASH_REAL_RETURN; // per-year cash growth factor (1.0 at the 0.0 default)
+// 033(US3): real rates in closed-form expectations derive via the Fisher
+// helper so they can never drift from the engine (was subtraction).
 
 // ---------------------------------------------------------------------------
 // Minimal fixture builders
@@ -77,8 +83,8 @@ test('T-01: clean accumulation matches closed-form compound interest', () => {
   assert.ok(Array.isArray(perYearRows), 'result.perYearRows must be an array');
   assert.strictEqual(perYearRows.length, fireAge - inp.ageRoger, 'perYearRows.length === fireAge - currentAge');
 
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate); // 033(US3): Fisher
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);   // 033(US3): Fisher
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
   const annualSavings = inp.monthlySavings * 12;
@@ -99,7 +105,7 @@ test('T-01: clean accumulation matches closed-form compound interest', () => {
   // tax accounting is now modeled (FR-015 + cashflow-research.md).
   // Instead of a closed-form, we verify pCash grew (is larger than the v1 floor).
   const pCash0 = inp.cashSavings + inp.otherAssets;
-  const v1CashFloor = pCash0 * Math.pow(1.005, years); // v1 floor (no income)
+  const v1CashFloor = pCash0 * Math.pow(CASH_G, years); // v1 floor (no income) — 033(US1): derives from CASH_REAL_RETURN
   // With income residual flowing in, end.pCash must be strictly greater than v1 floor.
   assert.ok(end.pCash > v1CashFloor,
     `pCash v2: must exceed v1 pure-growth floor ~${Math.round(v1CashFloor)}; got ${Math.round(end.pCash)}`);
@@ -940,12 +946,24 @@ test('v2-CF-01: positive-residual conservation — cash pool grows by residual e
 });
 
 // ---------------------------------------------------------------------------
-// v2-CF-02: negative-residual clamps + warns
-// $80k income, 28% tax, $70k spend (zero 401k, zero stock contrib).
-// gross = 80000, tax = 80000 * 0.28 = 22400, residual = 80000 - 22400 - 70000 = -12400
-// pCash must NOT decrease; cashFlowWarning === 'NEGATIVE_RESIDUAL'
+// v2-CF-02: shortfall funds via the ladder (UPDATED for feature 033 US2).
+// $80k income, 28% tax, $90k spend (zero 401k, zero stock contrib), 0% growth.
+//   gross = 80000, tax = 22400, residual = 80000 − 22400 − 90000 = −32400/yr.
+// PRE-033 behavior (now removed): cashFlowToCash floored to 0, warning
+//   NEGATIVE_RESIDUAL, pCash untouched — the residual was silently dropped.
+// POST-033 (this feature): the funding ladder runs. With no planned
+//   stockContribution, rung 1 reduces nothing; rung 2 drains cash; rung 3
+//   draws brokerage at face value. Pools (cash 5000 + stocks 150000) easily
+//   cover 2 × 32400, so EVERY year is fully funded → CONTRIBUTION_REDUCED,
+//   NOT NEGATIVE_RESIDUAL.
+//   Year 1: fundedFromCash 5000, fundedFromStocks 27400 → pCash 0, pStocks 122600.
+//   Year 2: fundedFromCash 0,    fundedFromStocks 32400 → pStocks 90200.
+//   cashFlowToCash stays 0 (shortfall years deposit nothing).
+// DELTA: warning NEGATIVE_RESIDUAL→CONTRIBUTION_REDUCED; end.pCash 5000→0;
+//        end.pStocks 150000→90200. This is the intended removal of the
+//        silent-floor bug (contract §"Shortfall funding ladder").
 // ---------------------------------------------------------------------------
-test('v2-CF-02: negative-residual clamps cash-pool at 0 and emits NEGATIVE_RESIDUAL warning', () => {
+test('v2-CF-02: negative residual funds via the ladder (cash then brokerage) and flags CONTRIBUTION_REDUCED', () => {
   const inp = baseInp({
     annualIncome: 80000,
     taxRate: 0.28,
@@ -969,15 +987,24 @@ test('v2-CF-02: negative-residual clamps cash-pool at 0 and emits NEGATIVE_RESID
   assert.ok(result.perYearRows.length === 2, 'should have 2 rows');
   for (const row of result.perYearRows) {
     assert.strictEqual(row.cashFlowToCash, 0,
-      `v2-CF-02: cashFlowToCash must be 0 for negative-residual year at age ${row.age}`);
-    assert.strictEqual(row.cashFlowWarning, 'NEGATIVE_RESIDUAL',
-      `v2-CF-02: cashFlowWarning must be 'NEGATIVE_RESIDUAL' at age ${row.age}`);
+      `v2-CF-02: cashFlowToCash must be 0 for shortfall year at age ${row.age}`);
+    assert.strictEqual(row.cashFlowWarning, 'CONTRIBUTION_REDUCED',
+      `v2-CF-02: shortfall fully funded by ladder → CONTRIBUTION_REDUCED at age ${row.age}`);
+    assert.strictEqual(row.stockContributionActual, 0, 'no planned contribution to cut');
   }
 
-  // pCash must not have decreased due to negative residual (clamp at 0 inflow)
-  // Starting pCash = 5000; with zero inflow but 0.5%/yr growth, it grows slightly.
-  assert.ok(result.end.pCash >= 5000 * Math.pow(1.005, 2) - 1,
-    `v2-CF-02: pCash must not decrease from negative residual; got ${result.end.pCash}`);
+  // Year 1: cash fully drained, then brokerage.
+  const y1 = result.perYearRows[0];
+  assert.ok(Math.abs(y1.fundedFromCash - 5000) < 0.01, `Y1 fundedFromCash 5000; got ${y1.fundedFromCash}`);
+  assert.ok(Math.abs(y1.fundedFromStocks - 27400) < 0.01, `Y1 fundedFromStocks 27400; got ${y1.fundedFromStocks}`);
+  // Year 2: cash already empty, all from brokerage.
+  const y2 = result.perYearRows[1];
+  assert.strictEqual(y2.fundedFromCash, 0, 'Y2 cash empty');
+  assert.ok(Math.abs(y2.fundedFromStocks - 32400) < 0.01, `Y2 fundedFromStocks 32400; got ${y2.fundedFromStocks}`);
+
+  // End pools reflect the draws (0% growth): cash drained, brokerage 150000 − 59800 = 90200.
+  assert.ok(Math.abs(result.end.pCash - 0) < 0.01, `end.pCash drained to 0; got ${result.end.pCash}`);
+  assert.ok(Math.abs(result.end.pStocks - 90200) < 0.01, `end.pStocks 90200; got ${result.end.pStocks}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -1011,7 +1038,7 @@ test('v2-CF-03: pTrad pool-update reconciliation within $1', () => {
   const fireAge = 52; // 10 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  const realReturn401k = inp.return401k - inp.inflationRate; // 0.04
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate); // 033(US3): Fisher (~0.0388 at 7%/3%, was 0.04)
   const contribPerYear = inp.contrib401kTrad + inp.empMatch; // 15000
 
   // Closed-form: pTrad = P0 * r^n + C * (r^n - 1) / (r - 1)
@@ -1070,12 +1097,13 @@ test('v2-CF-04: override toggle ON — cash pool uses override value instead of 
       `v2-CF-04: override active — cashFlowToCash must be ${overrideValue}, got ${row.cashFlowToCash} at age ${row.age}`);
   }
 
-  // Cash pool after 2 years: 0 + 5000 at end of year 1, then grow 0.5% + 5000 again.
-  // Year 1: pCash = (0 * 1.005) + 5000 = 5000 … wait, order is: add cashFlow THEN grow.
-  // Per contract step 8 then 9: pCash += cashFlowToCash, then pCash *= 1.005.
-  // Year 1: pCash = (0 + 5000) * 1.005 = 5025
-  // Year 2: pCash = (5025 + 5000) * 1.005 = 10075.125
-  const expectedCash = ((0 + overrideValue) * 1.005 + overrideValue) * 1.005;
+  // Cash pool after 2 years — order per contract step 8 then 9:
+  // pCash += cashFlowToCash, then pCash *= CASH_G.
+  // 033(US1): CASH_G derives from CASH_REAL_RETURN (was hardcoded 1.005 →
+  // expected 10075.125; at the 0.0 default CASH_G = 1.0 → expected 10000).
+  // Year 1: pCash = (0 + 5000) * CASH_G
+  // Year 2: pCash = (year1 + 5000) * CASH_G
+  const expectedCash = ((0 + overrideValue) * CASH_G + overrideValue) * CASH_G;
   assert.ok(
     Math.abs(result.end.pCash - expectedCash) < 1,
     `v2-CF-04: end pCash expected ~${expectedCash.toFixed(2)}, got ${result.end.pCash.toFixed(2)}`
@@ -1823,10 +1851,11 @@ test('v4-FRAME-03: raiseRate > inflationRate → grossIncomeReal grows at delta'
   const fireAge = 47;  // 5 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  // Real wage growth = 0.05 − 0.03 = 0.02 (2%/yr).
-  // Year t real income = $100,000 × 1.02^t.
+  // 033(US3): real wage growth = realRate(0.05, 0.03) ≈ 1.94%/yr (Fisher,
+  // was the 2.00% subtraction shortcut).
+  const wage = 1 + realRate(0.05, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const expected = 100000 * Math.pow(1.02, t);
+    const expected = 100000 * Math.pow(wage, t);
     const actual = result.perYearRows[t].grossIncome;
     assert.ok(
       Math.abs(actual - expected) < 1,
@@ -1848,10 +1877,11 @@ test('v4-FRAME-04: raiseRate < inflationRate (real wage cut) → grossIncomeReal
   const fireAge = 47;  // 5 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  // Real wage growth = 0.02 − 0.03 = −0.01 (1%/yr decline).
-  // Year t real income = $100,000 × 0.99^t.
+  // 033(US3): real wage growth = realRate(0.02, 0.03) ≈ −0.97%/yr (Fisher,
+  // was the −1.00% subtraction shortcut).
+  const wage = 1 + realRate(0.02, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const expected = 100000 * Math.pow(0.99, t);
+    const expected = 100000 * Math.pow(wage, t);
     const actual = result.perYearRows[t].grossIncome;
     assert.ok(
       Math.abs(actual - expected) < 1,
@@ -1883,9 +1913,11 @@ test('v4-FRAME-05: backwards-compat with flat-rate override (taxRate > 0)', () =
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
   // Per-year: federalTax = (grossIncomeReal − pretax401k) × 0.22.
-  // grossIncomeReal = $150,000 × (1 + 0.05 − 0.03)^t = $150,000 × 1.02^t.
+  // 033(US3): grossIncomeReal = $150,000 × (1 + realRate(0.05, 0.03))^t
+  // (Fisher, was the 1.02 subtraction shortcut).
+  const wage = 1 + realRate(0.05, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const realGross = 150000 * Math.pow(1.02, t);
+    const realGross = 150000 * Math.pow(wage, t);
     const expectedFedTax = (realGross - 20000) * 0.22;
     const actual = result.perYearRows[t].federalTax;
     assert.ok(
@@ -2357,4 +2389,201 @@ test('T034: rothIraContribReal=7000 flows into accumulation (annuity-FV $96,715)
     result.end.pRothIra > 90000,
     `T034: end.pRothIra > 90000 confirms contribution applied; got ${result.end.pRothIra}`
   );
+});
+
+// =====================================================================
+// 033 US2 — shortfall funding ladder (T014 tests, T015 implementation)
+// =====================================================================
+// Spec:  specs/033-math-assumptions-cleanup/contracts/assumptions.contract.md
+//        §"Shortfall funding ladder" (NON-NEGOTIABLE ordering)
+//        specs/033-math-assumptions-cleanup/research.md §D3 (pseudocode), §D4
+//        specs/033-math-assumptions-cleanup/data-model.md §2 (v7 fields, I1–I6)
+//
+// Ladder (per accumulation year, override OFF, residual < 0):
+//   1. cut discretionary brokerage contribution (down to $0)
+//   2. draw from cash pool (down to $0)
+//   3. draw from brokerage pool (face value, no LTCG gross-up — D4)
+//   4. remainder → `unfunded`, row flagged NEGATIVE_RESIDUAL
+//   funded by rungs 1–3 → row flagged CONTRIBUTION_REDUCED (informational)
+//
+// New row fields (always present, numeric): stockContributionActual,
+// fundedFromCash, fundedFromStocks. `stockContribution` keeps its v2 PLANNED
+// meaning (sibling-field lesson). cashFlowToCash === 0 in any shortfall year.
+//
+// Test rig: single accumulation year (fireAge = currentAge + 1), inflationRate
+// = 0 and raiseRate = 0 so the pre-growth pool values equal the row snapshot,
+// flat taxRate (ficaTax = 0), no 401k employee deferral. Shortfalls are
+// engineered via low after-tax income + high annualSpend + stockContribution.
+// ---------------------------------------------------------------------------
+
+/** Shortfall-rig inp: one earner-ish, flat tax, no pretax 401k, no growth. */
+function ladderInp(overrides) {
+  return Object.assign({
+    ageRoger: 40,
+    roger401kTrad: 0,
+    roger401kRoth: 0,
+    rogerStocks: 0,
+    rebeccaStocks: 0,
+    cashSavings: 0,
+    otherAssets: 0,
+    returnRate: 0.07,
+    return401k: 0.07,
+    inflationRate: 0,          // no inflation → pre-growth pools == snapshot
+    raiseRate: 0,              // no wage growth → grossIncome == annualIncome
+    monthlySavings: 0,         // planned stockContribution set per-case
+    contrib401kTrad: 0,
+    contrib401kRoth: 0,
+    empMatch: 0,
+    endAge: 95,
+    taxTrad: 0.22,
+    stockGainPct: 0.6,
+    annualIncome: 100000,
+    taxRate: 0.25,             // flat → ficaTax 0, federalTax = (gross)*0.25
+    ssClaimAge: 67,
+  }, overrides || {});
+}
+
+// a. reduction-only: gap (10000) < planned stockContribution (24000)
+//    after-tax income 75000, spend 61000, planned 24000 → residual -10000
+test('033-LADDER-a: reduction-only — actual = planned − gap, no draws, CONTRIBUTION_REDUCED', () => {
+  const inp = ladderInp({ monthlySavings: 2000, annualSpend: 61000 });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  assert.strictEqual(row.stockContribution, 24000, 'planned contribution unchanged (v2 semantics)');
+  assert.ok(Math.abs(row.stockContributionActual - 14000) < 0.01,
+    `actual = 24000 − 10000 gap = 14000; got ${row.stockContributionActual}`);
+  assert.strictEqual(row.fundedFromCash, 0, 'no cash drawn');
+  assert.strictEqual(row.fundedFromStocks, 0, 'no stocks drawn');
+  assert.strictEqual(row.cashFlowWarning, 'CONTRIBUTION_REDUCED', 'reduction-only fully funds → CONTRIBUTION_REDUCED');
+  assert.strictEqual(row.cashFlowToCash, 0, 'shortfall year deposits $0 to cash');
+});
+
+// b. reduction + cash: gap (30000) > planned (24000) but < planned + pCash (44000)
+test('033-LADDER-b: reduction + cash — actual 0, fundedFromCash = remainder, pCash decreases', () => {
+  const inp = ladderInp({ monthlySavings: 2000, annualSpend: 81000, cashSavings: 20000 });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  assert.strictEqual(row.stockContribution, 24000, 'planned unchanged');
+  assert.strictEqual(row.stockContributionActual, 0, 'contribution cut to 0 first');
+  assert.ok(Math.abs(row.fundedFromCash - 6000) < 0.01,
+    `fundedFromCash = 30000 gap − 24000 planned = 6000; got ${row.fundedFromCash}`);
+  assert.strictEqual(row.fundedFromStocks, 0, 'cash covered remainder, no stock draw');
+  // pCash decreases by exactly fundedFromCash (before growth). CASH_G == 1 at 0.0 default.
+  assert.ok(Math.abs(row.pCash - (20000 - 6000)) < 0.01,
+    `pCash 20000 − 6000 = 14000 (pre-growth, CASH_G=${CASH_G}); got ${row.pCash}`);
+  assert.strictEqual(row.cashFlowWarning, 'CONTRIBUTION_REDUCED', 'fully funded by rungs 1–2');
+  assert.strictEqual(row.cashFlowToCash, 0);
+});
+
+// c. reduction + cash + stocks: gap (50000) exhausts cash → stock draw
+test('033-LADDER-c: reduction + cash + stocks — fundedFromStocks > 0, cash exhausted (I3)', () => {
+  const inp = ladderInp({ monthlySavings: 2000, annualSpend: 101000, cashSavings: 20000, rogerStocks: 150000 });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  // gap 50000: cut 24000 planned → need 26000; cash 20000 → need 6000; stocks 6000.
+  assert.strictEqual(row.stockContributionActual, 0, 'contribution cut to 0');
+  assert.ok(Math.abs(row.fundedFromCash - 20000) < 0.01,
+    `fundedFromCash = all 20000 cash; got ${row.fundedFromCash}`);
+  assert.ok(Math.abs(row.fundedFromStocks - 6000) < 0.01,
+    `fundedFromStocks = 26000 − 20000 = 6000; got ${row.fundedFromStocks}`);
+  // Invariant I3: fundedFromStocks > 0 ⇒ cash was fully drained (pCash_before all used).
+  assert.ok(row.fundedFromStocks > 0, 'precondition: stock draw happened');
+  assert.strictEqual(row.pCash, 0, 'I3: cash exhausted before any stock draw');
+  assert.strictEqual(row.cashFlowWarning, 'CONTRIBUTION_REDUCED', 'fully funded by rungs 1–3');
+  assert.strictEqual(row.cashFlowToCash, 0);
+});
+
+// d. unfunded remainder: gap exceeds planned + pCash + pStocks
+test('033-LADDER-d: unfunded remainder — NEGATIVE_RESIDUAL, pools floor at 0 not negative', () => {
+  const inp = ladderInp({ monthlySavings: 2000, annualSpend: 101000, cashSavings: 5000, rogerStocks: 10000 });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  // gap 50000: cut 24000 → need 26000; cash 5000 → need 21000; stocks 10000 → unfunded 11000.
+  assert.strictEqual(row.stockContributionActual, 0);
+  assert.ok(Math.abs(row.fundedFromCash - 5000) < 0.01, `all 5000 cash; got ${row.fundedFromCash}`);
+  assert.ok(Math.abs(row.fundedFromStocks - 10000) < 0.01, `all 10000 stocks; got ${row.fundedFromStocks}`);
+  assert.strictEqual(row.cashFlowWarning, 'NEGATIVE_RESIDUAL', 'remainder unfunded → genuine infeasibility');
+  // Unfunded NOT silently absorbed: pools end at exactly 0, never negative.
+  assert.strictEqual(row.pCash, 0, 'cash floors at 0');
+  assert.strictEqual(row.pStocks, 0, 'stocks floor at 0 (not −11000)');
+  assert.strictEqual(row.cashFlowToCash, 0);
+});
+
+// e. override ON bypass: ladder MUST NOT activate even with negative computed residual
+test('033-LADDER-e: override ON — ladder bypassed, cashFlowToCash = override, no draws', () => {
+  const inp = ladderInp({
+    monthlySavings: 2000, annualSpend: 101000, cashSavings: 20000, rogerStocks: 150000,
+    pviCashflowOverrideEnabled: true, pviCashflowOverride: -1234,
+  });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  assert.strictEqual(row.cashFlowToCash, -1234, 'override value used verbatim');
+  assert.strictEqual(row.stockContributionActual, row.stockContribution, 'actual === planned (ladder inert)');
+  assert.strictEqual(row.fundedFromCash, 0, 'no cash draw under override');
+  assert.strictEqual(row.fundedFromStocks, 0, 'no stock draw under override');
+  assert.notStrictEqual(row.cashFlowWarning, 'CONTRIBUTION_REDUCED', 'no ladder flag under override');
+  assert.notStrictEqual(row.cashFlowWarning, 'NEGATIVE_RESIDUAL', 'no ladder flag under override');
+  // pools untouched by a ladder (only override deposit + growth apply).
+  assert.ok(row.pStocks >= 150000 - 0.01, `stocks not drained by ladder; got ${row.pStocks}`);
+});
+
+// f. surplus year unchanged: positive residual → v6-identical behavior
+test('033-LADDER-f: surplus year — actual === planned, draws 0, no warning', () => {
+  const inp = ladderInp({ monthlySavings: 1000, annualSpend: 30000, cashSavings: 20000, rogerStocks: 100000 });
+  const result = accumulateToFire(inp, 41, baseOptions());
+  const row = result.perYearRows[0];
+
+  // after-tax 75000 − spend 30000 − planned 12000 = +33000 surplus.
+  assert.strictEqual(row.stockContribution, 12000, 'planned');
+  assert.strictEqual(row.stockContributionActual, 12000, 'surplus: actual === planned');
+  assert.strictEqual(row.fundedFromCash, 0, 'surplus: no cash draw');
+  assert.strictEqual(row.fundedFromStocks, 0, 'surplus: no stock draw');
+  assert.ok(row.cashFlowWarning === undefined, 'surplus: no warning');
+  assert.ok(Math.abs(row.cashFlowToCash - 33000) < 0.01,
+    `cashFlowToCash = residual = 33000; got ${row.cashFlowToCash}`);
+  // I5: new fields present but byte-identical economic effect to pre-033.
+  assert.ok(typeof row.stockContributionActual === 'number' && typeof row.fundedFromCash === 'number'
+    && typeof row.fundedFromStocks === 'number', 'I5: v7 fields always present and numeric');
+});
+
+// g. per-year conservation identity I6, EVERY row of a mixed multi-year scenario.
+//    LHS = gross − fedTax − fica − spend − pretax401k − actual − cashToCash
+//          + fundedFromCash + fundedFromStocks   must === unfunded (0 unless NEGATIVE_RESIDUAL)
+test('033-LADDER-g: conservation identity I6 holds for every row (mixed scenario)', () => {
+  // 5-year run that starts in surplus then slides into shortfall as cash/stocks deplete.
+  const inp = ladderInp({
+    monthlySavings: 1500,        // planned 18000/yr
+    annualSpend: 88000,          // after-tax 75000 → residual −31000/yr (shortfall every year)
+    cashSavings: 30000,
+    rogerStocks: 120000,
+  });
+  const result = accumulateToFire(inp, 45, baseOptions()); // 5 years
+
+  assert.strictEqual(result.perYearRows.length, 5, 'five rows');
+  for (const row of result.perYearRows) {
+    const lhs = row.grossIncome - row.federalTax - row.ficaTax - row.annualSpending
+      - row.pretax401kEmployee - row.stockContributionActual - row.cashFlowToCash
+      + row.fundedFromCash + row.fundedFromStocks;
+    const expectedUnfunded = (row.cashFlowWarning === 'NEGATIVE_RESIDUAL')
+      ? lhs               // genuine infeasibility — LHS is the unfunded remainder (> 0)
+      : 0;                // funded years conserve exactly
+    if (row.cashFlowWarning !== 'NEGATIVE_RESIDUAL') {
+      assert.ok(Math.abs(lhs - 0) < 0.01,
+        `I6 funded row @age ${row.age}: LHS must be ~0; got ${lhs} (warning=${row.cashFlowWarning})`);
+    } else {
+      assert.ok(lhs > 0.005,
+        `I6 NEGATIVE_RESIDUAL row @age ${row.age}: unfunded remainder must be > 0; got ${lhs}`);
+    }
+    // sibling invariants
+    assert.ok(row.stockContributionActual >= 0 && row.stockContributionActual <= row.stockContribution,
+      `I1 @age ${row.age}: 0 ≤ actual ≤ planned`);
+    if (row.fundedFromStocks > 0) {
+      assert.strictEqual(row.pCash, 0, `I3 @age ${row.age}: cash exhausted before stock draw`);
+    }
+  }
 });

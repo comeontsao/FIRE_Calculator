@@ -641,3 +641,15 @@ Investigated in feature 021 US7 (`commit 09c547d`). Three cross-cutting risks su
 ### B-031-3. Audit chart-sim omits mortgage strategy (signed-vs-chart end-balance threading)
 
 **Surfaced during feature 031 follow-up diagnosis, 2026-05-27.** `calc/calcAudit.js` builds its canonical `ctx.chart` via `getActiveChartStrategyOptions()` (~:1054), which threads strategy+θ but NOT `mortgageStrategyOverride`. So under `invest-lump-sum`, the audit's chart-sim runs `invest-keep-paying` and can drift from the *displayed* lifecycle chart. Separately, the residual signed-vs-clamp end-balance dollar difference (signed sim allows negative pools for Feature-015 insolvency detection; chart clamps to ≥0) is by-design and now correctly NOT flagged by `_invariantA` (031 follow-up made the invariant apples-to-apples). Fully eliminating the dollar drift would require clamping the signed sim — which destroys insolvency detection and flips verdicts — so it's deliberately deferred. A proper fix = thread `getActiveMortgageStrategyOptions()` into the audit's chartOpts; relates to the feature-018 mortgage-threading lesson. Also note `tests/meta/frame-coverage.test.js` sits at 90.28% (pre-existing, not in the `test:unit` gate).
+
+### B-033-1. LTCG gross-up on the funding ladder's brokerage rung
+
+**Deferred from feature 033 (research D4), 2026-06-06.** The accumulation shortfall funding ladder's third rung (`fundedFromStocks`) draws at face value — a real-world sale would incur LTCG, so the true brokerage drop is `draw × (1 + ltcgRate × stockGainPct)` (the feature-018 LumpSumEvent v3 `actualDrawdown` precedent). Deferred because the rung only activates after the contribution is cut to $0 AND cash is exhausted (near-infeasible regime), and a gross-up needs a second tax pass through the conservation identity (I6). Revisit if any persona shows material `fundedFromStocks`.
+
+### B-033-2. User-facing cashRealReturn input
+
+**Deferred from feature 033 (spec Assumptions), 2026-06-06.** `CASH_REAL_RETURN` ships as an internal constant (0.0). The originating review proposed a slider (−2%…+1%) for stress-testing cash purchasing-power loss. Couples with X1's stress-mode cash series. One defining location exists now, so exposure is a small UI feature: input + localStorage key + i18n pair + threading into `calc/assumptions.js` consumption (would change the constant into a resolved input — touch the static guard accordingly).
+
+### B-033-3. Signed-endBalance check for Safe/Exact gates (clamp-masking class)
+
+**Surfaced during feature 033 US2, 2026-06-06.** The DWZ gate gained `sim.endBalance >= 0` (signed) because the clamped chart total can never go negative — a signed −$139K depletion hid behind a floor-passing clamped trajectory (feature-015 signed-debt class). The SAME masking is theoretically possible for Safe/Exact floor checks (deep per-pool negatives offset by surviving locked pools), but no symptom has been observed and adding the check could flip borderline verdicts — needs its own persona sweep before landing.
