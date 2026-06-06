@@ -135,6 +135,10 @@ async function captureSnapshot(page: Page, ageOffset: number) {
 
 for (const file of ['FIRE-Dashboard.html', 'FIRE-Dashboard-Generic.html']) {
   test(`brokerage growth diverges across strategies — ${file}`, async ({ page }) => {
+    // 21-31s (Generic exceeds the 30s budget even standalone — observed
+    // 2026-06-06). slow() triples the timeout; same flake class as the
+    // feature-018 matrix sweeps.
+    test.slow();
     await setupDashboard(page, file);
     await setMonthlySavings(page, 2000);  // $2000/mo into the linked sliders.
 
