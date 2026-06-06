@@ -9244,6 +9244,57 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   let saleAdded = false;
   let relocDeducted = false;
 
+  // B-031-3 fix (2026-06-06, feature 033 follow-up) — strategy-aware home-sale
+  // seed for the SIGNED sim. Mirrors projectFullLifecycle's T033/LH-Inv-3
+  // handoff: when sellAtFire is ON and the PvI calc module is loaded, the
+  // retirement-phase brokerage MUST be seeded from
+  // postSaleBrokerageAtFire[strategy] (tax-aware, Section-121-aware,
+  // per-strategy) instead of the legacy strategy-unaware mtgAdj.saleProceeds
+  // add. Without this the signed sim diverged from the chart by the difference
+  // between the two sale models — observed as audit invariant A's
+  // endBalance-mismatch (7.6% / ~$28K) under invest-lump-sum + sellAtFire.
+  // Strategy resolution mirrors the chart: options override first, then the
+  // shared helper (feature-018 mortgage-threading lesson).
+  const _sgMortgageStrategy = (options && typeof options.mortgageStrategyOverride === 'string')
+    ? options.mortgageStrategyOverride
+    : ((typeof getActiveMortgageStrategyOptions === 'function')
+        ? getActiveMortgageStrategyOptions().mortgageStrategyOverride
+        : 'invest-keep-paying');
+  let _sgHomeSaleEvent = null;
+  let _sgPostSaleAtFire = null;
+  let _sgSaleSeeded = false;
+  const _sgSellAtFireOn = !!(mortgageEnabled && mtg && mtg.sellAtFire === true);
+  if (mortgageEnabled && mtg
+      && (_sgMortgageStrategy !== 'invest-keep-paying' || _sgSellAtFireOn)
+      && typeof computePayoffVsInvest === 'function'
+      && typeof document !== 'undefined' && document) {
+    try {
+      const _sgExtraEl = document.getElementById('pviExtraMonthly');
+      const _sgExtra = _sgExtraEl ? (parseFloat(_sgExtraEl.value) || 0) : 0;
+      const _sgOut = computePayoffVsInvest({
+        currentAge: inp.ageRoger,
+        fireAge: fireAge,
+        endAge: inp.endAge || 99,
+        mortgageEnabled: true,
+        mortgage: mtg,
+        sellAtFire: _sgSellAtFireOn,
+        mfjStatus: 'mfj', // RR dashboard default per FR-016
+        stocksReturn: inp.returnRate,
+        inflation: inp.inflationRate,
+        ltcgRate: inp.taxTrad ? Math.min(0.20, inp.taxTrad) : 0.15,
+        stockGainPct: typeof inp.stockGainPct === 'number' ? inp.stockGainPct : 0.6,
+        extraMonthly: _sgExtra,
+        framing: 'liquidNetWorth',
+        mortgageStrategy: _sgMortgageStrategy,
+        lumpSumPayoff: (_sgMortgageStrategy === 'invest-lump-sum'),
+      });
+      if (_sgOut && !_sgOut.disabledReason) {
+        _sgHomeSaleEvent = _sgOut.homeSaleEvent || null;
+        _sgPostSaleAtFire = _sgOut.postSaleBrokerageAtFire || null;
+      }
+    } catch (_e) { /* swallow — legacy mtgAdj.saleProceeds path remains the fallback */ }
+  }
+
   // Phase-transition balance snapshots (effective-spendable terms).
   // Captured at the START of the first Phase-2 / Phase-3 year.
   let balanceAtUnlock = null;
@@ -9361,8 +9412,35 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       if (balanceAtSS === null && ssActive) balanceAtSS = effBal();
     }
 
+    // B-031-3 fix — strategy-aware sale seed (mirrors projectFullLifecycle's
+    // T033 block verbatim; see prefetch above). The legacy add below remains
+    // the fallback for non-mortgage sales / unconfigured calc modules.
+    if (isRetired && !_sgSaleSeeded && _sgHomeSaleEvent && _sgPostSaleAtFire
+        && _sgSellAtFireOn && age === _sgHomeSaleEvent.age) {
+      const _sgStrategyKey = (_sgMortgageStrategy === 'prepay-extra') ? 'prepay' : 'invest';
+      const _sgSeed = _sgPostSaleAtFire[_sgStrategyKey];
+      if (Number.isFinite(_sgSeed)) {
+        pStocks = Math.max(0, _sgSeed);
+        _sgSaleSeeded = true;
+        saleAdded = true; // suppress the legacy mtgAdj.saleProceeds add below
+      }
+    }
     if (isRetired && !saleAdded && mtgAdj.saleProceeds > 0) { pStocks += mtgAdj.saleProceeds; saleAdded = true; }
-    if (isRetired && !relocDeducted && relocationCost > 0) { pStocks -= relocationCost; relocDeducted = true; }
+    // B-031-3 fix (part 2, 2026-06-06) — relocation deduction MUST mirror the
+    // chart's CASH-FIRST pattern (projectFullLifecycle deducts from cash down
+    // to $0, then stocks — the feature-020 C3 safe-deduction pattern). The
+    // signed sim previously took the whole cost from stocks, so under any
+    // geo-arbitrage scenario with a relocation cost the two sims' pools
+    // diverged from the first retirement year and compounded apart for the
+    // whole horizon (taiwan: $10K reloc × ~50yr → the dominant share of the
+    // invariant-A endBalance-mismatch). Signed semantics preserved: the
+    // stocks remainder is NOT clamped (feature-015 signed-debt invariant).
+    if (isRetired && !relocDeducted && relocationCost > 0) {
+      const _relocFromCash = Math.min(Math.max(0, pCash), relocationCost);
+      pCash -= _relocFromCash;
+      pStocks -= (relocationCost - _relocFromCash);
+      relocDeducted = true;
+    }
     // Second home sale at FIRE
     if (secondHomeEnabled && h2 && isRetired && !h2SaleAdded && h2.destiny === 'sell') {
       pStocks += getSecondHomeSaleAtFire(h2, yrsToFire);
@@ -9530,6 +9608,25 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
             pCash, pStocks, swept: _f031_swept_,
           });
         }
+      }
+      // B-031-3 debug surface — per-year per-pool trajectory (post-flows,
+      // post-growth, post-sweep). Opt-in via options._trajectory: []. Lets
+      // the audit / diagnostics diff the signed sim against the chart rows
+      // pool-by-pool to pinpoint the first divergence age (cashSweepTraces
+      // precedent; zero cost when the option is absent).
+      if (options && Array.isArray(options._trajectory)) {
+        options._trajectory.push({
+          age,
+          pTrad: Math.round(pTrad), pRoth: Math.round(pRoth),
+          pRothIra: Math.round(pRothIra), pStocks: Math.round(pStocks),
+          pCash: Math.round(pCash),
+          wTrad: Math.round(mix.wTrad || 0), wRoth: Math.round(mix.wRoth || 0),
+          wRothIra: Math.round(mix.wRothIra || 0), wStocks: Math.round(mix.wStocks || 0),
+          wCash: Math.round(mix.wCash || 0),
+          shortfall: Math.round(mix.shortfall || 0),
+          synth: Math.round(mix.syntheticConversion || 0),
+          ssThisYear: Math.round(ssThisYear), grossSpend: Math.round(grossSpend),
+        });
       }
     }
   }

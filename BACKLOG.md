@@ -638,9 +638,20 @@ Investigated in feature 021 US7 (`commit 09c547d`). Three cross-cutting risks su
 
 **Surfaced during feature 031 (US3), 2026-05-27.** US3 made the feasibility *flag* (KPI cards + deficit banner) winner-aware, and the feature-028 stop-gap flips the pill on-track→behind when the winner fails. But the pill's displayed FIRE-age number stays bracket-fill (intentionally — making it winner-based would reintroduce the circularity US3 avoided). If a future feature wants the pill *text/class* fully winner-derived, it needs a deliberate design that avoids the age-search circularity. Confirm current behavior in the T030 browser smoke.
 
-### B-031-3. Audit chart-sim omits mortgage strategy (signed-vs-chart end-balance threading)
+### B-031-3. ✅ RESOLVED 2026-06-06 — signed-vs-chart end-balance drift (was: "audit chart-sim omits mortgage strategy")
 
-**Surfaced during feature 031 follow-up diagnosis, 2026-05-27.** `calc/calcAudit.js` builds its canonical `ctx.chart` via `getActiveChartStrategyOptions()` (~:1054), which threads strategy+θ but NOT `mortgageStrategyOverride`. So under `invest-lump-sum`, the audit's chart-sim runs `invest-keep-paying` and can drift from the *displayed* lifecycle chart. Separately, the residual signed-vs-clamp end-balance dollar difference (signed sim allows negative pools for Feature-015 insolvency detection; chart clamps to ≥0) is by-design and now correctly NOT flagged by `_invariantA` (031 follow-up made the invariant apples-to-apples). Fully eliminating the dollar drift would require clamping the signed sim — which destroys insolvency detection and flips verdicts — so it's deliberately deferred. A proper fix = thread `getActiveMortgageStrategyOptions()` into the audit's chartOpts; relates to the feature-018 mortgage-threading lesson. Also note `tests/meta/frame-coverage.test.js` sits at 90.28% (pre-existing, not in the `test:unit` gate).
+**Original (2026-05-27):** `calc/calcAudit.js` threads strategy+θ but not `mortgageStrategyOverride` into its sims; under `invest-lump-sum` the audit could drift from the displayed chart. Also noted `tests/meta/frame-coverage.test.js` sits at 90.28% (still true, still not in the `test:unit` gate).
+
+**Resolution (post-feature-033, prompted by a live non-expected `endBalance-mismatch` on the user's real config — 7.6%/$28K under invest-lump-sum + sellAtFire, exact mode):** a new per-pool `_trajectory` debug hook on `signedLifecycleEndBalance` (cashSweepTraces precedent) pinpointed TWO genuine signed-vs-chart structural gaps, both fixed in lockstep in both HTML files:
+
+1. **Relocation deduction asymmetry (the dominant share).** The chart deducts geo-arbitrage relocation cost CASH-FIRST then stocks (feature-020 C3 safe-deduction pattern); the signed sim took the whole cost from stocks. Under any scenario with a relocation cost (e.g., taiwan $10K) the two sims' cash/stocks pools diverged from the first retirement year and compounded apart across the whole horizon — cash-sweep ON partially masked it (5.4%); sweep OFF showed it raw (15.8%). The signed sim now mirrors cash-first while preserving its unclamped signed-debt semantics.
+2. **Strategy-aware home-sale seed missing from the signed sim.** Under sellAtFire the chart seeds retirement brokerage from `postSaleBrokerageAtFire[strategy]` (T033/LH-Inv-3); the signed sim used the legacy strategy-unaware `mtgAdj.saleProceeds` add. The signed sim now runs the same PvI prefetch + seed (guarded; legacy path remains the sandbox/non-mortgage fallback).
+
+Verified: the user's exact config is CLEAN across all sweep variants (sellAtFire on/off, invest-keep-paying, no second home, no college, sweep off); 697/697 unit; cold-load probes clean in all three FIRE modes.
+
+### B-031-3b. Signed sim lacks retirement-phase lump-sum drain + strategy P&I swap
+
+**Narrowed from B-031-3, 2026-06-06.** `projectFullLifecycle`'s retirement loop has three feature-018 mechanisms `signedLifecycleEndBalance` still lacks: (a) the cash-first lump-sum mortgage payoff drain at `lumpSumEvent.age` (fires only when the event lands at/after FIRE with sellAtFire OFF), (b) the `_pviAmort` strategy-aware per-year P&I lookup, (c) the `_mortgageRetiredBySale` mtgAdjust suppression. Common configs (sellAtFire ON, or lump-sum firing during accumulation via accumulateToFire) are now parity-clean; a retirement-age lump-sum under keep-the-home can still drift. Diagnose with `options._trajectory` on `signedLifecycleEndBalance` (per-pool per-age diff vs chart rows).
 
 ### B-033-1. LTCG gross-up on the funding ladder's brokerage rung
 
