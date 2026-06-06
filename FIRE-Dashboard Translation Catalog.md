@@ -1135,6 +1135,13 @@ New keys introduced by `specs/014-calc-audit/`. Per Constitution Principle VII (
 | `audit.section.lifecycle.title` | Lifecycle Projection | 生命週期預測 |
 | `audit.section.crossval.title` | Cross-Validation | 交叉驗證 |
 
+### Funding-ladder flag + tooltip (2) — feature 033
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `audit.flag.contributionReduced` | Contribution reduced to fund spending | 為支應開銷而調降投資供款 |
+| `audit.tip.fundingLadder` | This year's income couldn't cover spending plus planned contributions. The plan cuts the brokerage contribution first, then draws from cash. | 該年度收入不足以支應開銷與預定供款。計畫會先調降證券投資供款,再動用現金。 |
+
 ### Flow-diagram stage labels (6)
 
 | Key | EN | zh-TW |

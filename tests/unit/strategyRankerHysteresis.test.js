@@ -365,6 +365,16 @@ test('ranker-quantize-03: fractional-month input preserved (fireAge=55.5)', () =
   const inp = Object.assign({}, baselineInp, {
     agePerson1: 42.0, agePerson2: 42.0,
     ageRoger:   42.0, ageRebecca: 42.0,
+    // 033(US2) delta: at the persona's default $130K income, a FORCED
+    // fireAge=55 plan is genuinely infeasible under the honest funding
+    // ladder — every strategy's end balance collapses to $0 for BOTH 55.0
+    // and 55.5 (pre-033, the silent NEGATIVE_RESIDUAL floor faked viability
+    // and the half-year diff leaked through the untouched cash residual).
+    // Raise income so the plan is funded and the fractional-month component
+    // has a real trajectory to differentiate. (Verified empirically:
+    // $130K → all $0/$0 identical; $200K → e.g. trad-first 629,475 vs
+    // 765,350.)
+    annualIncome: 200000,
   });
 
   const rowsInt  = _rankRowsById(api, inp, 55.0);

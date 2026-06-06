@@ -64,8 +64,19 @@ Append-only extension of the feature-021 v3 block:
 
 ## 4. Audit flow-diagram observability (Principle II.4)
 
-The Accumulation stage's `subSteps` array gains one entry:
-`"shortfall funding ladder (cut stock contribution → draw cash → draw brokerage)"`.
+The `lifecycle` stage's `subSteps` array gains one entry:
+`"Accumulation shortfall funding ladder (cut stock contribution → draw cash → draw brokerage)"`.
+
+*(Implementation note 2026-06-06: the flow diagram has no standalone
+"Accumulation" stage — accumulation runs inside `projectFullLifecycle`, which
+is the `lifecycle` stage. The entry landed there.)*
+
+**Row-shape propagation (implementation finding)**: `projectFullLifecycle`'s
+accumulation loop COPIES selected fields from `accumulateToFire`'s rows into
+its own row objects (RR ~10730 / Generic ~10996). The v7 sibling fields MUST be
+copied through at that site — without it the audit rows carry the keys as
+`undefined` and the conservation identity silently degrades to planned-value
+math (caught by the live-browser I6 probe during US2 verification).
 
 ## 5. User-visible strings (Principle VII)
 

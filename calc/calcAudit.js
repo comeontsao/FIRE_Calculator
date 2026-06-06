@@ -583,6 +583,11 @@ function _buildLifecycleProjection(chart, fireAge) {
     pretax401kEmployee: Number.isFinite(r.pretax401kEmployee) ? _round(r.pretax401kEmployee) : undefined,
     empMatchToTrad: Number.isFinite(r.empMatchToTrad) ? _round(r.empMatchToTrad) : undefined,
     stockContribution: Number.isFinite(r.stockContribution) ? _round(r.stockContribution) : undefined,
+    // Feature 033 (T016b) — v7 funding-ladder sibling fields. Same
+    // Number.isFinite/_round pattern; absent on surplus/retirement rows.
+    stockContributionActual: Number.isFinite(r.stockContributionActual) ? _round(r.stockContributionActual) : undefined,
+    fundedFromCash: Number.isFinite(r.fundedFromCash) ? _round(r.fundedFromCash) : undefined,
+    fundedFromStocks: Number.isFinite(r.fundedFromStocks) ? _round(r.fundedFromStocks) : undefined,
     cashFlowToCash: Number.isFinite(r.cashFlowToCash) ? _round(r.cashFlowToCash) : undefined,
     cashFlowWarning: r.cashFlowWarning || undefined,
   }));
@@ -694,6 +699,8 @@ function _buildFlowDiagram(options, ctx) {
         subSteps: [
           'Call projectFullLifecycle(inp, spend, fireAge, true, options)',
           'Thread winner strategy + chosenTheta through options',
+          // Feature 033 (T017c) — accumulation-phase shortfall funding ladder (Principle II.4).
+          'Accumulation shortfall funding ladder (cut stock contribution → draw cash → draw brokerage)',
           'Per-year retirement loop calls taxOptimizedWithdrawal:',
           '  Step 1 — RMD floor (age 73+)',
           '  Step 2 — Bracket-fill smoothing (pTrad / yearsRemaining cap)',

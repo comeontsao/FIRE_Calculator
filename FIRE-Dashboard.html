@@ -6438,6 +6438,9 @@ const TRANSLATIONS = {
     'audit.cashflow.phase.phase1':              'Retired (pre-401K)',
     'audit.cashflow.phase.phase2':              'Retired (401K open)',
     'audit.cashflow.phase.phase3':              'Retired (with SS)',
+    // Feature 033 (T018) — funding-ladder informational flag + tooltip.
+    'audit.flag.contributionReduced':           'Contribution reduced to fund spending',
+    'audit.tip.fundingLadder':                  "This year's income couldn't cover spending plus planned contributions. The plan cuts the brokerage contribution first, then draws from cash.",
     'audit.section.crossval.title':             'Cross-Validation',
     'audit.flow.stage.inputs':                  'Inputs',
     'audit.flow.stage.spending':                'Spending Adjustments',
@@ -7537,6 +7540,9 @@ const TRANSLATIONS = {
     'audit.cashflow.phase.phase1':              '退休（401K 未解鎖）',
     'audit.cashflow.phase.phase2':              '退休（401K 已解鎖）',
     'audit.cashflow.phase.phase3':              '退休（有社安福利）',
+    // Feature 033 (T018) — funding-ladder informational flag + tooltip.
+    'audit.flag.contributionReduced':           '為支應開銷而調降投資供款',
+    'audit.tip.fundingLadder':                  '該年度收入不足以支應開銷與預定供款。計畫會先調降證券投資供款,再動用現金。',
     'audit.section.crossval.title':             '交叉驗證',
     'audit.flow.stage.inputs':                  '輸入',
     'audit.flow.stage.spending':                '支出調整',
@@ -9117,7 +9123,14 @@ function projectGrowth(inp, years) {
 //   DieWithZero: end balance ≥ 0 (targets exactly $0 at plan age)
 function yearsToFIRE(inp, annualSpend) {
   const r = findFireAgeNumerical(inp, annualSpend, fireMode);
-  return r.years;
+  // 033(US2) — round UP to the next integer year when the month-precise DWZ
+  // result carries months. `r.years` alone FLOORS the interpolated result
+  // (6y3m → 6 → FIRE age 49), but every integer-age consumer (chart render,
+  // gates, audit invariant A) then evaluates an age the gate itself calls
+  // infeasible — the documented intent ("chart rounds UP to an integer year
+  // so it stays feasible", recalcAll DWZ display block) was never applied
+  // here. Non-DWZ modes always return months=0, so this is a DWZ-only change.
+  return r.months > 0 ? r.years + 1 : r.years;
 }
 
 // ==================== DWZ NUMERICAL SOLVER (MONTH-PRECISE) ====================
@@ -9665,6 +9678,14 @@ function isFireAgeFeasible(sim, inp, annualSpend, mode, fireAge) {
         const last = chart[chart.length - 1];
         const endBal = last ? last.total : 0;
         if (endBal < 0) return false;
+        // 033(US2) — the clamped chart total can NEVER go negative (pools are
+        // clamped to ≥ 0 before compounding), so the `endBal < 0` check above
+        // is vacuous on its own: a signed −$139K depletion can hide behind a
+        // floor-passing clamped trajectory (pStocks deeply negative offset by
+        // surviving Trad — the feature-015 signed-debt class). The SIGNED sim
+        // is the authoritative depletion detector (CLAUDE.md gates contract);
+        // DWZ requires the genuine end balance ≥ 0.
+        if (sim && typeof sim.endBalance === 'number' && sim.endBalance < 0) return false;
         const unlockAge = 59.5;
         for (let i = 0; i < chart.length; i++) {
           const row = chart[i];
@@ -9856,14 +9877,33 @@ function findFireAgeNumerical(inp, annualSpend, mode) {
         const span = sim.endBalance - prevSim.endBalance; // > 0 (monotonic)
         const f = span > 0 ? Math.max(0, Math.min(1, -prevSim.endBalance / span)) : 0;
         const totalMonths = Math.max(0, Math.min(maxYrs * 12, Math.ceil((y - 1) * 12 + f * 12)));
-        return {
-          totalMonths,
-          years: Math.floor(totalMonths / 12),
-          months: totalMonths % 12,
-          endBalance: sim.endBalance,
-          sim,
-          feasible: true
-        };
+        // 033(US2) fix — verify the interpolated FRACTIONAL age passes the
+        // FULL gate (floor + hasShortfall + endBalance), not just the
+        // endBalance crossover. The previous guard assumed `prevSim.endBalance
+        // < 0` meant the boundary was endBalance-driven ALONE, but a year can
+        // fail BOTH endBalance and the trajectory floor; interpolating then
+        // displayed a FIRE age that every integer-age consumer (audit gates,
+        // cross-validation invariant A) evaluated as infeasible — surfaced as
+        // a genuine endBalance-mismatch warning under active DWZ once the
+        // honest funding ladder lowered the accumulation trajectory.
+        let _fracFeasible = false;
+        try {
+          const _fracAge = ageRoger + totalMonths / 12;
+          const _fracSim = signedLifecycleEndBalance(inp, annualSpend, _fracAge);
+          _fracFeasible = isFireAgeFeasible(_fracSim, inp, annualSpend, mode, _fracAge);
+        } catch (_e) { _fracFeasible = false; }
+        if (_fracFeasible) {
+          return {
+            totalMonths,
+            years: Math.floor(totalMonths / 12),
+            months: totalMonths % 12,
+            endBalance: sim.endBalance,
+            sim,
+            feasible: true
+          };
+        }
+        // Interpolated point fails the full gate → fall through to the
+        // integer-year return (the first age the gate actually accepts).
       }
       return {
         totalMonths: y * 12,
@@ -10724,6 +10764,12 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
         stockContribution: _ay.stockContribution,
         cashFlowToCash: _ay.cashFlowToCash,
         cashFlowWarning: _ay.cashFlowWarning,
+        // v7 funding-ladder fields (feature 033, US2 — honest shortfall funding).
+        // MUST be copied through: the audit's lifecycleProjection rows and the
+        // conservation identity (data-model I6) read them off THIS row shape.
+        stockContributionActual: _ay.stockContributionActual,
+        fundedFromCash: _ay.fundedFromCash,
+        fundedFromStocks: _ay.fundedFromStocks,
         // v3 cash-flow fields (feature 021, US3 — progressive brackets + FICA)
         ficaTax: _ay.ficaTax,
         federalTaxBreakdown: _ay.federalTaxBreakdown,
@@ -16553,6 +16599,10 @@ function _cashflowUpdateWarning() {
       ? resolveAccumulationOptions(inp, fireAge, 'invest-keep-paying')
       : {};
     const result = accumulateToFire(inp, fireAge, _accumOpts);
+    // Feature 033 (T017b) — semantics narrowed: with the funding ladder,
+    // NEGATIVE_RESIDUAL now means a *genuinely unfunded* remainder (ladder
+    // exhausted); CONTRIBUTION_REDUCED years are funded and intentionally NOT
+    // surfaced by this callout. Key on NEGATIVE_RESIDUAL only.
     const hasWarning = !!(result && result.perYearRows
       && result.perYearRows.some(r => r && r.cashFlowWarning === 'NEGATIVE_RESIDUAL'));
     wrap.hidden = !hasWarning;
@@ -19365,9 +19415,15 @@ window._rebindStickyHeaderObserver();
       const cashDelta = isAccum
         ? (Number.isFinite(r.cashFlowToCash) ? r.cashFlowToCash : 0)
         : ((ssIncome + withdraw) - spent);
+      // Feature 033 (T017a) — CONTRIBUTION_REDUCED is informational (the funding
+      // ladder covered the year), so it renders a distinct ℹ️ marker with the
+      // contributionReduced tooltip — not the ⚠️ used for genuine shortfalls.
       const warnTd = (r.cashFlowWarning === 'NEGATIVE_RESIDUAL')
         ? ' ⚠️'
-        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️' : '';
+        : (r.cashFlowWarning === 'MISSING_SPEND') ? ' ⚠️'
+        : (r.cashFlowWarning === 'CONTRIBUTION_REDUCED')
+          ? ' <span title="' + _esc(t0('audit.flag.contributionReduced', 'Contribution reduced to fund spending')) + '">ℹ️</span>'
+          : '';
       // Feature 023 follow-up — convert all $ values to Book Value at age
       // for chart-frame consistency.
       return '<tr' + cls + '>'
@@ -20506,6 +20562,11 @@ function copyDebugInfo() {
     const _accumRows = lc.filter(d => d.phase === 'accumulation');
     let _totalCashFlow = 0;
     let _grossSum = 0, _taxSum = 0, _ficaSum = 0, _spendSum = 0, _contribSum = 0, _stockSum = 0, _cashSum = 0;
+    // Feature 033 (T016a): conservation block v4. _stockSum now sums the ACTUAL
+    // contribution (after any shortfall-ladder reduction), falling back to the
+    // planned value for stale/v6 rows. _stockPlannedSum keeps the planned total,
+    // and the two ladder-draw totals let the residual reduce to unfundedSum.
+    let _stockPlannedSum = 0, _fundedFromCashSum = 0, _fundedFromStocksSum = 0;
     for (const _r of _accumRows) {
       const _cf = _r.cashFlowToCash || 0;
       _totalCashFlow += _cf;
@@ -20514,9 +20575,16 @@ function copyDebugInfo() {
       _ficaSum += (_r.ficaTax || 0);
       _spendSum += (_r.annualSpending || 0);
       _contribSum += (_r.pretax401kEmployee || 0);
-      _stockSum += (_r.stockContribution || 0);
+      // v7: actual contribution after ladder; defensive fallback to planned.
+      _stockSum += (_r.stockContributionActual != null ? _r.stockContributionActual : (_r.stockContribution || 0));
+      _stockPlannedSum += (_r.stockContribution || 0);
+      _fundedFromCashSum += (_r.fundedFromCash || 0);
+      _fundedFromStocksSum += (_r.fundedFromStocks || 0);
       _cashSum += _cf;
     }
+    // v4 residual: gross − tax − fica − spend − contrib − stockActual − cash
+    //              + fundedFromCash + fundedFromStocks  ⇒  unfundedSum (≈$0 feasible).
+    const _unfundedSum = _grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum + _fundedFromCashSum + _fundedFromStocksSum;
     const lifecycleProjection = {
       rows: _accumRows.map(_r => ({
         age: _r.age,
@@ -20530,6 +20598,10 @@ function copyDebugInfo() {
         pretax401kEmployee: Math.round(_r.pretax401kEmployee || 0),
         empMatchToTrad: Math.round(_r.empMatchToTrad || 0),
         stockContribution: Math.round(_r.stockContribution || 0),
+        // v7 (033): actual contribution + ladder draws (sibling fields).
+        stockContributionActual: Math.round(_r.stockContributionActual != null ? _r.stockContributionActual : (_r.stockContribution || 0)),
+        fundedFromCash: Math.round(_r.fundedFromCash || 0),
+        fundedFromStocks: Math.round(_r.fundedFromStocks || 0),
         cashFlowToCash: Math.round(_r.cashFlowToCash || 0),
         cashFlowWarning: _r.cashFlowWarning || null,
         pCash: Math.round(_r.pCash || 0),
@@ -20549,8 +20621,13 @@ function copyDebugInfo() {
         spendSum: Math.round(_spendSum),
         contribSum: Math.round(_contribSum),
         stockSum: Math.round(_stockSum),
+        // v4 (033): planned-vs-actual + ladder draw totals + unfunded remainder.
+        stockPlannedSum: Math.round(_stockPlannedSum),
+        fundedFromCashSum: Math.round(_fundedFromCashSum),
+        fundedFromStocksSum: Math.round(_fundedFromStocksSum),
+        unfundedSum: Math.round(_unfundedSum),
         cashSum: Math.round(_cashSum),
-        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum),
+        residual: Math.round(_grossSum - _taxSum - _ficaSum - _spendSum - _contribSum - _stockSum - _cashSum + _fundedFromCashSum + _fundedFromStocksSum),
       },
     };
     // v3 (feature 018, T049 US3) — Capture Payoff-vs-Invest state per FR-019:
