@@ -22,7 +22,8 @@
  *     unrecoverable missing input (currently: primary age).
  *
  * Defaults applied (documented so consumers know what's automatic):
- *   - returnRate → 0.07 (nominal); inflationRate → 0.03; returnRateCashReal → 0.005
+ *   - returnRate → 0.07 (nominal); inflationRate → 0.03;
+ *     returnRateCashReal → CASH_REAL_RETURN (calc/assumptions.js, feature 033)
  *   - annualSpendReal → scenario-table lookup (selectedScenario → USD/yr)
  *
  * FRAME (feature 022 / FR-009):
@@ -61,6 +62,14 @@ const DEFAULT_TAX_CONFIG = Object.freeze({
   ]),
   rmdAgeStart: 73,
 });
+
+// Feature 033 — single-source cash-growth rate from calc/assumptions.js.
+// This module is Node-only (not a browser <script> tag), so require is the
+// primary path; the globalThis fallback tolerates a browser eval context.
+// Name `_cashRR` avoids any future global-scope collision.
+const _cashRR = (typeof require !== 'undefined')
+  ? require('./assumptions.js').CASH_REAL_RETURN
+  : (typeof globalThis !== 'undefined' ? globalThis.CASH_REAL_RETURN : undefined);
 
 /**
  * Per-scenario cold-load annual-spend lookup — mirrors the inline engine's
@@ -235,8 +244,9 @@ export function getCanonicalInputs(inp) {
   const inflationRate = inp.inflationRate ?? 0.03;
   // FRAME: real-$ — returnRateReal feeds canonical real-frame pool growth.
   const returnRateReal = returnNominal - inflationRate;
-  // Inline cash pool grows at CASH_ANNUAL_GROWTH = 1.005 → 0.5% real.
-  const returnRateCashReal = 0.005;
+  // Cash pool grows at CASH_REAL_RETURN (today's-$ rate) — single source:
+  // calc/assumptions.js (feature 033). Supersedes the old hardcoded rate.
+  const returnRateCashReal = _cashRR;
 
   // -------------------------------------------------------------------------
   // Spend (scenario-keyed).

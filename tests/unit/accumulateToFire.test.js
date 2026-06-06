@@ -16,6 +16,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const { accumulateToFire } = require(path.resolve(__dirname, '..', '..', 'calc', 'accumulateToFire.js'));
+// 033(US1): cash growth derives from the single assumptions registry so these
+// expectations can never drift from the engine (was hardcoded 1.005).
+const { CASH_REAL_RETURN } = require(path.resolve(__dirname, '..', '..', 'calc', 'assumptions.js'));
+const CASH_G = 1 + CASH_REAL_RETURN; // per-year cash growth factor (1.0 at the 0.0 default)
 
 // ---------------------------------------------------------------------------
 // Minimal fixture builders
@@ -99,7 +103,7 @@ test('T-01: clean accumulation matches closed-form compound interest', () => {
   // tax accounting is now modeled (FR-015 + cashflow-research.md).
   // Instead of a closed-form, we verify pCash grew (is larger than the v1 floor).
   const pCash0 = inp.cashSavings + inp.otherAssets;
-  const v1CashFloor = pCash0 * Math.pow(1.005, years); // v1 floor (no income)
+  const v1CashFloor = pCash0 * Math.pow(CASH_G, years); // v1 floor (no income) — 033(US1): derives from CASH_REAL_RETURN
   // With income residual flowing in, end.pCash must be strictly greater than v1 floor.
   assert.ok(end.pCash > v1CashFloor,
     `pCash v2: must exceed v1 pure-growth floor ~${Math.round(v1CashFloor)}; got ${Math.round(end.pCash)}`);
@@ -975,8 +979,9 @@ test('v2-CF-02: negative-residual clamps cash-pool at 0 and emits NEGATIVE_RESID
   }
 
   // pCash must not have decreased due to negative residual (clamp at 0 inflow)
-  // Starting pCash = 5000; with zero inflow but 0.5%/yr growth, it grows slightly.
-  assert.ok(result.end.pCash >= 5000 * Math.pow(1.005, 2) - 1,
+  // 033(US1): growth factor derives from CASH_REAL_RETURN (was 1.005; at the
+  // 0.0 default the pool simply holds its $5,000).
+  assert.ok(result.end.pCash >= 5000 * Math.pow(CASH_G, 2) - 1,
     `v2-CF-02: pCash must not decrease from negative residual; got ${result.end.pCash}`);
 });
 
@@ -1070,12 +1075,13 @@ test('v2-CF-04: override toggle ON — cash pool uses override value instead of 
       `v2-CF-04: override active — cashFlowToCash must be ${overrideValue}, got ${row.cashFlowToCash} at age ${row.age}`);
   }
 
-  // Cash pool after 2 years: 0 + 5000 at end of year 1, then grow 0.5% + 5000 again.
-  // Year 1: pCash = (0 * 1.005) + 5000 = 5000 … wait, order is: add cashFlow THEN grow.
-  // Per contract step 8 then 9: pCash += cashFlowToCash, then pCash *= 1.005.
-  // Year 1: pCash = (0 + 5000) * 1.005 = 5025
-  // Year 2: pCash = (5025 + 5000) * 1.005 = 10075.125
-  const expectedCash = ((0 + overrideValue) * 1.005 + overrideValue) * 1.005;
+  // Cash pool after 2 years — order per contract step 8 then 9:
+  // pCash += cashFlowToCash, then pCash *= CASH_G.
+  // 033(US1): CASH_G derives from CASH_REAL_RETURN (was hardcoded 1.005 →
+  // expected 10075.125; at the 0.0 default CASH_G = 1.0 → expected 10000).
+  // Year 1: pCash = (0 + 5000) * CASH_G
+  // Year 2: pCash = (year1 + 5000) * CASH_G
+  const expectedCash = ((0 + overrideValue) * CASH_G + overrideValue) * CASH_G;
   assert.ok(
     Math.abs(result.end.pCash - expectedCash) < 1,
     `v2-CF-04: end pCash expected ~${expectedCash.toFixed(2)}, got ${result.end.pCash.toFixed(2)}`

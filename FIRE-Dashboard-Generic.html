@@ -9402,7 +9402,7 @@ function projectGrowth(inp, years) {
     // Monthly savings reduced by mortgage-rent delta
     const effectiveAnnualSavings = Math.max(0, (inp.monthlySavings * 12) - mtgSavingsAdjust);
     portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
-    portfolioCash *= 1.005;
+    portfolioCash *= (1 + CASH_REAL_RETURN);
 
     data.push({
       year: 2026 + y,
@@ -9494,7 +9494,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   // Mortgage upfront handling
   // Feature 020 (C3 fix): use the safe deduction pattern from projectFullLifecycle —
   // subtract from cash up to zero, then take the remainder from stocks. Previously
-  // signed sim let pCash go negative, which then compounded at 1.005 and skewed
+  // signed sim let pCash go negative, which then compounded at the cash growth rate (CASH_REAL_RETURN) and skewed
   // subsequent withdrawal calculations against the chart's cash-clamped behavior,
   // producing systematic ~$575/year drift in `buying-in` and `buying-now` scenarios.
   const mtg = mortgageEnabled ? getMortgageInputs() : null;
@@ -9673,7 +9673,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       pRothIra = pRothIra * (1 + realReturn401k) + rothIraContrib;
       const effAnnualSavings = Math.max(0, inp.monthlySavings * 12 - mtgAdjust - collegeCostThisYear - h2Carry);
       pStocks = pStocks * (1 + realReturnStocks) + effAnnualSavings;
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       {
         const _f030_sweep_ = (typeof _applyCashSweep === 'function')
@@ -9783,7 +9783,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
       // simply compounds until US4 lands.
       pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // Feature 031 (part 2 — clamp-then-sweep parity): sweep split decision on
       // CLAMPED copies (Math.max(0,…)) — the SAME non-negative basis the chart
@@ -10395,7 +10395,7 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     // draws); for now it grows monotonically through retirement.
     pRothIra *= (1 + realReturn401k * scale);
     pStocks *= (1 + realReturnStocks * scale);
-    pCash *= (1 + 0.005 * scale);
+    pCash *= (1 + CASH_REAL_RETURN * scale);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
       const _f030_sweep_ = (typeof _applyCashSweep === 'function')
@@ -11252,7 +11252,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // US4b: contribution sourced from `rothIraContrib`.
       portfolioRothIra = portfolioRothIra * (1 + realReturn401k) + rothIraContrib;
       portfolioStocks = portfolioStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
-      portfolioCash *= 1.005;
+      portfolioCash *= (1 + CASH_REAL_RETURN);
     } else {
       // === RETIREMENT: tax-optimized withdrawal (matches Lifetime Strategy chart) ===
       // Feature 010 US2 — perChildAllowanceThisYear added per child-allowance.contract.md
@@ -11325,7 +11325,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
       // Withdrawal layer (US3+) handles any wRothIra subtraction.
       portfolioRothIra  = Math.max(0, portfolioRothIra)  * (1 + realReturn401k);
       portfolioStocks   = Math.max(0, portfolioStocks)   * (1 + realReturnStocks);
-      portfolioCash     = Math.max(0, portfolioCash)     * 1.005;
+      portfolioCash     = Math.max(0, portfolioCash)     * (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // Feature 031 US5 — sixth simulator sweep site; matches the other five.
       {
@@ -12572,7 +12572,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       // Feature 032 hotfix: pRothIra compounds at realReturn401k (Invariant I4).
       pRothIra *= (1 + realReturn401k);
       pStocks *= (1 + realReturnStocks);
-      pCash *= 1.005;
+      pCash *= (1 + CASH_REAL_RETURN);
       // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
       // No `options` param in this closure; trace push omitted (helper call only).
       {
@@ -13119,7 +13119,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     pRothIra = Math.max(0, postRothIra) * (1 + realReturn401k);
     pStocks  = Math.max(0, postStocks)  * (1 + realReturnStocks);
     pCash    = Math.max(0, postCash);
-    pCash *= 1.005;
+    pCash *= (1 + CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     // No `options` param in this function; trace push omitted (helper call only).
     {
@@ -13228,7 +13228,7 @@ function computeRothLadder(inp, retireSpend, fireAge) {
     pTrad = pTrad * (1 + realReturn401k) + tradContrib;
     pRoth = pRoth * (1 + realReturn401k) + rothContrib;
     pStocks = pStocks * (1 + realReturnStocks) + inp.monthlySavings * 12;
-    pCash *= 1.005;
+    pCash *= (1 + CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     // No `options` param in this function; trace push omitted (helper call only).
     {

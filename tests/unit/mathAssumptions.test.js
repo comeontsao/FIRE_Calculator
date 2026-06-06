@@ -89,3 +89,32 @@ function simulatorSurfaces() {
 }
 
 module.exports = { simulatorSurfaces };
+
+// ---------------------------------------------------------------------------
+// Part 2 (T011, US1) — static guard (a): no hardcoded cash-growth multiplier
+// outside calc/assumptions.js. Exclusion ledger per research.md §R1 + the
+// US1 implementation findings.
+// ---------------------------------------------------------------------------
+
+/** Lines allowed to contain 1.005 / 0.005 without being cash-growth sites. */
+const CASH_GUARD_EXCLUSIONS = [
+  /letter-spacing/,             // CSS micro-typography
+  /isTie|SAFE_TIE_FRACTION/,    // payoff-vs-invest tie thresholds
+  /spread\s*[<>]|magnitude/,    // payoffVsInvest verdict thresholds
+  /appreciation:\s*0\.005/,     // japan scenario constant (unrelated to cash)
+];
+
+test('static guard (a): zero hardcoded cash-growth multipliers outside calc/assumptions.js', () => {
+  const offenders = [];
+  for (const { name, src } of simulatorSurfaces()) {
+    const lines = src.split('\n');
+    lines.forEach((line, i) => {
+      if (!/1\.005|0\.005/.test(line)) return;
+      if (CASH_GUARD_EXCLUSIONS.some((re) => re.test(line))) return;
+      offenders.push(`${name}:${i + 1}: ${line.trim().slice(0, 100)}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    `Hardcoded cash-growth multiplier(s) found — every cash-growth site MUST consume ` +
+    `CASH_REAL_RETURN from calc/assumptions.js (feature 033 FR-003):\n  ${offenders.join('\n  ')}`);
+});

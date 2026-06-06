@@ -92,7 +92,9 @@
  *   - Node-importable via CommonJS module.exports.
  *   - Tax brackets + FICA constants imported from calc/taxBrackets.js (require for
  *     Node, globalThis.taxBrackets for browser — see UMD-classic-script pattern).
- *   - Cash growth: 1.005/yr.
+ *   - CASH_REAL_RETURN imported from calc/assumptions.js (same require/globalThis
+ *     pattern; assumptions.js is the FIRST calc <script> tag — feature 033).
+ *   - Cash growth: (1 + CASH_REAL_RETURN)/yr — single source: calc/assumptions.js (feature 033).
  *   - Federal tax: progressive brackets (auto) OR flat rate × (gross − pretax401k).
  *   - FICA: 0 in flat-rate mode; full SS+Medicare+addtlMedicare in auto mode.
  *
@@ -128,7 +130,8 @@
  *       and SSA wage base treated as today's-$ values per FR-015.
  *     - Cash-flow residual (real-$, single-frame): residual = grossIncomeReal
  *       − federalTax − ficaTax − pretax401kEmployee − annualSpendingReal − stockContribution.
- *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at 0.5%/yr.
+ *     - Pool growth (real-$): pTrad/pRoth/pStocks at realReturn; pCash at
+ *       CASH_REAL_RETURN/yr (today's-$, from calc/assumptions.js — feature 033).
  * =============================================================================
  */
 
@@ -159,6 +162,17 @@ const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_SINGLE : 200000;
 const _FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ = _taxBrackets
   ? _taxBrackets.FICA_ADDITIONAL_MEDICARE_THRESHOLD_MFJ : 250000;
+
+// Feature 033 — assumptions registry. Pattern matches `_taxBrackets`:
+// Node `require` in tests; globalThis in browser (calc/assumptions.js is
+// the FIRST calc script tag, so eval-time capture is safe — NOT the
+// failed eval-time-capture _applyCashSweep pattern, which loaded later).
+const _assumptions = (typeof require !== 'undefined')
+  ? require('./assumptions.js')
+  : (typeof globalThis !== 'undefined' ? globalThis : null);
+const _CASH_REAL_RETURN = _assumptions && typeof _assumptions.CASH_REAL_RETURN === 'number'
+  ? _assumptions.CASH_REAL_RETURN
+  : (() => { throw new Error('[accumulateToFire] calc/assumptions.js not loaded — it must be the first calc <script> tag'); })();
 
 // Feature 030 — Cash-sweep helper. Pattern matches `_taxBrackets` above:
 // Node `require` in tests; globalThis attachment in browser via UMD wrapper.
@@ -776,10 +790,14 @@ function accumulateToFire(inp, fireAge, options) {
     pStocks = pStocks * (1 + realReturnStocks) + effectiveAnnualSavings;
     pCash = pCash + cashFlowToCash;
 
-    // Step 9: Pool growth (real return for 401k; nominal 0.5% for cash).
+    // Step 9: Pool growth — cash at CASH_REAL_RETURN (today's-$ frame).
     // Note: pTrad/pRoth/pStocks growth is already applied in step 8 (multiply before add).
-    // pCash grows at 0.5%/yr nominal (FR-016 — hardcoded, locked).
-    pCash *= 1.005;
+    // pCash grows at CASH_REAL_RETURN/yr — a purchasing-power (today's-$) rate,
+    // NOT nominal. The old "0.5%/yr nominal" label mislabeled the frame: the
+    // multiplier always applied to a today's-$ pool. FR-016's "hardcoded,
+    // locked" lock is SUPERSEDED — single source is calc/assumptions.js
+    // (see specs/033-math-assumptions-cleanup/contracts/assumptions.contract.md).
+    pCash *= (1 + _CASH_REAL_RETURN);
     // Feature 030 — Cash-sweep integration (see calc/cashSweep.js + contracts/cash-sweep.contract.md)
     {
       // Resolve lazily (see _resolveApplyCashSweep above). The block-scoped

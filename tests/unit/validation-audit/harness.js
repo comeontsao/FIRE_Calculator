@@ -249,6 +249,13 @@ function _getSandboxFactory(dashboard) {
   const OVERRIDES = `
 // ---- HARNESS STUBS (injected by harness.js buildSandboxFactory) ----
 
+// 033(US1/US3) — calc/assumptions.js globals. The extracted HTML simulators
+// reference these; values injected from the REAL module at harness-build time
+// so the sandbox can never drift from the engine (feature-020 OVERRIDES
+// lesson: a missing top-level constant makes invariants silently skip).
+var CASH_REAL_RETURN = ${require('../../../calc/assumptions.js').CASH_REAL_RETURN};
+var realRate = function (nominal, inflation) { return (1 + nominal) / (1 + inflation) - 1; };
+
 // Stub: getMortgageInputs — reads from _harnessPersonaInp (persona.inp)
 function getMortgageInputs() {
   var inp = _harnessPersonaInp;

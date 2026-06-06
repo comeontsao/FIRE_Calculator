@@ -80,10 +80,14 @@ function extractFunctionBody(src, fnName) {
 
 /**
  * Verify body invokes _applyCashSweep at least minCount times AND each call
- * follows (textually) a `pCash *= 1.005` or `pCash *= (1 + 0.005 * scale)`
- * compounding line within ~600 characters. The 600-char window matches the
- * canonical integration block size in contracts/cash-sweep.contract.md
- * (an `if/let` block + trace push).
+ * follows (textually) a cash-compounding line within ~600 characters. The
+ * 600-char window matches the canonical integration block size in
+ * contracts/cash-sweep.contract.md (an `if/let` block + trace push).
+ *
+ * 033(US1): the compounding form changed from hardcoded `1.005` /
+ * `(1 + 0.005 * scale)` to the named constant `(1 + CASH_REAL_RETURN)` /
+ * `(1 + CASH_REAL_RETURN * scale)` (calc module uses the `_CASH_REAL_RETURN`
+ * local alias) — regexes updated to the new canonical patterns.
  */
 function assertSweepFollowsCompounding(body, fnLabel, minCount) {
   const sweepCount = (body.match(/_applyCashSweep\s*\(/g) || []).length;
@@ -94,7 +98,7 @@ function assertSweepFollowsCompounding(body, fnLabel, minCount) {
   // For each `pCash *=` compounding line, ensure a sweep call appears within
   // a reasonable window AFTER it. We require at least minCount of these
   // pCash-compounding+sweep pairs.
-  const compoundRe = /pCash\s*\*=\s*(?:1\.005|\(1\s*\+\s*0\.005\s*\*\s*scale\))/g;
+  const compoundRe = /pCash\s*\*=\s*\(1\s*\+\s*_?CASH_REAL_RETURN(?:\s*\*\s*scale)?\)/g;
   let pairs = 0;
   let m;
   while ((m = compoundRe.exec(body)) !== null) {
@@ -103,7 +107,7 @@ function assertSweepFollowsCompounding(body, fnLabel, minCount) {
   }
   assert.ok(
     pairs >= minCount,
-    `${fnLabel}: expected ≥${minCount} (pCash*=1.005 … _applyCashSweep) pairs, found ${pairs}`,
+    `${fnLabel}: expected ≥${minCount} (pCash*=(1+CASH_REAL_RETURN) … _applyCashSweep) pairs, found ${pairs}`,
   );
 }
 
@@ -141,11 +145,11 @@ HTML_PATHS.forEach(({ name, file }) => {
   // _applyCashSweep after all flows — the SIXTH simulator sweep site, closing
   // the gap noted in specs/031-lifecycle-strategy-parity/research.md (clause
   // C5 / FR-006). Unlike the other five inline simulators, projectFullLifecycle
-  // compounds cash via `portfolioCash = Math.max(0, portfolioCash) * 1.005`
-  // (NOT `pCash *= 1.005`), so the generic pCash-compounding regex does not
+  // compounds cash via `portfolioCash = Math.max(0, portfolioCash) * (1 + CASH_REAL_RETURN)`
+  // (NOT `pCash *=`), so the generic pCash-compounding regex does not
   // apply here. We assert (a) the body contains an _applyCashSweep call, and
-  // (b) that call follows the retirement-phase `portfolioCash … * 1.005`
-  // cash-interest compounding line (the canonical year-end point).
+  // (b) that call follows the retirement-phase `portfolioCash …` cash-interest
+  // compounding line (the canonical year-end point). [033(US1): pattern updated]
   test(`${name}: projectFullLifecycle retirement loop has _applyCashSweep after portfolioCash compounding`, () => {
     const src = fs.readFileSync(file, 'utf8');
     const body = extractFunctionBody(src, 'projectFullLifecycle');
@@ -154,8 +158,9 @@ HTML_PATHS.forEach(({ name, file }) => {
       sweepCount >= 1,
       `${name} projectFullLifecycle: expected ≥1 _applyCashSweep call, found ${sweepCount}`,
     );
-    // The retirement cash-interest line: `portfolioCash = Math.max(0, portfolioCash) * 1.005;`
-    const compoundRe = /portfolioCash\s*=\s*Math\.max\(\s*0\s*,\s*portfolioCash\s*\)\s*\*\s*1\.005/g;
+    // The retirement cash-interest line:
+    // `portfolioCash = Math.max(0, portfolioCash) * (1 + CASH_REAL_RETURN);` [033(US1)]
+    const compoundRe = /portfolioCash\s*=\s*Math\.max\(\s*0\s*,\s*portfolioCash\s*\)\s*\*\s*\(1\s*\+\s*CASH_REAL_RETURN\)/g;
     let pairs = 0;
     let m;
     while ((m = compoundRe.exec(body)) !== null) {
@@ -164,7 +169,7 @@ HTML_PATHS.forEach(({ name, file }) => {
     }
     assert.ok(
       pairs >= 1,
-      `${name} projectFullLifecycle: expected ≥1 (portfolioCash*1.005 … _applyCashSweep) pair, found ${pairs}`,
+      `${name} projectFullLifecycle: expected ≥1 (portfolioCash*(1+CASH_REAL_RETURN) … _applyCashSweep) pair, found ${pairs}`,
     );
   });
 
@@ -199,7 +204,7 @@ test('calc/accumulateToFire.js body has _applyCashSweep after pCash compounding'
   const src = fs.readFileSync(ACCUMULATE_TO_FIRE_PATH, 'utf8');
   // accumulateToFire is the canonical accumulation-phase helper. Per the
   // contract (`Simulator Integration Sites` row 6), it must invoke
-  // _applyCashSweep after the existing `pCash *= 1.005;` line (line 711 on
-  // current main).
+  // _applyCashSweep after the cash-compounding line
+  // `pCash *= (1 + _CASH_REAL_RETURN);` [033(US1): was hardcoded 1.005].
   assertSweepFollowsCompounding(src, 'accumulateToFire (module body)', 1);
 });
