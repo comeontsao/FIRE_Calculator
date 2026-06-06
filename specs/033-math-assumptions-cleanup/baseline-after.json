@@ -1,0 +1,31 @@
+{
+  "target": "FIRE-Dashboard.html",
+  "generatedAt": "2026-06-06T01:51:36.781Z",
+  "displayedFireAge": 50,
+  "winnerId": "aggressive-bracket-fill",
+  "modes": [
+    {
+      "mode": "safe",
+      "candidateFireAge": 50,
+      "endBalance": 475843,
+      "verdict": true,
+      "strategyUsed": "aggressive-bracket-fill"
+    },
+    {
+      "mode": "exact",
+      "candidateFireAge": 50,
+      "endBalance": 475843,
+      "verdict": true,
+      "strategyUsed": "aggressive-bracket-fill"
+    },
+    {
+      "mode": "dieWithZero",
+      "candidateFireAge": 50,
+      "endBalance": 475843,
+      "verdict": true,
+      "strategyUsed": "aggressive-bracket-fill"
+    }
+  ],
+  "nonExpectedWarnings": [],
+  "pageErrors": []
+}
