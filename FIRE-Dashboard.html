@@ -8896,7 +8896,7 @@ function calcFIRENumber(annualSpend, swr) {
 // Returns function(fireAge) → minimum ACCESSIBLE portfolio needed at FIRE
 
 function calcThreePhaseFireNumber(inp, annualSpend, fireAge) {
-  const realReturn = inp.returnRate - inp.inflationRate;
+  const realReturn = realRate(inp.returnRate, inp.inflationRate);
   const endAge = inp.endAge || 95;
   const unlockAge = 59.5;
   const claimAge = inp.ssClaimAge;
@@ -9051,8 +9051,8 @@ function projectGrowth(inp, years) {
   let portfolioStocks = inp.rogerStocks + inp.rebeccaStocks;
   let portfolioCash = inp.cashSavings + inp.otherAssets;
   let income = inp.annualIncome;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   // Employer match is ALWAYS Traditional
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
@@ -9169,10 +9169,10 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
   const _strategyOverride = options && options.strategyOverride && options.strategyOverride !== 'bracket-fill-smoothed'
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
-  // FRAME: real-$ — stocks real return (nominal − inflation)
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  // FRAME: real-$ — 401k real return (nominal − inflation)
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  // FRAME: real-$ — stocks real return (Fisher: realRate(nominal, inflation))
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  // FRAME: real-$ — 401k real return (Fisher: realRate(nominal, inflation))
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   // Employer match is always Traditional
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
@@ -9340,7 +9340,7 @@ function signedLifecycleEndBalance(inp, annualSpend, fireAge, options) {
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // Snapshot balances at the START of each phase transition (post-retirement only)
     // + trajectory sampling for Safe-mode "every year" enforcement across all 3 phases.
@@ -9983,9 +9983,9 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     ? options.strategyOverride : null;
   const _thetaOverride = options && typeof options.thetaOverride === 'number' ? options.thetaOverride : null;
   // FRAME: real-$ — stocks real return
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
   // FRAME: real-$ — 401k real return
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const endAge = inp.endAge || 95;
   const unlockAge = 59.5;
   const taxTrad = inp.taxTrad;
@@ -10056,7 +10056,7 @@ function simulateRetirementOnlySigned(inp, annualSpend, fireAge, p401kTrad0, p40
     const is401kUnlocked = age >= unlockAge;
     const ssActive = age >= inp.ssClaimAge;
     // Feature 024 (B-023-5) — SS COLA factor before partial-year scale.
-    const ssThisYearFull = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYearFull = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // FRAME: pure-data — pro-rate scale for the partial FIRE-year row.
     // scale = (1 − mFraction) on first iteration; 1.0 on all subsequent
@@ -10225,7 +10225,7 @@ function findMinAccessibleAtFireNumerical(inp, annualSpend, fireAge, mode) {
   // else compound from inp.rothIraReal locally INCLUDING annual contributions
   // (US4b). Annuity FV formula keeps this fallback in lockstep with the
   // accumulateToFire helper's growth+contribution math.
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const _rothIraStart = (typeof inp.rothIraReal === 'number') ? inp.rothIraReal : 0;
   const _rothIraContrib = (typeof inp.rothIraContribReal === 'number') ? inp.rothIraContribReal : 0;
   const _annuityFV = (realReturn401k === 0)
@@ -10411,11 +10411,11 @@ function coastFIRECheck(inp) {
   const scenario = scenarios.find(s => s.id === selectedScenario);
   const yearsTo60 = 60 - inp.ageRoger;
   const coastSpend = getScenarioEffectiveSpend(scenario);
-  const realReturn = inp.returnRate - inp.inflationRate;
+  const realReturn = realRate(inp.returnRate, inp.inflationRate);
   const mtgAdj = getMortgageAdjustedRetirement(coastSpend, yearsTo60);
   // Grow total assets (accessible + locked) to age 60.
   const futureAccessible = accessible * Math.pow(1 + realReturn, yearsTo60) + mtgAdj.saleProceeds;
-  const futureLocked = locked * Math.pow(1 + (inp.return401k - inp.inflationRate), yearsTo60);
+  const futureLocked = locked * Math.pow(1 + realRate(inp.return401k, inp.inflationRate), yearsTo60);
   const futureTotal = futureAccessible + futureLocked;
   // Total-assets target at age 60 under current FIRE mode (chart-consistent).
   const target = findMinTotalAtFireNumerical(inp, coastSpend, 60, fireMode);
@@ -10441,8 +10441,8 @@ function simulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge,
 
 // Legacy inline drawdown (kept for reference only — not called). DO NOT USE.
 function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, fireAge, withSS) {
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const ssAnnual = withSS ? getSSAnnual(inp, inp.ssClaimAge, fireAge) : 0;
   const unlockAge = 59.5;
   const endAge = inp.endAge || 95;
@@ -10457,7 +10457,7 @@ function _legacySimulateDrawdown(inp, annualSpend, start401k, startAccessible, f
 
     const is401kUnlocked = age >= unlockAge;
     // Feature 024 (B-023-5) — SS COLA factor (same formula as other 5 sites).
-    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = (withSS && age >= inp.ssClaimAge) ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // Calculate withdrawal amount — fixed target spend for all modes.
     // DWZ distinction is only in FIRE number calculation (no buffers, no terminal value).
@@ -10565,8 +10565,8 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
   //   portfolioStocks (T019).
   const _mortgageStrategy = (options && typeof options.mortgageStrategyOverride === 'string')
     ? options.mortgageStrategyOverride : 'invest-keep-paying';
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const tradContrib = inp.contrib401kTrad + inp.empMatch; // employer match → Trad
   const rothContrib = inp.contrib401kRoth;
   // Feature 032 (US4b) — Roth IRA contribution; mirrors signedLifecycleEndBalance:9126.
@@ -10851,7 +10851,7 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     // At FIRE, settle the home sale.
     // T033 (feature 018 US4) — LH-Inv-3 lifecycle handoff truncation.
@@ -12133,8 +12133,8 @@ function getStrategies() { return window.__STRATEGIES_V008__; }
 function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
   const strategies = getStrategies();
   const endAge = inp.endAge || 95;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const ssAnnual = getSSAnnual(inp, inp.ssClaimAge, fireAge);
   // RR is always MFJ (Roger + Rebecca), but Generic has auto-detect. Use the
   // function if present (Generic path), else default to true (RR path).
@@ -12252,7 +12252,7 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
       const taxableSS = ssThisYear * 0.85;
       const rmdThisYear = (age >= 73 && pTrad > 0) ? Math.min(pTrad, pTrad / getRMDDivisor(age)) : 0;
       const targetBracketCap = (brackets.stdDed + brackets.top12) * (1 - bfOpts.safetyMargin);
@@ -12726,8 +12726,8 @@ function rankByObjective(results, objective, mode) {
 //   - future chart annotators reading `strategy[i].irmaaCapped / ssReducedFill / ...`
 function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
   const endAge = inp.endAge || 95;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
   const yrsToFire = Math.max(0, fireAge - inp.ageRoger);
@@ -12787,7 +12787,7 @@ function computeWithdrawalStrategy(inp, annualSpend, fireAge, brackets) {
     // Feature 024 (B-023-5) — apply per-year SS COLA factor so when ssCOLA <
     // inflation, real-$ SS shrinks across retirement. When ssCOLA = inflation
     // (default), factor = 1 → byte-identical pre-024 behavior.
-    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + ((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate) - inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
+    const ssThisYear = ssActive ? ssAnnual * Math.pow(1 + realRate((inp.ssCOLARate != null ? inp.ssCOLARate : inp.inflationRate), inp.inflationRate), Math.max(0, age - inp.ssClaimAge)) : 0;
 
     const hcDelta = getHealthcareDeltaAnnual(selectedScenario, age);
     const collegeCostThisYear = getTotalCollegeCostForYear(inp, yearsFromNow);
@@ -12962,8 +12962,8 @@ function computeRothLadder(inp, retireSpend, fireAge) {
   const fractionalBridge = Math.max(0, unlockAge - fireAge);
   const bridgeYears = Math.ceil(fractionalBridge);
   const lastYearFraction = fractionalBridge - Math.floor(fractionalBridge); // 0 if exact, else 0<f<1
-  const realReturn401k = inp.return401k - inp.inflationRate;
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate);
   const taxTrad = inp.taxTrad;
 
   // Simulate portfolio up to FIRE using accumulation-phase math (mirrors projectFullLifecycle)
@@ -14144,7 +14144,7 @@ function recalcAll() {
     let opportunityCostHTML = '';
     if ((mtg.ownership === 'buying-now' || (mtg.ownership === 'buying-in' && yrsToFire > mtg.buyInYears))) {
       const upfrontCost = mtg.downPayment + mtg.closingCosts;
-      const realRet = inp.returnRate - inp.inflationRate;
+      const realRet = realRate(inp.returnRate, inp.inflationRate);
       const downGrown = upfrontCost * Math.pow(1 + realRet, yrsToFire);
       const downGrowth = downGrown - upfrontCost;
       let monthlyInvGrown = 0;
@@ -17805,7 +17805,7 @@ function renderTimeline(inp) {
     for (const d of projection) {
       const yearsLeft = 60 - d.age;
       if (yearsLeft > 0) {
-        const realReturn = inp.returnRate - inp.inflationRate;
+        const realReturn = realRate(inp.returnRate, inp.inflationRate);
         const fv = d.total * Math.pow(1 + realReturn, yearsLeft);
         if (fv >= target) {
           milestones.push({ label: t('timeline.coast.future'), year: d.year, desc: t('timeline.coast.desc', d.age), amount: Math.round(d.total), type: 'future' });

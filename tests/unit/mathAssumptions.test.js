@@ -56,6 +56,25 @@ test('undisturbed cash pool holds constant purchasing power at CASH_REAL_RETURN 
   assert.strictEqual(pCash, 80_000);
 });
 
+test('getCanonicalInputs derives its rates from the assumptions registry (ESM-import regression lock)', () => {
+  // Regression lock for the US3 finding: getCanonicalInputs.js is an ES
+  // module, so a `typeof require` UMD guard silently bound `undefined` —
+  // returnRateCashReal shipped as undefined until the Fisher change failed
+  // loudly. require(esm) works under Node ≥22.12, so this CJS test can load it.
+  const { getCanonicalInputs } = require(path.join(REPO_ROOT, 'calc', 'getCanonicalInputs.js'));
+  const canonical = getCanonicalInputs({
+    ageRoger: 40, ageRebecca: 40, roger401kTrad: 100000, roger401kRoth: 50000,
+    rogerStocks: 25000, rebeccaStocks: 25000, cashSavings: 10000, otherAssets: 0,
+    monthlySavings: 500, contrib401kTrad: 3000, contrib401kRoth: 1500, empMatch: 1500,
+    returnRate: 0.07, inflationRate: 0.03, selectedScenario: 'us', fireMode: 'safe',
+    bufferUnlock: 2, bufferSS: 3, ssClaimAge: 67, endAge: 95,
+  });
+  assert.strictEqual(canonical.returnRateCashReal, CASH_REAL_RETURN,
+    'returnRateCashReal must equal the registry value (NOT undefined)');
+  assert.ok(Math.abs(canonical.returnRateReal - realRate(0.07, 0.03)) < 1e-12,
+    'returnRateReal must be the Fisher conversion');
+});
+
 // ---------------------------------------------------------------------------
 // Static-guard scaffolding (Parts 2 & 3 land with US1/US3 — see T011/T023).
 // The file-set helper is defined now so the guards bolt on without rework.
@@ -103,6 +122,28 @@ const CASH_GUARD_EXCLUSIONS = [
   /spread\s*[<>]|magnitude/,    // payoffVsInvest verdict thresholds
   /appreciation:\s*0\.005/,     // japan scenario constant (unrelated to cash)
 ];
+
+// ---------------------------------------------------------------------------
+// Part 3 (T023, US3) — static guard (b): no subtraction-form real-rate
+// derivation in simulator code. Every real rate routes through realRate()
+// (Fisher). Comment lines are excluded (prose may describe history).
+// ---------------------------------------------------------------------------
+
+test('static guard (b): zero subtraction-form real-rate derivations in simulators', () => {
+  const offenders = [];
+  for (const { name, src } of simulatorSurfaces()) {
+    const lines = src.split('\n');
+    lines.forEach((line, i) => {
+      const t = line.trim();
+      if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return; // prose
+      if (!/-\s*(inp\.)?inflationRate\b/.test(line)) return;
+      offenders.push(`${name}:${i + 1}: ${t.slice(0, 100)}`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    `Subtraction-form real-rate derivation(s) found — every real rate MUST route ` +
+    `through realRate(nominal, inflation) from calc/assumptions.js (feature 033 FR-009):\n  ${offenders.join('\n  ')}`);
+});
 
 test('static guard (a): zero hardcoded cash-growth multipliers outside calc/assumptions.js', () => {
   const offenders = [];

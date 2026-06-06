@@ -160,7 +160,7 @@
  *       real-return constants in real-$ frame.
  *     - Line ~370: raiseRate read — used at the income-real conversion site below.
  *     - Income (real-$ at conversion site below): grossIncomeReal computed via
- *       (1 + raiseRate − inflationRate)^t — real wage growth.
+ *       (1 + realRate(raiseRate, inflationRate))^t — real wage growth (Fisher).
  *     - Spending (real-$): annualSpendingReal === baseAnnualSpend (constant in today's $).
  *     - Tax (real-$): _computeYearTax invoked with grossIncomeReal; 2024 brackets
  *       and SSA wage base treated as today's-$ values per FR-015.
@@ -209,6 +209,12 @@ const _assumptions = (typeof require !== 'undefined')
 const _CASH_REAL_RETURN = _assumptions && typeof _assumptions.CASH_REAL_RETURN === 'number'
   ? _assumptions.CASH_REAL_RETURN
   : (() => { throw new Error('[accumulateToFire] calc/assumptions.js not loaded — it must be the first calc <script> tag'); })();
+// Feature 033 (US3) — Fisher real-rate helper from the same registry. Hard
+// throw if missing (mirrors _CASH_REAL_RETURN above): a silent fallback would
+// reintroduce the subtraction-form drift this feature removes.
+const _realRate = _assumptions && typeof _assumptions.realRate === 'function'
+  ? _assumptions.realRate
+  : (() => { throw new Error('[accumulateToFire] calc/assumptions.js realRate not loaded — it must be the first calc <script> tag'); })();
 
 // Feature 033 (US2) — half-cent rounding epsilon for the shortfall funding
 // ladder. An unfunded remainder at or below this is treated as fully funded
@@ -480,10 +486,10 @@ function accumulateToFire(inp, fireAge, options) {
   // FRAME: real-$ — real-frame return constants; pool growth at these
   //        rates keeps balances in today's purchasing power.
   const inflationRate = inp.inflationRate || 0;
-  // FRAME: real-$ — stocks real return (nominal − inflation)
-  const realReturnStocks = inp.returnRate - inflationRate;
-  // FRAME: real-$ — 401k real return (nominal − inflation)
-  const realReturn401k = inp.return401k - inflationRate;
+  // FRAME: real-$ — stocks real return (Fisher: realRate)
+  const realReturnStocks = _realRate(inp.returnRate, inflationRate);
+  // FRAME: real-$ — 401k real return (Fisher: realRate)
+  const realReturn401k = _realRate(inp.return401k, inflationRate);
 
   // --- Contribution constants (line 9320–9322) ---
   // v2: split employee vs employer for cash-flow conservation accounting.
@@ -498,7 +504,7 @@ function accumulateToFire(inp, fireAge, options) {
   const taxRate = (typeof inp.taxRate === 'number') ? inp.taxRate : 0;
   // FRAME: pure-data — raiseRate is a decimal scaling factor (non-$); combined
   //        with inflationRate at the income conversion site below to compute
-  //        real wage growth = (1 + raiseRate − inflationRate)^t.
+  //        real wage growth = (1 + realRate(raiseRate, inflationRate))^t (Fisher).
   const raiseRate = (typeof inp.raiseRate === 'number') ? inp.raiseRate : 0;
   // Feature 023 (FR-006 / US1) — 4-tier fallback chain for accumulation-phase
   // spending baseline. Preferred path is options.accumulationSpend (real-$,
@@ -715,11 +721,12 @@ function accumulateToFire(inp, fireAge, options) {
     const effectiveAnnualSavings = stockContribution;
 
     // --- v4 Cash-flow accounting (feature 022 US3 — single-frame real-$) ---
-    // Step 1: Gross income in real-$ frame. (1 + raiseRate − inflationRate)^t
+    // Step 1: Gross income in real-$ frame. (1 + realRate(raiseRate, inflation))^t
     //        is the real wage growth multiplier. raiseRate == inflationRate →
     //        constant; > → real growth; < → real wage cut. Per FR-012 / FR-013.
     // FRAME: real-$ — income converted from nominal to real before residual.
-    const grossIncome = annualIncomeBase * Math.pow(1 + raiseRate - inflationRate, yearsFromNow);
+    // Feature 033 (US3) — real wage growth via Fisher realRate (was subtraction).
+    const grossIncome = annualIncomeBase * Math.pow(1 + _realRate(raiseRate, inflationRate), yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
     // FRAME: real-$ — 401k contribution caps are constant in today's $ (the

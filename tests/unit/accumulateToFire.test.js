@@ -18,8 +18,10 @@ const require = createRequire(import.meta.url);
 const { accumulateToFire } = require(path.resolve(__dirname, '..', '..', 'calc', 'accumulateToFire.js'));
 // 033(US1): cash growth derives from the single assumptions registry so these
 // expectations can never drift from the engine (was hardcoded 1.005).
-const { CASH_REAL_RETURN } = require(path.resolve(__dirname, '..', '..', 'calc', 'assumptions.js'));
+const { CASH_REAL_RETURN, realRate } = require(path.resolve(__dirname, '..', '..', 'calc', 'assumptions.js'));
 const CASH_G = 1 + CASH_REAL_RETURN; // per-year cash growth factor (1.0 at the 0.0 default)
+// 033(US3): real rates in closed-form expectations derive via the Fisher
+// helper so they can never drift from the engine (was subtraction).
 
 // ---------------------------------------------------------------------------
 // Minimal fixture builders
@@ -81,8 +83,8 @@ test('T-01: clean accumulation matches closed-form compound interest', () => {
   assert.ok(Array.isArray(perYearRows), 'result.perYearRows must be an array');
   assert.strictEqual(perYearRows.length, fireAge - inp.ageRoger, 'perYearRows.length === fireAge - currentAge');
 
-  const realReturnStocks = inp.returnRate - inp.inflationRate;
-  const realReturn401k = inp.return401k - inp.inflationRate;
+  const realReturnStocks = realRate(inp.returnRate, inp.inflationRate); // 033(US3): Fisher
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate);   // 033(US3): Fisher
   const tradContrib = inp.contrib401kTrad + inp.empMatch;
   const rothContrib = inp.contrib401kRoth;
   const annualSavings = inp.monthlySavings * 12;
@@ -1036,7 +1038,7 @@ test('v2-CF-03: pTrad pool-update reconciliation within $1', () => {
   const fireAge = 52; // 10 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  const realReturn401k = inp.return401k - inp.inflationRate; // 0.04
+  const realReturn401k = realRate(inp.return401k, inp.inflationRate); // 033(US3): Fisher (~0.0388 at 7%/3%, was 0.04)
   const contribPerYear = inp.contrib401kTrad + inp.empMatch; // 15000
 
   // Closed-form: pTrad = P0 * r^n + C * (r^n - 1) / (r - 1)
@@ -1849,10 +1851,11 @@ test('v4-FRAME-03: raiseRate > inflationRate → grossIncomeReal grows at delta'
   const fireAge = 47;  // 5 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  // Real wage growth = 0.05 − 0.03 = 0.02 (2%/yr).
-  // Year t real income = $100,000 × 1.02^t.
+  // 033(US3): real wage growth = realRate(0.05, 0.03) ≈ 1.94%/yr (Fisher,
+  // was the 2.00% subtraction shortcut).
+  const wage = 1 + realRate(0.05, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const expected = 100000 * Math.pow(1.02, t);
+    const expected = 100000 * Math.pow(wage, t);
     const actual = result.perYearRows[t].grossIncome;
     assert.ok(
       Math.abs(actual - expected) < 1,
@@ -1874,10 +1877,11 @@ test('v4-FRAME-04: raiseRate < inflationRate (real wage cut) → grossIncomeReal
   const fireAge = 47;  // 5 years
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
-  // Real wage growth = 0.02 − 0.03 = −0.01 (1%/yr decline).
-  // Year t real income = $100,000 × 0.99^t.
+  // 033(US3): real wage growth = realRate(0.02, 0.03) ≈ −0.97%/yr (Fisher,
+  // was the −1.00% subtraction shortcut).
+  const wage = 1 + realRate(0.02, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const expected = 100000 * Math.pow(0.99, t);
+    const expected = 100000 * Math.pow(wage, t);
     const actual = result.perYearRows[t].grossIncome;
     assert.ok(
       Math.abs(actual - expected) < 1,
@@ -1909,9 +1913,11 @@ test('v4-FRAME-05: backwards-compat with flat-rate override (taxRate > 0)', () =
   const result = accumulateToFire(inp, fireAge, baseOptions());
 
   // Per-year: federalTax = (grossIncomeReal − pretax401k) × 0.22.
-  // grossIncomeReal = $150,000 × (1 + 0.05 − 0.03)^t = $150,000 × 1.02^t.
+  // 033(US3): grossIncomeReal = $150,000 × (1 + realRate(0.05, 0.03))^t
+  // (Fisher, was the 1.02 subtraction shortcut).
+  const wage = 1 + realRate(0.05, 0.03);
   for (let t = 0; t < result.perYearRows.length; t++) {
-    const realGross = 150000 * Math.pow(1.02, t);
+    const realGross = 150000 * Math.pow(wage, t);
     const expectedFedTax = (realGross - 20000) * 0.22;
     const actual = result.perYearRows[t].federalTax;
     assert.ok(

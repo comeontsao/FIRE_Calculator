@@ -29,8 +29,8 @@
  * FRAME (feature 022 / FR-009):
  *   Dominant frame: pure-data (adapter; mostly forwards canonical fields).
  *   Frame-conversion sites:
- *     - Line 212: returnRateReal = nominal − inflation (real return derivation;
- *       result fed into lifecycle in real-$ frame).
+ *     - Line 212: returnRateReal = realRate(nominal, inflation) (Fisher real
+ *       return derivation; result fed into lifecycle in real-$ frame).
  *     - Line 268: inflationRate forwarded into canonical Inputs (consumed by
  *       lifecycle.js, socialSecurity.js, healthcare.js — all real-$ modules).
  *   - solverMode → inp.fireMode ?? 'safe'
@@ -63,13 +63,17 @@ const DEFAULT_TAX_CONFIG = Object.freeze({
   rmdAgeStart: 73,
 });
 
-// Feature 033 — single-source cash-growth rate from calc/assumptions.js.
-// This module is Node-only (not a browser <script> tag), so require is the
-// primary path; the globalThis fallback tolerates a browser eval context.
-// Name `_cashRR` avoids any future global-scope collision.
-const _cashRR = (typeof require !== 'undefined')
-  ? require('./assumptions.js').CASH_REAL_RETURN
-  : (typeof globalThis !== 'undefined' ? globalThis.CASH_REAL_RETURN : undefined);
+// Feature 033 — single-source math assumptions from calc/assumptions.js.
+// THIS FILE IS AN ES MODULE (`export function getCanonicalInputs`), so the
+// `typeof require` UMD pattern used by the CJS calc modules CANNOT work here
+// (`require` is never defined in ESM scope — the original guard silently
+// bound `undefined` and shipped `returnRateCashReal: undefined` until the
+// Fisher change made it fail loudly). Import the CJS module's default export
+// (its `module.exports` object) the ESM way instead. Node-only — this file
+// is never a browser <script> tag, so Constitution V's UMD rule doesn't bind.
+import _assumptionsApi from './assumptions.js';
+const _cashRR = _assumptionsApi.CASH_REAL_RETURN;
+const _realRate = _assumptionsApi.realRate;
 
 /**
  * Per-scenario cold-load annual-spend lookup — mirrors the inline engine's
@@ -243,7 +247,9 @@ export function getCanonicalInputs(inp) {
   //        forwarded downstream into real-$ modules.
   const inflationRate = inp.inflationRate ?? 0.03;
   // FRAME: real-$ — returnRateReal feeds canonical real-frame pool growth.
-  const returnRateReal = returnNominal - inflationRate;
+  // Feature 033 (US3) — Fisher conversion via calc/assumptions.js realRate
+  // (was subtraction); single source shared with accumulateToFire.js.
+  const returnRateReal = _realRate(returnNominal, inflationRate);
   // Cash pool grows at CASH_REAL_RETURN (today's-$ rate) — single source:
   // calc/assumptions.js (feature 033). Supersedes the old hardcoded rate.
   const returnRateCashReal = _cashRR;

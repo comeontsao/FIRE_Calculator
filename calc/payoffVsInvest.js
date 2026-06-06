@@ -162,12 +162,13 @@ function _stepMonth(state, extraPrincipalThisMonth) {
  *
  * v1.2 (2026-04-28): NO annual tax drag. The Payoff-vs-Invest comparison
  * assumes BUY-AND-HOLD during the comparison window — stocks compound at the
- * full real return (returnRate − inflation) without realizing capital gains
- * year-over-year. This matches:
+ * full real return (Fisher: realRate(returnRate, inflation)) without realizing
+ * capital gains year-over-year. This matches:
  *   1. The user's stated mental model ("constantly buy and don't sell").
- *   2. The rest of the dashboard's lifecycle simulator, which uses
- *      `realReturn = returnRate - inflationRate` directly (tax applies only
- *      at withdrawal via the active strategy's per-year mix, not annually).
+ *   2. The rest of the dashboard's lifecycle simulator, which derives the real
+ *      return via the Fisher helper `realRate(returnRate, inflationRate)`
+ *      (calc/assumptions.js, feature 033) (tax applies only at withdrawal via
+ *      the active strategy's per-year mix, not annually).
  * Terminal LTCG would apply if/when the user actually sells the brokerage —
  * we don't model that here. The factor breakdown surfaces what the terminal
  * tax bite would be (`ltcgRate × stockGainPct`) so the user can mentally
