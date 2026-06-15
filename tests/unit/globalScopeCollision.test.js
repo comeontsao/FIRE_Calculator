@@ -98,3 +98,36 @@ for (const htmlFile of HTML_FILES) {
     assert.ok(!/^let sidebarMode = /m.test(html), `found 'let sidebarMode' — must be var`);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Feature 034 — static guard for calc/taxEstimator.js.
+// Registers a UNIQUE global `estimateYearTax` via a UNIQUE UMD const
+// `_taxEstimatorApi` (never `_api`), and carries NO top-level `export` keyword
+// (file:// classic-script requirement, Constitution V). Mirrors the discipline
+// proven by calc/cashSweep.js's `_cashSweepApi`.
+// ---------------------------------------------------------------------------
+test('calc/taxEstimator.js uses a unique UMD const and registers a unique global', () => {
+  const jsPath = path.join(REPO_ROOT, 'calc', 'taxEstimator.js');
+  assert.ok(fs.existsSync(jsPath), 'calc/taxEstimator.js must exist');
+  const src = fs.readFileSync(jsPath, 'utf8');
+
+  // Unique UMD const name — NOT the historically-colliding `_api`.
+  assert.ok(/^const _taxEstimatorApi = /m.test(src),
+    `expected top-level 'const _taxEstimatorApi =' UMD footer`);
+  assert.ok(!/^const _api\b/m.test(src),
+    `found top-level 'const _api' — collides across classic scripts (see cashSweep.js history)`);
+
+  // Registers the global the renderer consumes.
+  assert.ok(/globalThis\.estimateYearTax = estimateYearTax/.test(src),
+    `expected 'globalThis.estimateYearTax = estimateYearTax' global registration`);
+  assert.ok(/module\.exports = _taxEstimatorApi/.test(src),
+    `expected 'module.exports = _taxEstimatorApi' Node export`);
+
+  // No top-level ESM export keyword — file:// classic <script> cannot parse it.
+  assert.ok(!/^export\s/m.test(src),
+    `found a top-level 'export' — breaks file:// classic-script loading (Constitution V)`);
+
+  // The public function declaration is present.
+  assert.ok(/^function estimateYearTax\(/m.test(src),
+    `expected top-level 'function estimateYearTax(' declaration`);
+});
