@@ -1405,6 +1405,7 @@ marginal / IRMAA / NIIT chip + tooltip keys land in a later wave (T023-T027).
 | `te.title` | 🔬 Year Tax Estimator | 🔬 單年稅務估算器 |
 | `te.caption` | Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection. | 單一年度的本地假設情境。此處的編輯僅為私人草稿 — 不會改變 Lifecycle 圖表、終生稅額或您的計畫。重設會還原自動帶入的預測值。 |
 | `te.yearLabel` | Tax year | 稅務年度 |
+| `te.ageLabel` | age {0} | {0} 歲 |
 | `te.reset` | Reset to projection | 重設為預測值 |
 | `te.input.otherOrdinary` | Other ordinary income (taxable SS + interest) | 其他一般收入（應稅 SS + 利息） |
 | `te.input.tradWithdrawal` | Traditional 401k/IRA withdrawal | Traditional 401k/IRA 提領 |

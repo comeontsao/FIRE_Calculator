@@ -6583,6 +6583,7 @@ const TRANSLATIONS = {
     'te.title':                                 '🔬 Year Tax Estimator',
     'te.caption':                               'Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection.',
     'te.yearLabel':                             'Tax year',
+    'te.ageLabel':                              'age {0}',
     'te.reset':                                 'Reset to projection',
     'te.input.otherOrdinary':                   'Other ordinary income (taxable SS + interest)',
     'te.input.tradWithdrawal':                  'Traditional 401k/IRA withdrawal',
@@ -7733,6 +7734,7 @@ const TRANSLATIONS = {
     'te.title':                                 '🔬 單年稅務估算器',
     'te.caption':                               '單一年度的本地假設情境。此處的編輯僅為私人草稿 — 不會改變 Lifecycle 圖表、終生稅額或您的計畫。重設會還原自動帶入的預測值。',
     'te.yearLabel':                             '稅務年度',
+    'te.ageLabel':                              '{0} 歲',
     'te.reset':                                 '重設為預測值',
     'te.input.otherOrdinary':                   '其他一般收入（應稅 SS + 利息）',
     'te.input.tradWithdrawal':                  'Traditional 401k/IRA 提領',
@@ -15010,53 +15012,24 @@ function renderYearTaxEstimator(inp) {
     var inflationRate = (typeof inp.inflationRate === 'number') ? inp.inflationRate : 0;
     var baseYear = new Date().getFullYear();
 
-    // ---- Retirement year range: effective FIRE age → plan age (mirror renderRothLadder) ----
+    // ---- Effective FIRE age (mirror renderRothLadder) ----
     var effectiveFireAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null)
       ? fireAgeOverride
       : (currentAge + (typeof yearsToFIREcache === 'number' ? yearsToFIREcache : 0));
-    var planAge = (typeof inp.planAge === 'number' && inp.planAge > effectiveFireAge)
-      ? inp.planAge
-      : (typeof inp.lifeExpectancy === 'number' ? inp.lifeExpectancy : effectiveFireAge);
-    if (!(planAge >= effectiveFireAge)) planAge = effectiveFireAge;
     var fireYear = baseYear + Math.max(0, Math.round(effectiveFireAge - currentAge));
-    var planYear = baseYear + Math.max(0, Math.round(planAge - currentAge));
 
-    // ---- Populate the year picker once per range change ----
-    var rangeKey = fireYear + '-' + planYear;
-    if (_teYearRangeKey !== rangeKey) {
-      var prev = yearSel.value;
-      var opts = '';
-      for (var y = fireYear; y <= planYear; y += 1) {
-        opts += '<option value="' + y + '">' + y + '</option>';
-      }
-      yearSel.innerHTML = opts;
-      _teYearRangeKey = rangeKey;
-      // Keep the prior selection if still valid, else default to the first retirement year.
-      if (prev && Number(prev) >= fireYear && Number(prev) <= planYear) {
-        yearSel.value = prev;
-      } else {
-        yearSel.value = String(fireYear);
-      }
-    }
-    var selectedYear = Number(yearSel.value) || fireYear;
-    var selectedAge = currentAge + (selectedYear - baseYear);
-
-    // ---- Inflation factor (real → nominal at the selected year) ----
-    var factor = (typeof makeInflation === 'function')
-      ? makeInflation(inflationRate, baseYear).toNominal(1, selectedYear)
-      : Math.pow(1 + inflationRate, selectedYear - baseYear);
-    if (!Number.isFinite(factor) || factor <= 0) factor = 1;
-
-    // ---- Auto-pull adapter: find the displayed strategy's row for selectedAge ----
-    // Reuse the SAME source renderRothLadder consumes so the un-edited values agree
-    // with the projection (FR-005). Real-$ row → nominal via `factor`.
-    var row = null;
+    // ---- Auto-pull: compute the displayed strategy's per-year rows. These are the
+    // source of truth for BOTH the selectable year list AND the per-year numbers
+    // (FR-005), so EVERY projected retirement year is selectable — not just one.
+    // (Bug fix: the prior code guessed inp.planAge / inp.lifeExpectancy — neither
+    // exists, so the range collapsed to the single FIRE year.) ----
+    var strategyRows = [];
     try {
       var isMFJ = true;
       var brackets0 = getTaxBrackets(isMFJ);
       var scenarioSpend = getScenarioEffectiveSpend(scenarios.find(function (s) { return s.id === selectedScenario; }));
       var result = computeWithdrawalStrategy(inp, scenarioSpend, effectiveFireAge, brackets0);
-      var strategyRows = (result && Array.isArray(result.strategy)) ? result.strategy.slice() : [];
+      strategyRows = (result && Array.isArray(result.strategy)) ? result.strategy.slice() : [];
       // Swap in the displayed (winner/preview) strategy's per-year rows, matching
       // renderRothLadder's swap so the estimator pulls from the SAME displayed strategy.
       try {
@@ -15074,11 +15047,50 @@ function renderYearTaxEstimator(inp) {
           }
         }
       } catch (_swapErr) { /* fall back to default strategy rows */ }
-      row = strategyRows.find(function (r) { return r && Math.round(r.age) === Math.round(selectedAge); }) || null;
     } catch (_pullErr) {
-      if (typeof console !== 'undefined' && console.error) console.error('[yearTaxEstimator] auto-pull threw:', _pullErr);
-      row = null;
+      if (typeof console !== 'undefined' && console.error) console.error('[yearTaxEstimator] strategy pull threw:', _pullErr);
+      strategyRows = [];
     }
+
+    // ---- {year, age} pairs from the strategy rows (de-duped, ascending). ----
+    var yearAgePairs = [];
+    strategyRows.forEach(function (r) {
+      if (r && typeof r.age === 'number') {
+        var a = Math.round(r.age);
+        yearAgePairs.push({ year: baseYear + Math.max(0, Math.round(a - currentAge)), age: a });
+      }
+    });
+    yearAgePairs.sort(function (p, q) { return p.year - q.year; });
+    var _seenYr = {};
+    yearAgePairs = yearAgePairs.filter(function (p) { if (_seenYr[p.year]) return false; _seenYr[p.year] = 1; return true; });
+    if (yearAgePairs.length === 0) yearAgePairs.push({ year: fireYear, age: Math.round(effectiveFireAge) });
+
+    // ---- Populate the year picker once per range/language change. Label: "YYYY (age N)". ----
+    var _lang = (typeof currentLang !== 'undefined') ? currentLang : '';
+    var rangeKey = _lang + '|' + yearAgePairs.map(function (p) { return p.year + ':' + p.age; }).join(',');
+    if (_teYearRangeKey !== rangeKey) {
+      var prev = yearSel.value;
+      var opts = '';
+      yearAgePairs.forEach(function (p) {
+        opts += '<option value="' + p.year + '">' + p.year + ' (' + t('te.ageLabel', p.age) + ')</option>';
+      });
+      yearSel.innerHTML = opts;
+      _teYearRangeKey = rangeKey;
+      // Keep the prior selection if still valid, else default to the first retirement year.
+      var _validPrev = prev && yearAgePairs.some(function (p) { return String(p.year) === String(prev); });
+      yearSel.value = _validPrev ? prev : String(yearAgePairs[0].year);
+    }
+    var selectedYear = Number(yearSel.value) || yearAgePairs[0].year;
+    var selectedAge = currentAge + (selectedYear - baseYear);
+
+    // ---- Inflation factor (real → nominal at the selected year) ----
+    var factor = (typeof makeInflation === 'function')
+      ? makeInflation(inflationRate, baseYear).toNominal(1, selectedYear)
+      : Math.pow(1 + inflationRate, selectedYear - baseYear);
+    if (!Number.isFinite(factor) || factor <= 0) factor = 1;
+
+    // ---- Find the displayed strategy's row for the selected age (FR-005). ----
+    var row = strategyRows.find(function (r) { return r && Math.round(r.age) === Math.round(selectedAge); }) || null;
 
     var stockGainPct = (typeof inp.stockGainPct === 'number') ? inp.stockGainPct
       : (function () { var el = document.getElementById('stockGainPct'); return el ? (parseFloat(el.value) / 100) : 0.60; })();
