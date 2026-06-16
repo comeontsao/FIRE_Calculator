@@ -25,6 +25,11 @@
 <script src="calc/fireAgeResolver.js"></script>
 <script src="calc/cashSweep.js"></script>
 <script src="calc/withdrawalTooltipFrame.js"></script>
+<!-- Feature 034 — Year Tax Estimator pure calc module. Loaded here for calc-layer
+     lockstep (Constitution Principle I), but the Generic dashboard intentionally has
+     NO estimator UI: the block is a personalized MFJ tax-planning tool scoped to the
+     RR dashboard only. See the divergence comment at the Withdrawal Strategy tab. -->
+<script src="calc/taxEstimator.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -4072,6 +4077,15 @@
       </details>
     </div>
   </div>
+  <!-- ==================== Feature 034 — Year Tax Estimator: intentional UI divergence ====================
+       The Year Tax Estimator block (section title + year picker + editable inputs + #teOrdinaryCard /
+       #teLtcgCard / #teSignals containers + renderYearTaxEstimator) lives ONLY in FIRE-Dashboard.html
+       (RR), inserted here at the bottom of the Withdrawal Strategy pill-host (equivalent location: RR
+       FIRE-Dashboard.html, after this same #strategyComparePanel </details>). It is a personalized
+       MFJ tax-planning tool scoped to the RR dashboard per explicit user request.
+       Calc-layer lockstep IS preserved: Generic still loads calc/taxEstimator.js (see the <script> tag
+       in the head) — it simply has no UI consumer. Documented Principle-I divergence (plan.md
+       Complexity Tracking). -->
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
       <div class="pill-host" data-tab="retirement" data-pill="drawdown" hidden>

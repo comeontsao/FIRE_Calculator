@@ -20,6 +20,10 @@
 <script src="calc/fireAgeResolver.js"></script>
 <script src="calc/cashSweep.js"></script>
 <script src="calc/withdrawalTooltipFrame.js"></script>
+<!-- Feature 034 — Year Tax Estimator pure calc module (LTCG stacking / IRMAA / NIIT).
+     Loaded in BOTH HTML files for calc-layer lockstep; only the RR file has the
+     estimator UI + renderYearTaxEstimator() consumer (documented Principle-I divergence). -->
+<script src="calc/taxEstimator.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -4101,6 +4105,71 @@
       </details>
     </div>
   </div>
+  <!-- ==================== Feature 034 — Year Tax Estimator (RR only) ====================
+       A self-contained single-year federal tax microscope. Auto-pulls the displayed
+       strategy's projected income/gains for the selected retirement year, converts them to
+       that year's nominal dollars, and shows the 0%-LTCG room headline + two show-your-work
+       breakdown cards. Editing is a LOCAL what-if — renderYearTaxEstimator NEVER writes back
+       to the plan/Lifecycle chart (FR-002). Powered by calc/taxEstimator.js + calc/inflation.js.
+       Wave 2a builds the skeleton + auto-pull + room-left headline + breakdown cards;
+       a later wave fills #teSignals (marginal/IRMAA/NIIT chips) and the tooltips. -->
+  <div class="card span-3 surface--secondary" id="teCard">
+    <div class="card-title"><span data-i18n="te.title">🔬 Year Tax Estimator</span> <span class="info-tip" data-i18n-tip="te.tip.method" data-tip="How your capital-gains rate is decided: your ordinary income (after the standard deduction) fills the brackets first, then long-term gains stack on top. The 0%/15%/20% rate depends on where the TOP of that stack lands versus the 0% ceiling — a taxable-income threshold, not a gains-only one. Any standard deduction your ordinary income doesn't use also shelters gains, so with low ordinary income you can realize the 0% ceiling PLUS the unused deduction at $0 tax. Each extra $1 of ordinary income or gains pushes $1 of gain toward the next rate.">ⓘ</span></div>
+    <p class="chart-caveat" id="teCaption" data-i18n="te.caption"
+       style="margin:0 0 14px 0;padding:8px 12px;background:rgba(108,99,255,0.06);border:1px solid rgba(108,99,255,0.25);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5">Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection.</p>
+
+    <!-- Year picker + Reset -->
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-bottom:14px">
+      <div>
+        <label for="teYear" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px" data-i18n="te.yearLabel">Tax year</label>
+        <!-- T020 — year change re-pulls + re-inflates + re-seeds + repaints. -->
+        <select id="teYear" onchange="if (typeof _teYearChanged === 'function') _teYearChanged()" style="padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em;min-width:120px"></select>
+      </div>
+      <!-- T019 — Reset re-runs the auto-pull adapter for the selected year, discarding edits. -->
+      <button type="button" id="teReset" data-i18n="te.reset" onclick="if (typeof _teResetToProjection === 'function') _teResetToProjection()"
+              style="padding:6px 12px;font-size:0.82em;border-radius:6px;border:1px solid var(--accent);background:var(--card);color:var(--accent);cursor:pointer">Reset to projection</button>
+    </div>
+
+    <!-- T018 — editable inputs; each oninput recomputes from CURRENT field values (no re-pull). -->
+    <!-- T022 edit-mode helper text. -->
+    <p style="margin:-4px 0 10px 0;font-size:0.76em;color:var(--text-dim);line-height:1.5" data-i18n="te.editHelp">Edit any value to explore a what-if — only this estimator updates. Hit “Reset to projection” to restore the auto-pulled numbers.</p>
+    <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px 14px;margin-bottom:14px">
+      <div>
+        <label for="teOtherOrdinary" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.otherOrdinary">Other ordinary income (taxable SS + interest)</span> <span class="info-tip" data-i18n-tip="te.tip.otherOrdinary" data-tip="The portion of income taxed at ordinary rates that isn't a Traditional withdrawal or Roth conversion — mainly the taxable 85% of Social Security plus any taxable interest.">ⓘ</span></label>
+        <input type="number" id="teOtherOrdinary" value="0" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+      <div>
+        <label for="teTradWithdrawal" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.tradWithdrawal">Traditional 401k/IRA withdrawal</span> <span class="info-tip" data-i18n-tip="te.tip.tradWithdrawal" data-tip="Money pulled from a pre-tax Traditional 401k/IRA. Fully taxed as ordinary income — it fills the brackets first and shrinks your 0% capital-gains room.">ⓘ</span></label>
+        <input type="number" id="teTradWithdrawal" value="0" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+      <div>
+        <label for="teRothConversion" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.rothConversion">Roth conversion</span> <span class="info-tip" data-i18n-tip="te.tip.rothConversion" data-tip="Moving pre-tax money into a Roth. Counts as ordinary income the year you convert — like a Traditional withdrawal, it consumes bracket space and 0% capital-gains room.">ⓘ</span></label>
+        <input type="number" id="teRothConversion" value="0" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+      <div>
+        <label for="teLtcg" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.ltcg">Realized long-term capital gain (LTCG)</span> <span class="info-tip" data-i18n-tip="te.tip.ltcg" data-tip="The gain (sale price minus cost basis) on long-held investments you sell this year. Taxed at 0%/15%/20% depending on where it stacks on top of your ordinary taxable income.">ⓘ</span></label>
+        <input type="number" id="teLtcg" value="0" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+      <div>
+        <label for="teStdDed" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.standardDeduction">Standard deduction</span><span id="teStdDedYr"></span> <span class="info-tip" data-i18n-tip="te.tip.standardDeduction" data-tip="Subtracted from gross ordinary income before tax. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different deduction.">ⓘ</span></label>
+        <input type="number" id="teStdDed" value="30000" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+      <div>
+        <!-- T008 — NEW input: 0% LTCG ceiling (MFJ 2026 ~$96,700, today's-$; inflated to the year). -->
+        <label for="teLtcg0Ceiling" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.ltcg0Ceiling">0% capital-gains ceiling (MFJ)</span><span id="teLtcg0CeilingYr"></span> <span class="info-tip" data-i18n-tip="te.tip.ltcg0Ceiling" data-tip="The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different ceiling.">ⓘ</span></label>
+        <input type="number" id="teLtcg0Ceiling" value="96700" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
+      </div>
+    </div>
+
+    <!-- Room-left-at-0% headline (US1, T012) — visually dominant signals row. -->
+    <div id="teSignals" style="margin-bottom:14px"></div>
+
+    <!-- Two show-your-work breakdown cards (US2, T014/T015). Filled by renderYearTaxEstimator. -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px">
+      <div id="teOrdinaryCard"></div>
+      <div id="teLtcgCard"></div>
+    </div>
+  </div>
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
       </div>
       <div class="pill-host" data-tab="retirement" data-pill="drawdown" hidden>
@@ -6509,6 +6578,61 @@ const TRANSLATIONS = {
     'display.frame.purchasingPowerColumnSuffix':'(purchasing power)',
     // Feature 022 (US4 / T067) — country budget tier frame disambiguation tooltip.
     'display.frame.countryTierFrameNote':       "Cost in today's $; the dashboard inflates this to your retirement year for projections.",
+    // ==================== Feature 034 — Year Tax Estimator (RR only) ====================
+    // T010 — block chrome + input labels.
+    'te.title':                                 '🔬 Year Tax Estimator',
+    'te.tip.method':                            "How your capital-gains rate is decided: your ordinary income (after the standard deduction) fills the brackets first, then long-term gains stack on top. The 0%/15%/20% rate depends on where the TOP of that stack lands versus the 0% ceiling — a taxable-income threshold, not a gains-only one. Any standard deduction your ordinary income doesn't use also shelters gains, so with low ordinary income you can realize the 0% ceiling PLUS the unused deduction at $0 tax. Each extra $1 of ordinary income or gains pushes $1 of gain toward the next rate.",
+    'te.caption':                               'Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection.',
+    'te.yearLabel':                             'Tax year',
+    'te.ageLabel':                              'age {0}',
+    'te.reset':                                 'Reset to projection',
+    'te.input.otherOrdinary':                   'Other ordinary income (taxable SS + interest)',
+    'te.input.tradWithdrawal':                  'Traditional 401k/IRA withdrawal',
+    'te.input.rothConversion':                  'Roth conversion',
+    'te.input.ltcg':                            'Realized long-term capital gain (LTCG)',
+    'te.input.standardDeduction':               'Standard deduction',
+    'te.input.ltcg0Ceiling':                    '0% capital-gains ceiling (MFJ)',
+    'te.zeroState':                             'No projection available for this year yet — pick a retirement year, or enter values above to estimate.',
+    // T013 (US1) — room-left headline + tooltip.
+    'te.roomLeft.label':                        'Room left at 0% capital gains',
+    'te.roomLeft.tip':                          'How much more in long-term gains you can still sell this year at 0% federal tax. The standard deduction shelters gains first, so this room is the 0% ceiling PLUS any deduction your ordinary income did not use. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) OR more gains shrinks it dollar-for-dollar.',
+    'te.roomLeft.value':                        '${0}',
+    // Companion headline — the same 0% pool seen from the ordinary-income side.
+    'te.headroom.label':                        'Ordinary-income headroom',
+    'te.headroom.tip':                          'How much more ordinary income (Traditional withdrawal, Roth conversion, or taxable SS + interest) you can add this year before your long-term gains start being taxed at 15%. It draws from the SAME 0% pool as the capital-gains room — adding a dollar of EITHER gains or ordinary income consumes a dollar of room — so the two figures match by design.',
+    // T017 (US2) — card headings + show-your-work step templates.
+    'te.card.ordinary':                         'Ordinary income tax',
+    'te.card.ltcg':                             'Long-term capital gains tax',
+    'te.step.ordGross':                         'Ordinary income: ${0} other + ${1} Traditional + ${2} Roth conversion = ${3} gross',
+    'te.step.ordMinusStd':                      '${0} gross − ${1} standard deduction = ${2} taxable',
+    'te.step.ordLayer':                         '${0}–${1}: ${2} taxed at {3}% = ${4}',
+    'te.step.ordTotal':                         'Ordinary tax owed: ${0}',
+    'te.step.ltcgShelter':                      'Your standard deduction shelters ${0} of these gains (your ordinary income didn’t use all of it), so only ${1} of gain is taxable.',
+    'te.step.ltcgStack':                        'Gains stack on top of ${0} ordinary taxable income; the 0% band tops out at ${1}, leaving ${2} of 0% room.',
+    'te.step.ltcgLayer':                        '{0}% rate: ${1} of gain = ${2}',
+    'te.step.ltcgTotal':                        'LTCG tax owed: ${0}',
+    'te.step.ltcgPool':                         'Up to ${0} of long-term gains are taxed at 0% this year (the 0% ceiling plus any unused standard deduction). You’ve realized ${1}, leaving ${2} of 0% room.',
+    // T022 (US3) — edit-mode helper text.
+    'te.editHelp':                              'Edit any value to explore a what-if — only this estimator updates. Hit “Reset to projection” to restore the auto-pulled numbers.',
+    // T023 (US4) — marginal next-dollar chips + shared tooltip.
+    'te.marginal.ordinary':                     'Next ordinary $ taxed at',
+    'te.marginal.ltcg':                         'Next gain $ taxed at',
+    'te.marginal.tip':                          'The rate your NEXT dollar would pay. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) shrinks your 0% capital-gains room and can flip gains from 0% to 15%.',
+    // T024 (US4) — IRMAA Tier 1 chip + tooltip.
+    'te.irmaa.chip':                            'IRMAA Tier 1 crossed',
+    'te.irmaa.tip':                             'Your MAGI this year is above the IRMAA Tier 1 threshold, which raises your Medicare Part B & D premiums two years later. The threshold here is inflated to the selected year.',
+    // T025 (US4) — NIIT 3.8% chip + tooltip.
+    'te.niit.chip':                             'NIIT 3.8% applies (+${0})',
+    'te.niit.tip':                              'The 3.8% Net Investment Income Tax hits investment gains once MAGI tops $250K (MFJ). This threshold is NOT inflation-indexed — it stays a fixed $250K, so later years trigger it more easily.',
+    // T026 (US4) — info-tips on labels / cards.
+    'te.tip.otherOrdinary':                     "The portion of income taxed at ordinary rates that isn't a Traditional withdrawal or Roth conversion — mainly the taxable 85% of Social Security plus any taxable interest.",
+    'te.tip.tradWithdrawal':                    'Money pulled from a pre-tax Traditional 401k/IRA. Fully taxed as ordinary income — it fills the brackets first and shrinks your 0% capital-gains room.',
+    'te.tip.rothConversion':                    'Moving pre-tax money into a Roth. Counts as ordinary income the year you convert — like a Traditional withdrawal, it consumes bracket space and 0% capital-gains room.',
+    'te.tip.ltcg':                              'The gain (sale price minus cost basis) on long-held investments you sell this year. Taxed at 0%/15%/20% depending on where it stacks on top of your ordinary taxable income.',
+    'te.tip.standardDeduction':                 "Subtracted from gross ordinary income before tax. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different deduction.",
+    'te.tip.ltcg0Ceiling':                      "The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different ceiling.",
+    'te.tip.ordinary':                          'Ordinary income (wages, Traditional withdrawals, Roth conversions, taxable SS) taxed at the marginal 10–37% brackets after the standard deduction.',
+    'te.tip.ltcgCard':                          'Long-term capital gains stack ON TOP of your ordinary taxable income and are taxed at 0% / 15% / 20% depending on where the stack lands.',
   },
   zh: {
     'header.title': 'Roger & Rebecca FIRE 指揮中心',
@@ -7611,6 +7735,61 @@ const TRANSLATIONS = {
     'display.frame.purchasingPowerColumnSuffix':'(約等於今日價值)',
     // Feature 022 (US4 / T067) — country budget tier frame disambiguation tooltip.
     'display.frame.countryTierFrameNote':       '成本以今日美元計算；儀表板會將其通膨調整至您的退休年份用於預測。',
+    // ==================== Feature 034 — Year Tax Estimator（僅 RR）====================
+    // T010 — 區塊框架 + 輸入欄位標籤。
+    'te.title':                                 '🔬 單年稅務估算器',
+    'te.tip.method':                            '你的資本利得稅率如何決定：你的一般收入（扣除標準扣除額後）先填滿級距，長期資本利得再堆疊在其上。0%/15%/20% 的稅率取決於這個堆疊的「頂端」落在 0% 上限的哪個位置 — 這是「應稅所得」門檻，而非僅看利得本身。你一般收入沒用完的標準扣除額也會抵減利得，因此在一般收入很低時，你可以實現「0% 上限加上未用完的扣除額」的利得而完全免稅。每增加 1 美元的一般收入或利得，都會把 1 美元的利得往下一個稅率推。',
+    'te.caption':                               '單一年度的本地假設情境。此處的編輯僅為私人草稿 — 不會改變 Lifecycle 圖表、終生稅額或您的計畫。重設會還原自動帶入的預測值。',
+    'te.yearLabel':                             '稅務年度',
+    'te.ageLabel':                              '{0} 歲',
+    'te.reset':                                 '重設為預測值',
+    'te.input.otherOrdinary':                   '其他一般收入（應稅 SS + 利息）',
+    'te.input.tradWithdrawal':                  'Traditional 401k/IRA 提領',
+    'te.input.rothConversion':                  'Roth 轉換',
+    'te.input.ltcg':                            '已實現長期資本利得（LTCG）',
+    'te.input.standardDeduction':               '標準扣除額',
+    'te.input.ltcg0Ceiling':                    '0% 資本利得上限（MFJ）',
+    'te.zeroState':                             '此年度尚無可用的預測 — 請選擇退休年份，或在上方輸入數值以估算。',
+    // T013（US1）— 0% 級距餘額標題 + 提示。
+    'te.roomLeft.label':                        '0% 資本利得剩餘空間',
+    'te.roomLeft.tip':                          '今年你還能以 0% 聯邦稅率賣出多少長期資本利得。標準扣除額會先抵減資本利得，因此這個空間是 0% 上限「加上」你一般收入未用完的扣除額。增加一般收入（更大的 Traditional 提領或 Roth 轉換）或更多利得都會逐元縮小此空間。',
+    'te.roomLeft.value':                        '${0}',
+    // 輔助標題 — 相同的 0% 空間，從一般收入的角度來看。
+    'te.headroom.label':                        '一般收入餘裕',
+    'te.headroom.tip':                          '今年你還能再增加多少一般收入（Traditional 提領、Roth 轉換，或應稅的社安 + 利息），長期資本利得才會開始以 15% 課稅。它與資本利得空間使用「同一個」0% 池 — 增加 1 美元的利得或一般收入都會消耗 1 美元的空間 — 因此這兩個數字依設計會相同。',
+    // T017（US2）— 卡片標題 + 計算過程範本。
+    'te.card.ordinary':                         '一般所得稅',
+    'te.card.ltcg':                             '長期資本利得稅',
+    'te.step.ordGross':                         '一般收入：${0} 其他 + ${1} Traditional + ${2} Roth 轉換 = ${3} 總額',
+    'te.step.ordMinusStd':                      '${0} 總額 − ${1} 標準扣除額 = ${2} 應稅額',
+    'te.step.ordLayer':                         '${0}–${1}：${2} 以 {3}% 課稅 = ${4}',
+    'te.step.ordTotal':                         '一般所得應繳稅：${0}',
+    'te.step.ltcgShelter':                      '你的標準扣除額抵減了這些利得中的 ${0}（你的一般收入沒有用完扣除額），因此只有 ${1} 的利得需要課稅。',
+    'te.step.ltcgStack':                        '資本利得堆疊在 ${0} 一般應稅所得之上；0% 級距上限為 ${1}，剩餘 ${2} 的 0% 空間。',
+    'te.step.ltcgLayer':                        '{0}% 稅率：${1} 的利得 = ${2}',
+    'te.step.ltcgTotal':                        'LTCG 應繳稅：${0}',
+    'te.step.ltcgPool':                         '今年最多有 ${0} 的長期資本利得以 0% 課稅（0% 上限加上未用完的標準扣除額）。你已實現 ${1}，剩餘 ${2} 的 0% 空間。',
+    // T022（US3）— 編輯模式說明文字。
+    'te.editHelp':                              '編輯任何數值以探索假設情境 — 只有此估算器會更新。點擊「重設為預測值」即可還原自動帶入的數字。',
+    // T023（US4）— 邊際下一元稅率標籤 + 共用提示。
+    'te.marginal.ordinary':                     '下一元一般收入稅率',
+    'te.marginal.ltcg':                         '下一元利得稅率',
+    'te.marginal.tip':                          '你下一元將適用的稅率。增加一般收入（更大的 Traditional 提領或 Roth 轉換）會縮小 0% 資本利得空間，並可能把利得從 0% 推升至 15%。',
+    // T024（US4）— IRMAA Tier 1 標籤 + 提示。
+    'te.irmaa.chip':                            '已超過 IRMAA Tier 1',
+    'te.irmaa.tip':                             '你今年的 MAGI 高於 IRMAA Tier 1 門檻，兩年後會提高你的 Medicare Part B 與 D 保費。此處門檻已通膨調整至所選年份。',
+    // T025（US4）— NIIT 3.8% 標籤 + 提示。
+    'te.niit.chip':                             'NIIT 3.8% 適用（+${0}）',
+    'te.niit.tip':                              '3.8% 淨投資所得稅（NIIT）在 MAGI 超過 $250K（MFJ）後對投資利得課徵。此門檻不會隨通膨調整 — 永遠固定為 $250K，因此後續年份更容易觸發。',
+    // T026（US4）— 標籤／卡片資訊提示。
+    'te.tip.otherOrdinary':                     '以一般稅率課稅、但非 Traditional 提領或 Roth 轉換的收入部分 — 主要是 Social Security 應稅的 85% 加上應稅利息。',
+    'te.tip.tradWithdrawal':                    '從稅前 Traditional 401k/IRA 提領的金額。以一般所得全額課稅 — 會優先填滿級距並縮小你的 0% 資本利得空間。',
+    'te.tip.rothConversion':                    '將稅前資金轉入 Roth。轉換當年計為一般收入 — 與 Traditional 提領一樣，會佔用級距空間與 0% 資本利得空間。',
+    'te.tip.ltcg':                              '你今年賣出長期持有投資的利得（售價減成本基礎）。依其堆疊在一般應稅所得之上的位置，以 0%/15%/20% 課稅。',
+    'te.tip.standardDeduction':                 '在課稅前從一般收入總額中扣除。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同扣除額。',
+    'te.tip.ltcg0Ceiling':                      '0% 長期資本利得級距的上限（應稅所得，MFJ）。低於此線的利得聯邦免稅；高於則以 15% 課稅。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同上限。',
+    'te.tip.ordinary':                          '一般收入（薪資、Traditional 提領、Roth 轉換、應稅 SS）在扣除標準扣除額後，以 10–37% 的邊際級距課稅。',
+    'te.tip.ltcgCard':                          '長期資本利得堆疊在你的一般應稅所得之上，依堆疊位置以 0% / 15% / 20% 課稅。',
   }
 };
 
@@ -14760,6 +14939,447 @@ function translateStrategyTag(tag) {
  * row objects via _extendSnapshotWithBookValues. Visual swap deferred to Wave 4b.
  */
 // FRAME: real-$ (chart axis data) — companions available for Wave 4b swap.
+// ==================== MODULE: Year Tax Estimator renderer (feature 034) ====================
+// Consumes: calc/taxEstimator.js (global `estimateYearTax`) + calc/inflation.js
+//           (global `makeInflation`) for the real→nominal auto-pull conversion.
+// Produces: paints #teYear / #teSignals / #teOrdinaryCard / #teLtcgCard inside the
+//           Year Tax Estimator block (RR Withdrawal Strategy tab). DOM-only side
+//           effects — NEVER calls recalcAll / renderGrowthChart / the strategy ranker,
+//           NEVER writes shared or localStorage state (FR-002 no-write-back).
+// Frame:    selected-year nominal-$ throughout (conversion confined to the auto-pull
+//           adapter below via inflation.js — FR-017 single-conversion-site rule).
+//
+// Wave 2a scope: year picker population, auto-pull + seed, room-left headline (US1),
+// ordinary + LTCG breakdown cards (US2).
+// Wave 2b scope (T018-T027): edit-vs-repull split — edits recompute from the CURRENT
+// field values (NO re-pull); Reset / year-change re-pull the projection and re-seed.
+// Plus US4 signal chips (marginal ordinary + LTCG next-dollar rates, IRMAA Tier 1, NIIT
+// 3.8%) rendered alongside the room-left headline in #teSignals.
+//
+// Architecture:
+//   renderYearTaxEstimator(inp)  — RE-PULL path. Populates the year picker, runs the
+//                                  auto-pull adapter for the selected year, SEEDS the
+//                                  editable fields, then calls _teComputeAndPaint().
+//                                  Hooked into renderRothLadder + the year-change + Reset.
+//   _teComputeAndPaint()         — shared compute+paint. Reads the CURRENT field values
+//                                  (never re-pulls), inflates the indexed thresholds for
+//                                  the selected year, calls estimateYearTax, paints
+//                                  signals + the two breakdown cards. Used by BOTH paths.
+//   _teRecomputeFromFields()     — EDIT path. Thin wrapper over _teComputeAndPaint() wired
+//                                  to each input's oninput. No re-pull, no re-seed.
+//   _teResetToProjection()       — Reset button: re-run renderYearTaxEstimator(getInputs()).
+// None of these call recalcAll / renderGrowthChart / the ranker, nor write shared or
+// localStorage state (FR-002 no-write-back).
+
+// Cache of the year range currently in the picker, so we only repopulate on change.
+var _teYearRangeKey = null;
+
+/** Format a nominal dollar amount as a whole-dollar string with thousands separators. */
+function _teFmt(v) {
+  var n = Number(v);
+  if (!Number.isFinite(n)) n = 0;
+  return Math.round(n).toLocaleString();
+}
+
+/**
+ * Build the ascending marginal `ordinaryBrackets` array the estimator module expects
+ * from the dashboard's existing 3-input bracket schedule (getTaxBrackets) at NOMINAL
+ * thresholds for the selected year. Standard MFJ rate ladder: 10/12/22/24/32/35/37.
+ * @param {object} brackets  result of getTaxBrackets(isMFJ)
+ * @param {number} factor    real→nominal inflation factor for the selected year
+ */
+function _teBuildOrdinaryBrackets(brackets, factor) {
+  // top10/top12/top22/top24/top32/top35 are today's-$ band ceilings; inflate to year.
+  // The estimator treats `threshold` as the band's LOWER edge, so the lowest band is 0.
+  var b = brackets || {};
+  var infl = function (v) { return (Number(v) || 0) * factor; };
+  return [
+    { threshold: 0,               rate: 0.10 },
+    { threshold: infl(b.top10),   rate: 0.12 },
+    { threshold: infl(b.top12),   rate: 0.22 },
+    { threshold: infl(b.top22),   rate: 0.24 },
+    { threshold: infl(b.top24),   rate: 0.32 },
+    { threshold: infl(b.top32),   rate: 0.35 },
+    { threshold: infl(b.top35),   rate: 0.37 },
+  ];
+}
+
+/**
+ * Render the Year Tax Estimator block (RR only). Pure read + DOM paint; no write-back.
+ * @param {object} inp  canonical inputs (getInputs())
+ */
+function renderYearTaxEstimator(inp) {
+  var yearSel = document.getElementById('teYear');
+  var signalsEl = document.getElementById('teSignals');
+  var ordCardEl = document.getElementById('teOrdinaryCard');
+  var ltcgCardEl = document.getElementById('teLtcgCard');
+  // Block absent (Generic, or DOM not ready) → no-op.
+  if (!yearSel || !signalsEl || !ordCardEl || !ltcgCardEl) return;
+  if (typeof estimateYearTax !== 'function') return;
+
+  try {
+    inp = inp || (typeof getInputs === 'function' ? getInputs() : {});
+    var currentAge = (typeof inp.ageRoger === 'number') ? inp.ageRoger
+      : (typeof inp.agePerson1 === 'number' ? inp.agePerson1 : 0);
+    var inflationRate = (typeof inp.inflationRate === 'number') ? inp.inflationRate : 0;
+    var baseYear = new Date().getFullYear();
+
+    // ---- Effective FIRE age (mirror renderRothLadder) ----
+    var effectiveFireAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null)
+      ? fireAgeOverride
+      : (currentAge + (typeof yearsToFIREcache === 'number' ? yearsToFIREcache : 0));
+    var fireYear = baseYear + Math.max(0, Math.round(effectiveFireAge - currentAge));
+
+    // ---- Auto-pull: compute the displayed strategy's per-year rows. These are the
+    // source of truth for BOTH the selectable year list AND the per-year numbers
+    // (FR-005), so EVERY projected retirement year is selectable — not just one.
+    // (Bug fix: the prior code guessed inp.planAge / inp.lifeExpectancy — neither
+    // exists, so the range collapsed to the single FIRE year.) ----
+    var strategyRows = [];
+    try {
+      var isMFJ = true;
+      var brackets0 = getTaxBrackets(isMFJ);
+      var scenarioSpend = getScenarioEffectiveSpend(scenarios.find(function (s) { return s.id === selectedScenario; }));
+      var result = computeWithdrawalStrategy(inp, scenarioSpend, effectiveFireAge, brackets0);
+      strategyRows = (result && Array.isArray(result.strategy)) ? result.strategy.slice() : [];
+      // Swap in the displayed (winner/preview) strategy's per-year rows, matching
+      // renderRothLadder's swap so the estimator pulls from the SAME displayed strategy.
+      try {
+        if (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.rows && _lastStrategyResults.rows.length > 0) {
+          var displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId) || _lastStrategyResults.winnerId;
+          if (displayedId && displayedId !== 'bracket-fill-smoothed') {
+            var displayed = _lastStrategyResults.rows.find(function (r) { return r.strategyId === displayedId; });
+            if (displayed && Array.isArray(displayed.perYearRows) && displayed.perYearRows.length > 0) {
+              var ssByAge = {};
+              strategyRows.forEach(function (r) { if (r && typeof r.age === 'number') ssByAge[r.age] = r.ssIncome || 0; });
+              strategyRows = displayed.perYearRows.map(function (r) {
+                return Object.assign({}, r, { ssIncome: ssByAge[r.age] !== undefined ? ssByAge[r.age] : (r.ssIncome || 0) });
+              });
+            }
+          }
+        }
+      } catch (_swapErr) { /* fall back to default strategy rows */ }
+    } catch (_pullErr) {
+      if (typeof console !== 'undefined' && console.error) console.error('[yearTaxEstimator] strategy pull threw:', _pullErr);
+      strategyRows = [];
+    }
+
+    // ---- {year, age} pairs from the strategy rows (de-duped, ascending). ----
+    var yearAgePairs = [];
+    strategyRows.forEach(function (r) {
+      if (r && typeof r.age === 'number') {
+        var a = Math.round(r.age);
+        yearAgePairs.push({ year: baseYear + Math.max(0, Math.round(a - currentAge)), age: a });
+      }
+    });
+    yearAgePairs.sort(function (p, q) { return p.year - q.year; });
+    var _seenYr = {};
+    yearAgePairs = yearAgePairs.filter(function (p) { if (_seenYr[p.year]) return false; _seenYr[p.year] = 1; return true; });
+    if (yearAgePairs.length === 0) yearAgePairs.push({ year: fireYear, age: Math.round(effectiveFireAge) });
+
+    // ---- Populate the year picker once per range/language change. Label: "YYYY (age N)". ----
+    var _lang = (typeof currentLang !== 'undefined') ? currentLang : '';
+    var rangeKey = _lang + '|' + yearAgePairs.map(function (p) { return p.year + ':' + p.age; }).join(',');
+    if (_teYearRangeKey !== rangeKey) {
+      var prev = yearSel.value;
+      var opts = '';
+      yearAgePairs.forEach(function (p) {
+        opts += '<option value="' + p.year + '">' + p.year + ' (' + t('te.ageLabel', p.age) + ')</option>';
+      });
+      yearSel.innerHTML = opts;
+      _teYearRangeKey = rangeKey;
+      // Keep the prior selection if still valid, else default to the first retirement year.
+      var _validPrev = prev && yearAgePairs.some(function (p) { return String(p.year) === String(prev); });
+      yearSel.value = _validPrev ? prev : String(yearAgePairs[0].year);
+    }
+    var selectedYear = Number(yearSel.value) || yearAgePairs[0].year;
+    var selectedAge = currentAge + (selectedYear - baseYear);
+
+    // ---- Inflation factor (real → nominal at the selected year) ----
+    var factor = (typeof makeInflation === 'function')
+      ? makeInflation(inflationRate, baseYear).toNominal(1, selectedYear)
+      : Math.pow(1 + inflationRate, selectedYear - baseYear);
+    if (!Number.isFinite(factor) || factor <= 0) factor = 1;
+
+    // ---- Find the displayed strategy's row for the selected age (FR-005). ----
+    var row = strategyRows.find(function (r) { return r && Math.round(r.age) === Math.round(selectedAge); }) || null;
+
+    var stockGainPct = (typeof inp.stockGainPct === 'number') ? inp.stockGainPct
+      : (function () { var el = document.getElementById('stockGainPct'); return el ? (parseFloat(el.value) / 100) : 0.60; })();
+    // stockGainPct input is 0-100; inp.stockGainPct may already be a fraction. Normalize.
+    if (stockGainPct > 1) stockGainPct = stockGainPct / 100;
+
+    // ---- Seed the editable inputs from the auto-pull (nominal-$). Zero state when no row. ----
+    var seedOther = row ? (0.85 * (row.ssIncome || 0)) * factor : 0;
+    var seedTrad = row ? (row.wTrad || 0) * factor : 0;
+    var seedRoth = row ? (row.syntheticConversion || 0) * factor : 0;
+    var seedLtcg = row ? (row.wStocks || 0) * stockGainPct * factor : 0;
+
+    // Seed BOTH inflation-indexed thresholds to the SELECTED YEAR's nominal dollars
+    // (today's-$ → nominal). Both are then used AS-IS by _teComputeAndPaint — what you
+    // see in the box is the value for that year. Editing models a different year value;
+    // changing the year / Reset re-seeds to that year's projected threshold.
+    var brkts = getTaxBrackets(true);
+    var stdDedEl = document.getElementById('teStdDed');
+    var ceilEl = document.getElementById('teLtcg0Ceiling');
+    var seedStdDed = (brkts.stdDed || 0) * factor;
+    var seedCeil = 96700 * factor; // today's MFJ 0% LTCG ceiling base, inflated to the year
+
+    // Write seeds into the editable fields so the user sees auto-pulled nominal values.
+    // This is the ONLY place fields are written — the edit path never re-seeds (FR-004).
+    document.getElementById('teOtherOrdinary').value = String(Math.round(seedOther));
+    document.getElementById('teTradWithdrawal').value = String(Math.round(seedTrad));
+    document.getElementById('teRothConversion').value = String(Math.round(seedRoth));
+    document.getElementById('teLtcg').value = String(Math.round(seedLtcg));
+    if (stdDedEl) stdDedEl.value = String(Math.round(seedStdDed));
+    if (ceilEl) ceilEl.value = String(Math.round(seedCeil));
+
+    // Year-stamp the two indexed-threshold labels so it's unambiguous the values
+    // shown are in the SELECTED YEAR's dollars (e.g. "Standard deduction (2036)").
+    var stdYrEl = document.getElementById('teStdDedYr');
+    if (stdYrEl) stdYrEl.textContent = ' (' + selectedYear + ')';
+    var ceilYrEl = document.getElementById('teLtcg0CeilingYr');
+    if (ceilYrEl) ceilYrEl.textContent = ' (' + selectedYear + ')';
+
+    // ---- Compute + paint from the (just-seeded) current field values. ----
+    _teComputeAndPaint();
+  } catch (_e) {
+    // Graceful zero/neutral state — never NaN, never throw (FR-023).
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[yearTaxEstimator] renderYearTaxEstimator threw — showing neutral state.',
+        _e && _e.stack ? _e.stack : _e);
+    }
+    try {
+      signalsEl.innerHTML = '<div style="padding:8px 12px;color:var(--text-dim);font-size:0.85em">' + t('te.zeroState') + '</div>';
+      ordCardEl.innerHTML = '';
+      ltcgCardEl.innerHTML = '';
+    } catch (_e2) { /* DOM gone — give up silently */ }
+  }
+}
+
+/**
+ * Shared COMPUTE + PAINT step. Reads the CURRENT estimator field values (never re-pulls
+ * the projection), inflates the indexed thresholds for the picker's selected year, calls
+ * the pure estimateYearTax module, and paints the signals row + the two breakdown cards.
+ * Used by BOTH the re-pull path (after seeding) and the edit path. No write-back.
+ */
+function _teComputeAndPaint() {
+  var yearSel = document.getElementById('teYear');
+  var signalsEl = document.getElementById('teSignals');
+  var ordCardEl = document.getElementById('teOrdinaryCard');
+  var ltcgCardEl = document.getElementById('teLtcgCard');
+  if (!yearSel || !signalsEl || !ordCardEl || !ltcgCardEl) return;
+  if (typeof estimateYearTax !== 'function') return;
+
+  try {
+    var inp = (typeof getInputs === 'function') ? getInputs() : {};
+    var currentAge = (typeof inp.ageRoger === 'number') ? inp.ageRoger
+      : (typeof inp.agePerson1 === 'number' ? inp.agePerson1 : 0);
+    var inflationRate = (typeof inp.inflationRate === 'number') ? inp.inflationRate : 0;
+    var baseYear = new Date().getFullYear();
+    var selectedYear = Number(yearSel.value) || baseYear;
+
+    // Inflation factor (real → nominal at the selected year) for the indexed thresholds.
+    var factor = (typeof makeInflation === 'function')
+      ? makeInflation(inflationRate, baseYear).toNominal(1, selectedYear)
+      : Math.pow(1 + inflationRate, selectedYear - baseYear);
+    if (!Number.isFinite(factor) || factor <= 0) factor = 1;
+
+    var brkts = getTaxBrackets(true);
+    var ceilEl = document.getElementById('teLtcg0Ceiling');
+    // The 0% ceiling field holds the SELECTED YEAR's nominal dollars (seeded
+    // inflated in renderYearTaxEstimator, like the standard deduction), so it is
+    // used AS-IS — NOT inflated a second time. Fallback inflates the today's-$ base.
+    var ceilNominal = ceilEl ? (parseFloat(ceilEl.value) || 0) : (96700 * factor);
+    var stdDedEl = document.getElementById('teStdDed');
+    var irmaaTodayEl = document.getElementById('irmaaThreshold');
+    var irmaaToday = irmaaTodayEl ? (parseFloat(irmaaTodayEl.value) || 0) : 212000;
+
+    // All income fields read straight from the CURRENT inputs (already nominal-$).
+    var params = {
+      year: selectedYear,
+      otherOrdinary: parseFloat(document.getElementById('teOtherOrdinary').value) || 0,
+      tradWithdrawal: parseFloat(document.getElementById('teTradWithdrawal').value) || 0,
+      rothConversion: parseFloat(document.getElementById('teRothConversion').value) || 0,
+      ltcg: parseFloat(document.getElementById('teLtcg').value) || 0,
+      standardDeduction: stdDedEl ? (parseFloat(stdDedEl.value) || 0) : (brkts.stdDed || 0) * factor,
+      ordinaryBrackets: _teBuildOrdinaryBrackets(brkts, factor),
+      ltcg0Ceiling: ceilNominal,
+      ltcg15Ceiling: (brkts.ltcg15Top || 583750) * factor,
+      irmaaThreshold: irmaaToday * factor,
+      niitThreshold: 250000, // FIXED $250k MFJ — never inflated (D2 / FR-021).
+      niitRate: 0.038,
+    };
+
+    var out = estimateYearTax(params);
+
+    // ---- Signals row: room-left headline (US1) + marginal/IRMAA/NIIT chips (US4). ----
+    _tePaintSignals(signalsEl, out);
+
+    // ---- US2 — Ordinary income tax card. ----
+    ordCardEl.innerHTML =
+      '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px">' +
+        '<div style="font-weight:700;font-size:0.92em;color:var(--accent);margin-bottom:8px">' + t('te.card.ordinary') +
+          ' <span class="info-tip" data-i18n-tip="te.tip.ordinary" data-tip="' + _teTipAttr('te.tip.ordinary') + '">ⓘ</span>' +
+        '</div>' +
+        _teRenderSteps(out.steps, 'te.step.ord') +
+      '</div>';
+
+    // ---- US2 — LTCG tax card. ----
+    ltcgCardEl.innerHTML =
+      '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px">' +
+        '<div style="font-weight:700;font-size:0.92em;color:var(--accent2);margin-bottom:8px">' + t('te.card.ltcg') +
+          ' <span class="info-tip" data-i18n-tip="te.tip.ltcgCard" data-tip="' + _teTipAttr('te.tip.ltcgCard') + '">ⓘ</span>' +
+        '</div>' +
+        _teRenderSteps(out.steps, 'te.step.ltcg') +
+      '</div>';
+  } catch (_e) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[yearTaxEstimator] _teComputeAndPaint threw — showing neutral state.',
+        _e && _e.stack ? _e.stack : _e);
+    }
+    try {
+      signalsEl.innerHTML = '<div style="padding:8px 12px;color:var(--text-dim);font-size:0.85em">' + t('te.zeroState') + '</div>';
+      ordCardEl.innerHTML = '';
+      ltcgCardEl.innerHTML = '';
+    } catch (_e2) { /* DOM gone — give up silently */ }
+  }
+}
+
+/**
+ * Paint the signals row: the dominant room-left-at-0% headline plus the marginal
+ * next-dollar chips (ordinary + LTCG, T023), the IRMAA Tier 1 chip (T024, conditional),
+ * and the NIIT 3.8% chip (T025, conditional). Pure DOM paint from the frozen output.
+ */
+function _tePaintSignals(signalsEl, out) {
+  var roomLeft = out.signals.roomLeftAt0;
+  // Dominant headline (US1): how much more LTCG can be realized at 0%. This now
+  // correctly accounts for the standard deduction sheltering gains, so it shrinks
+  // as EITHER gains OR ordinary income rise.
+  var html =
+    '<div style="display:inline-block;padding:12px 18px;margin-right:10px;background:rgba(100,220,100,0.08);border:1px solid var(--success);border-radius:10px;vertical-align:top">' +
+      '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.roomLeft.label') +
+        ' <span class="info-tip" data-i18n-tip="te.roomLeft.tip" data-tip="' + _teTipAttr('te.roomLeft.tip') + '">ⓘ</span>' +
+      '</div>' +
+      '<div style="font-weight:800;font-size:1.6em;color:var(--success);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
+    '</div>';
+
+  // Companion headline — same 0% pool, viewed from the INCOME side: how much more
+  // ordinary income (Traditional / Roth conversion / taxable SS + interest) can be
+  // added before gains start being taxed. Numerically identical to the gains room
+  // (every added dollar of EITHER consumes one dollar of the pool), shown so the
+  // user sees both framings. Reuses roomLeft (do NOT recompute — they are equal).
+  html +=
+    '<div style="display:inline-block;padding:12px 18px;background:rgba(108,99,255,0.08);border:1px solid var(--accent);border-radius:10px;vertical-align:top">' +
+      '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.headroom.label') +
+        ' <span class="info-tip" data-i18n-tip="te.headroom.tip" data-tip="' + _teTipAttr('te.headroom.tip') + '">ⓘ</span>' +
+      '</div>' +
+      '<div style="font-weight:800;font-size:1.6em;color:var(--accent);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
+    '</div>';
+
+  // Secondary chips row (marginal + IRMAA + NIIT).
+  var chips = '';
+  // T023 — marginal next-dollar (ordinary).
+  chips +=
+    '<span style="display:inline-block;padding:7px 12px;background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.4);border-radius:8px;font-size:0.82em">' +
+      '<span style="color:var(--text-dim)">' + t('te.marginal.ordinary') + '</span> ' +
+      '<strong style="color:var(--text)">' + _teFmtRate(out.marginal.nextOrdinaryRate * 100) + '%</strong>' +
+      ' <span class="info-tip" data-i18n-tip="te.marginal.tip" data-tip="' + _teTipAttr('te.marginal.tip') + '">ⓘ</span>' +
+    '</span>';
+  // T023 — marginal next-dollar (LTCG).
+  chips +=
+    '<span style="display:inline-block;padding:7px 12px;background:rgba(100,220,255,0.08);border:1px solid rgba(100,220,255,0.4);border-radius:8px;font-size:0.82em">' +
+      '<span style="color:var(--text-dim)">' + t('te.marginal.ltcg') + '</span> ' +
+      '<strong style="color:var(--text)">' + _teFmtRate(out.marginal.nextLtcgRate * 100) + '%</strong>' +
+      ' <span class="info-tip" data-i18n-tip="te.marginal.tip" data-tip="' + _teTipAttr('te.marginal.tip') + '">ⓘ</span>' +
+    '</span>';
+  // T024 — IRMAA Tier 1 chip (only when crossed).
+  if (out.signals.irmaa && out.signals.irmaa.crossed) {
+    chips +=
+      '<span style="display:inline-block;padding:7px 12px;background:rgba(255,180,90,0.1);border:1px solid var(--warning);border-radius:8px;font-size:0.82em;color:var(--warning)">' +
+        '⚠ ' + t('te.irmaa.chip') +
+        ' <span class="info-tip" data-i18n-tip="te.irmaa.tip" data-tip="' + _teTipAttr('te.irmaa.tip') + '">ⓘ</span>' +
+      '</span>';
+  }
+  // T025 — NIIT 3.8% chip + amount (only when crossed).
+  if (out.signals.niit && out.signals.niit.crossed) {
+    chips +=
+      '<span style="display:inline-block;padding:7px 12px;background:rgba(255,107,107,0.1);border:1px solid var(--danger);border-radius:8px;font-size:0.82em;color:var(--danger)">' +
+        '⚠ ' + t('te.niit.chip', _teFmt(out.signals.niit.amount)) +
+        ' <span class="info-tip" data-i18n-tip="te.niit.tip" data-tip="' + _teTipAttr('te.niit.tip') + '">ⓘ</span>' +
+      '</span>';
+  }
+
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center">' + chips + '</div>';
+  signalsEl.innerHTML = html;
+}
+
+/**
+ * EDIT path (T018). Recompute the estimator from the CURRENT field values and repaint.
+ * Wired to each editable input's oninput. Never re-pulls the projection, never re-seeds,
+ * never writes shared / localStorage state.
+ */
+function _teRecomputeFromFields() {
+  _teComputeAndPaint();
+}
+
+/**
+ * RESET button (T019). Re-run the auto-pull adapter for the currently selected year,
+ * re-seed every input, and repaint — discarding any local edits.
+ */
+function _teResetToProjection() {
+  if (typeof renderYearTaxEstimator === 'function' && typeof getInputs === 'function') {
+    renderYearTaxEstimator(getInputs());
+  }
+}
+
+/**
+ * YEAR-PICKER change (T020). Re-pull + re-inflate + re-seed + repaint for the newly
+ * selected year. Same path as Reset (re-pull), just triggered by the picker.
+ */
+function _teYearChanged() {
+  _teResetToProjection();
+}
+
+/** Resolve a tooltip's text for the static data-tip attribute (escaped for an HTML attr). */
+function _teTipAttr(key) {
+  var s = t(key);
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Render the bilingual show-your-work lines (T016) for steps whose key starts with
+ * `prefix`. Resolves each {key,args} descriptor via t(key, ...args). Dollar args are
+ * formatted with thousands separators; rate-percent args (already ×100) pass through.
+ */
+function _teRenderSteps(steps, prefix) {
+  if (!Array.isArray(steps)) return '';
+  var out = '';
+  for (var i = 0; i < steps.length; i += 1) {
+    var s = steps[i];
+    if (!s || s.key.indexOf(prefix) !== 0) continue;
+    var args;
+    // ordLayer args: [lower, upper, dollars, ratePct, layerTax] — ratePct is index 3.
+    // ltcgLayer args: [ratePct, dollars, layerTax] — ratePct is index 0.
+    if (s.key === 'te.step.ordLayer') {
+      args = [_teFmt(s.args[0]), _teFmt(s.args[1]), _teFmt(s.args[2]), _teFmtRate(s.args[3]), _teFmt(s.args[4])];
+    } else if (s.key === 'te.step.ltcgLayer') {
+      args = [_teFmtRate(s.args[0]), _teFmt(s.args[1]), _teFmt(s.args[2])];
+    } else {
+      args = (s.args || []).map(_teFmt);
+    }
+    out += '<div style="font-size:0.8em;color:var(--text-dim);line-height:1.7">' + t.apply(null, [s.key].concat(args)) + '</div>';
+  }
+  return out;
+}
+
+/** Format a rate-percent value (already ×100 by the module) trimming trailing zeros. */
+function _teFmtRate(v) {
+  var n = Number(v);
+  if (!Number.isFinite(n)) n = 0;
+  return (Math.round(n * 100) / 100).toString();
+}
+
 function renderRothLadder(inp) {
   const summaryBox = document.getElementById('rothLadderSummary');
   const canvas = document.getElementById('rothLadderChart');
@@ -15203,6 +15823,15 @@ function renderRothLadder(inp) {
       _renderBookValueCaption(_wrap, inp.inflationRate);
     }
   } catch (_e) { /* caption is decorative */ }
+
+  // Feature 034 — refresh the Year Tax Estimator block on every Withdrawal-tab
+  // render / input change. Guarded by typeof so the absence of the block (or the
+  // module) is a silent no-op. Strictly read + local paint — NO write-back (FR-002).
+  try {
+    if (typeof renderYearTaxEstimator === 'function') renderYearTaxEstimator(inp);
+  } catch (_teErr) {
+    if (typeof console !== 'undefined' && console.error) console.error('[yearTaxEstimator] hook threw:', _teErr);
+  }
 
   } catch (_renderRothLadderErr) {
     // Hot-fix 022 (Patch C): convert silent hang to visible fallback.
