@@ -128,15 +128,17 @@ test('G2: LTCG stacks on ordinary taxable; layer dollars sum to total gain', () 
 // ===========================================================================
 // Guarantee 3 — Standard-deduction flooring
 // ===========================================================================
-test('G3: deduction larger than gross floors ordinaryTaxable to 0 (no negative spill)', () => {
+test('G3: deduction larger than gross floors ordinaryTaxable to 0, and the UNUSED deduction shelters gains', () => {
   const inp = makeInput({ tradWithdrawal: 10000, standardDeduction: 29200, ltcg: 50000 });
   const out = estimateYearTax(inp);
   assert.strictEqual(out.ordinary.taxable, 0);
   assert.strictEqual(out.ordinary.tax, 0);
-  // 0% room must not exceed ltcg0Ceiling − 0 (no extra credit for the unused deduction).
-  assert.ok(out.signals.roomLeftAt0 <= LTCG0_CEILING + EPS);
-  // With ordinaryTaxable=0 and ltcg=50k < ceiling: room = 94050 − 0 − 50000.
-  assert.ok(approx(out.signals.roomLeftAt0, LTCG0_CEILING - 50000));
+  // gross 10k < stdDed 29.2k → 19.2k of deduction is unused and shelters gain.
+  const unused = 29200 - 10000; // 19200
+  assert.ok(approx(out.ltcg.shelteredByDeduction, unused));
+  assert.ok(approx(out.ltcg.taxableGain, 50000 - unused)); // 30800 taxable gain
+  // Room is measured against (ceiling + standardDeduction), not the bare ceiling.
+  assert.ok(approx(out.signals.roomLeftAt0, LTCG0_CEILING + 29200 - 10000 - 50000)); // 63250
 });
 
 // ===========================================================================
@@ -374,6 +376,86 @@ test('ltcg15Ceiling = Infinity disables the 20% layer', () => {
   const out = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 700000, ltcg15Ceiling: Infinity }));
   const byRate = Object.fromEntries(out.ltcg.layers.map(l => [l.rate, l.dollars]));
   assert.ok(!(0.2 in byRate), 'no 20% layer when ceiling is Infinity');
+});
+
+// ===========================================================================
+// Standard-deduction shelter on LTCG (tax-correctness fix).
+//   The unused portion of the standard deduction (after it offsets ordinary
+//   income) shelters capital gains: only the deduction-adjusted gain enters the
+//   0%/15%/20% schedule, and the 0% room is measured against
+//   (ltcg0Ceiling + standardDeduction), not the ceiling alone.
+//     shelteredByDeduction = min(ltcg, max(0, stdDed − gross))
+//     taxableGain          = ltcg − shelteredByDeduction
+//     roomLeftAt0          = max(0, ltcg0Ceiling + stdDed − gross − ltcg)
+// ===========================================================================
+test('SD: famous MFJ tax-free figure — zero ordinary income → room = ceiling + stdDed', () => {
+  // A couple with no other income can realize ltcg0Ceiling + stdDed of gain at
+  // $0 tax (2024 MFJ: 94,050 + 29,200 = 123,250). The bug reported only 94,050.
+  const out = estimateYearTax(makeInput({ otherOrdinary: 0, ltcg: 0 }));
+  assert.ok(approx(out.signals.roomLeftAt0, LTCG0_CEILING + STD_DED));
+});
+
+test('SD: unused deduction shelters gains → taxableGain shrinks, layers sum to taxableGain', () => {
+  // gross 0, ltcg 50k, stdDed 29.2k → 29.2k sheltered, 20.8k taxable gain, all 0%.
+  const out = estimateYearTax(makeInput({ ltcg: 50000 }));
+  assert.ok(approx(out.ltcg.shelteredByDeduction, STD_DED));
+  assert.ok(approx(out.ltcg.taxableGain, 50000 - STD_DED)); // 20800
+  assert.strictEqual(out.ltcg.tax, 0);
+  const layerDollars = out.ltcg.layers.reduce((s, l) => s + l.dollars, 0);
+  assert.ok(approx(layerDollars, out.ltcg.taxableGain), 'layers sum to the TAXABLE gain');
+});
+
+test('SD: deduction shelter lowers the 15% tax vs naively stacking the full gain', () => {
+  // gross 18k < stdDed 29.2k → unused 11.2k shelters gain. Large gain so part is 15%.
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 18000, ltcg: 200000 }));
+  const unused = STD_DED - 18000; // 11200
+  const taxableGain = 200000 - unused; // 188800
+  assert.ok(approx(out.ltcg.taxableGain, taxableGain));
+  const gainAt0 = Math.min(taxableGain, LTCG0_CEILING - 0); // ordinaryTaxable 0
+  const gainAt15 = taxableGain - gainAt0;
+  assert.ok(approx(out.ltcg.tax, gainAt15 * 0.15));
+});
+
+test('SD: adding ordinary income BELOW the deduction still shrinks the 0% room (the bug)', () => {
+  // The reported symptom: room must respond to ordinary income even when gross
+  // stays under the standard deduction (it un-shelters gain dollar-for-dollar).
+  const ltcg = 60000;
+  const r0 = estimateYearTax(makeInput({ otherOrdinary: 0, ltcg })).signals.roomLeftAt0;
+  const r1 = estimateYearTax(makeInput({ otherOrdinary: 10000, ltcg })).signals.roomLeftAt0;
+  const r2 = estimateYearTax(makeInput({ otherOrdinary: 20000, ltcg })).signals.roomLeftAt0;
+  assert.ok(approx(r0 - r1, 10000), `room should drop $10k per $10k ordinary; got ${r0 - r1}`);
+  assert.ok(approx(r1 - r2, 10000), `room should drop $10k per $10k ordinary; got ${r1 - r2}`);
+});
+
+test('SD: deduction fully used by ordinary (gross ≥ stdDed) → no shelter, full gain taxable', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  assert.strictEqual(out.ltcg.shelteredByDeduction, 0);
+  assert.ok(approx(out.ltcg.taxableGain, 40000));
+  // room = max(0, ceiling + stdDed − gross − ltcg) collapses to ceiling − ordTaxable − ltcg here.
+  assert.ok(approx(out.signals.roomLeftAt0, Math.max(0, LTCG0_CEILING + STD_DED - 60000 - 40000)));
+});
+
+test('SD: te.step.ltcgPool summarizes pool − realized = room (args [gainPool, ltcg, roomLeftAt0])', () => {
+  // gross 0, ltcg 50k → pool = ceiling + stdDed = 123250; room = 73250.
+  const out = estimateYearTax(makeInput({ ltcg: 50000 }));
+  const pool = out.steps.find(s => s.key === 'te.step.ltcgPool');
+  assert.ok(pool, 'pool summary step always emitted');
+  assert.ok(approx(pool.args[0], LTCG0_CEILING + STD_DED)); // 123250 total realizable at 0%
+  assert.ok(approx(pool.args[1], 50000));                   // already realized
+  assert.ok(approx(pool.args[2], out.signals.roomLeftAt0)); // room left
+  // Identity: pool − realized = room.
+  assert.ok(approx(pool.args[0] - pool.args[1], pool.args[2]));
+});
+
+test('SD: te.step.ltcgShelter emitted only when gains are sheltered; args = [sheltered, taxableGain]', () => {
+  const sheltered = estimateYearTax(makeInput({ tradWithdrawal: 10000, ltcg: 50000 }));
+  const step = sheltered.steps.find(s => s.key === 'te.step.ltcgShelter');
+  assert.ok(step, 'shelter step present when unused deduction shelters gain');
+  assert.ok(approx(step.args[0], STD_DED - 10000));         // sheltered
+  assert.ok(approx(step.args[1], 50000 - (STD_DED - 10000))); // taxable gain
+
+  const notSheltered = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  assert.ok(!notSheltered.steps.some(s => s.key === 'te.step.ltcgShelter'));
 });
 
 // ===========================================================================

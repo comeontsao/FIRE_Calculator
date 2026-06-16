@@ -1403,6 +1403,7 @@ marginal / IRMAA / NIIT chip + tooltip keys land in a later wave (T023-T027).
 | Key | EN | zh-TW |
 |---|---|---|
 | `te.title` | 🔬 Year Tax Estimator | 🔬 單年稅務估算器 |
+| `te.tip.method` | How your capital-gains rate is decided: your ordinary income (after the standard deduction) fills the brackets first, then long-term gains stack on top. The 0%/15%/20% rate depends on where the TOP of that stack lands versus the 0% ceiling — a taxable-income threshold, not a gains-only one. Any standard deduction your ordinary income doesn't use also shelters gains, so with low ordinary income you can realize the 0% ceiling PLUS the unused deduction at $0 tax. Each extra $1 of ordinary income or gains pushes $1 of gain toward the next rate. | 你的資本利得稅率如何決定：你的一般收入（扣除標準扣除額後）先填滿級距，長期資本利得再堆疊在其上。0%/15%/20% 的稅率取決於這個堆疊的「頂端」落在 0% 上限的哪個位置 — 這是「應稅所得」門檻，而非僅看利得本身。你一般收入沒用完的標準扣除額也會抵減利得，因此在一般收入很低時，你可以實現「0% 上限加上未用完的扣除額」的利得而完全免稅。每增加 1 美元的一般收入或利得，都會把 1 美元的利得往下一個稅率推。 |
 | `te.caption` | Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection. | 單一年度的本地假設情境。此處的編輯僅為私人草稿 — 不會改變 Lifecycle 圖表、終生稅額或您的計畫。重設會還原自動帶入的預測值。 |
 | `te.yearLabel` | Tax year | 稅務年度 |
 | `te.ageLabel` | age {0} | {0} 歲 |
@@ -1415,17 +1416,21 @@ marginal / IRMAA / NIIT chip + tooltip keys land in a later wave (T023-T027).
 | `te.input.ltcg0Ceiling` | 0% capital-gains ceiling (MFJ) | 0% 資本利得上限（MFJ） |
 | `te.zeroState` | No projection available for this year yet — pick a retirement year, or enter values above to estimate. | 此年度尚無可用的預測 — 請選擇退休年份，或在上方輸入數值以估算。 |
 | `te.roomLeft.label` | Room left at 0% capital gains | 0% 資本利得剩餘空間 |
-| `te.roomLeft.tip` | How much more in long-term gains you can still sell this year at 0% federal tax. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) shrinks this room. | 今年你還能以 0% 聯邦稅率賣出多少長期資本利得。增加一般收入（更大的 Traditional 提領或 Roth 轉換）會縮小此空間。 |
+| `te.roomLeft.tip` | How much more in long-term gains you can still sell this year at 0% federal tax. The standard deduction shelters gains first, so this room is the 0% ceiling PLUS any deduction your ordinary income did not use. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) OR more gains shrinks it dollar-for-dollar. | 今年你還能以 0% 聯邦稅率賣出多少長期資本利得。標準扣除額會先抵減資本利得，因此這個空間是 0% 上限「加上」你一般收入未用完的扣除額。增加一般收入（更大的 Traditional 提領或 Roth 轉換）或更多利得都會逐元縮小此空間。 |
 | `te.roomLeft.value` | ${0} | ${0} |
+| `te.headroom.label` | Ordinary-income headroom | 一般收入餘裕 |
+| `te.headroom.tip` | How much more ordinary income (Traditional withdrawal, Roth conversion, or taxable SS + interest) you can add this year before your long-term gains start being taxed at 15%. It draws from the SAME 0% pool as the capital-gains room — adding a dollar of EITHER gains or ordinary income consumes a dollar of room — so the two figures match by design. | 今年你還能再增加多少一般收入（Traditional 提領、Roth 轉換，或應稅的社安 + 利息），長期資本利得才會開始以 15% 課稅。它與資本利得空間使用「同一個」0% 池 — 增加 1 美元的利得或一般收入都會消耗 1 美元的空間 — 因此這兩個數字依設計會相同。 |
 | `te.card.ordinary` | Ordinary income tax | 一般所得稅 |
 | `te.card.ltcg` | Long-term capital gains tax | 長期資本利得稅 |
 | `te.step.ordGross` | Ordinary income: ${0} other + ${1} Traditional + ${2} Roth conversion = ${3} gross | 一般收入：${0} 其他 + ${1} Traditional + ${2} Roth 轉換 = ${3} 總額 |
 | `te.step.ordMinusStd` | ${0} gross − ${1} standard deduction = ${2} taxable | ${0} 總額 − ${1} 標準扣除額 = ${2} 應稅額 |
 | `te.step.ordLayer` | ${0}–${1}: ${2} taxed at {3}% = ${4} | ${0}–${1}：${2} 以 {3}% 課稅 = ${4} |
 | `te.step.ordTotal` | Ordinary tax owed: ${0} | 一般所得應繳稅：${0} |
+| `te.step.ltcgShelter` | Your standard deduction shelters ${0} of these gains (your ordinary income didn't use all of it), so only ${1} of gain is taxable. | 你的標準扣除額抵減了這些利得中的 ${0}（你的一般收入沒有用完扣除額），因此只有 ${1} 的利得需要課稅。 |
 | `te.step.ltcgStack` | Gains stack on top of ${0} ordinary taxable income; the 0% band tops out at ${1}, leaving ${2} of 0% room. | 資本利得堆疊在 ${0} 一般應稅所得之上；0% 級距上限為 ${1}，剩餘 ${2} 的 0% 空間。 |
 | `te.step.ltcgLayer` | {0}% rate: ${1} of gain = ${2} | {0}% 稅率：${1} 的利得 = ${2} |
 | `te.step.ltcgTotal` | LTCG tax owed: ${0} | LTCG 應繳稅：${0} |
+| `te.step.ltcgPool` | Up to ${0} of long-term gains are taxed at 0% this year (the 0% ceiling plus any unused standard deduction). You've realized ${1}, leaving ${2} of 0% room. | 今年最多有 ${0} 的長期資本利得以 0% 課稅（0% 上限加上未用完的標準扣除額）。你已實現 ${1}，剩餘 ${2} 的 0% 空間。 |
 
 ### Wave 2b keys (US3 interaction + US4 signal chips & tooltips)
 
@@ -1446,8 +1451,8 @@ Edit-mode helper text (T022), marginal/IRMAA/NIIT chips + tooltips (T023-T025), 
 | `te.tip.tradWithdrawal` | Money pulled from a pre-tax Traditional 401k/IRA. Fully taxed as ordinary income — it fills the brackets first and shrinks your 0% capital-gains room. | 從稅前 Traditional 401k/IRA 提領的金額。以一般所得全額課稅 — 會優先填滿級距並縮小你的 0% 資本利得空間。 |
 | `te.tip.rothConversion` | Moving pre-tax money into a Roth. Counts as ordinary income the year you convert — like a Traditional withdrawal, it consumes bracket space and 0% capital-gains room. | 將稅前資金轉入 Roth。轉換當年計為一般收入 — 與 Traditional 提領一樣，會佔用級距空間與 0% 資本利得空間。 |
 | `te.tip.ltcg` | The gain (sale price minus cost basis) on long-held investments you sell this year. Taxed at 0%/15%/20% depending on where it stacks on top of your ordinary taxable income. | 你今年賣出長期持有投資的利得（售價減成本基礎）。依其堆疊在一般應稅所得之上的位置，以 0%/15%/20% 課稅。 |
-| `te.tip.standardDeduction` | Subtracted from gross ordinary income before tax. Auto-seeded inflated to the selected year; edit to model a different deduction. | 在課稅前從一般收入總額中扣除。自動帶入並通膨調整至所選年份；可編輯以模擬不同扣除額。 |
-| `te.tip.ltcg0Ceiling` | The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Entered in today's dollars and inflated to the selected year. | 0% 長期資本利得級距的上限（應稅所得，MFJ）。低於此線的利得聯邦免稅；高於則以 15% 課稅。以今日美元輸入並通膨調整至所選年份。 |
+| `te.tip.standardDeduction` | Subtracted from gross ordinary income before tax. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different deduction. | 在課稅前從一般收入總額中扣除。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同扣除額。 |
+| `te.tip.ltcg0Ceiling` | The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different ceiling. | 0% 長期資本利得級距的上限（應稅所得，MFJ）。低於此線的利得聯邦免稅；高於則以 15% 課稅。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同上限。 |
 | `te.tip.ordinary` | Ordinary income (wages, Traditional withdrawals, Roth conversions, taxable SS) taxed at the marginal 10–37% brackets after the standard deduction. | 一般收入（薪資、Traditional 提領、Roth 轉換、應稅 SS）在扣除標準扣除額後，以 10–37% 的邊際級距課稅。 |
 | `te.tip.ltcgCard` | Long-term capital gains stack ON TOP of your ordinary taxable income and are taxed at 0% / 15% / 20% depending on where the stack lands. | 長期資本利得堆疊在你的一般應稅所得之上，依堆疊位置以 0% / 15% / 20% 課稅。 |
 

@@ -40,9 +40,11 @@ sentences). Example sequence (keys are illustrative; final keys live in the i18n
 { key:'te.step.ordMinusStd', args:[gross, standardDeduction, taxable] }
 { key:'te.step.ordLayer',   args:[lower, upper, dollarsInLayer, ratePct, layerTax] }   // repeated
 { key:'te.step.ordTotal',   args:[ordinaryTax] }
+{ key:'te.step.ltcgShelter', args:[shelteredByDeduction, taxableGain] }            // only when sheltered > 0
 { key:'te.step.ltcgStack',  args:[taxable, ltcg0Ceiling, roomLeftBeforeGain] }
 { key:'te.step.ltcgLayer',  args:[ratePct, dollars, layerTax] }                        // repeated
 { key:'te.step.ltcgTotal',  args:[ltcgTax] }
+{ key:'te.step.ltcgPool',   args:[gainPool, ltcg, roomLeftAt0] }   // gainPool = max(0, ltcg0Ceiling + stdDed − gross)
 ```
 
 ---
@@ -51,16 +53,21 @@ sentences). Example sequence (keys are illustrative; final keys live in the i18n
 
 1. **Ordinary marginal arithmetic** — each dollar taxed at its bracket's rate; `ordinary.tax`
    equals the sum of emitted layer taxes.
-2. **LTCG stacking** — ordinary taxable income fills the bottom of the LTCG schedule first;
-   only `max(0, ltcg0Ceiling − ordinaryTaxable)` of gain is taxed at 0%; the next slice at 15%
-   up to `ltcg15Ceiling`; the remainder at 20%. `gainAt0+gainAt15+gainAt20 === ltcg`.
-3. **Standard-deduction flooring** — `ordinaryTaxable = max(0, gross − stdDed)`; a deduction
-   larger than gross yields `ordinaryTaxable = 0` and does NOT increase the 0% LTCG room beyond
-   the `ltcg0Ceiling − 0` already implied.
-4. **Room-left** — `signals.roomLeftAt0 === max(0, ltcg0Ceiling − ordinaryTaxable − ltcg)`.
+2. **LTCG stacking** — the standard deduction offsets ordinary income first; any UNUSED
+   portion (`max(0, stdDed − gross)`) shelters gains. Only the deduction-adjusted gain
+   (`taxableGain = ltcg − min(ltcg, max(0, stdDed − gross))`) enters the schedule: it stacks on
+   ordinary taxable income, with `max(0, ltcg0Ceiling − ordinaryTaxable)` at 0%, the next slice
+   at 15% up to `ltcg15Ceiling`, the remainder at 20%. `gainAt0+gainAt15+gainAt20 === taxableGain`.
+   Output exposes `ltcg.shelteredByDeduction` and `ltcg.taxableGain`.
+3. **Standard-deduction shelter** — `ordinaryTaxable = max(0, gross − stdDed)`. A deduction
+   larger than gross yields `ordinaryTaxable = 0` AND shelters gains with the leftover, so the
+   0% room exceeds the bare ceiling (e.g. zero ordinary income ⇒ room `= ltcg0Ceiling + stdDed`,
+   the well-known MFJ tax-free-gains figure).
+4. **Room-left** — `signals.roomLeftAt0 === max(0, ltcg0Ceiling + stdDed − gross − ltcg)`. It
+   shrinks dollar-for-dollar as EITHER gains OR ordinary income rise.
 5. **Marginal** — `marginal.nextLtcgRate === 0` iff `roomLeftAt0 > 0`, else `0.15`
-   (or `0.20` when `ordinaryTaxable + ltcg >= ltcg15Ceiling`); `nextOrdinaryRate` is the rate
-   of the band containing `ordinaryTaxable`.
+   (or `0.20` when `ordinaryTaxable + taxableGain >= ltcg15Ceiling`); `nextOrdinaryRate` is the
+   rate of the band containing `ordinaryTaxable`.
 6. **IRMAA** — `signals.irmaa.crossed === (irmaaThreshold > 0 && magi > irmaaThreshold)`.
 7. **NIIT** — `crossed === (magi > niitThreshold)`; `amount === niitRate * min(ltcg, magi − niitThreshold)`
    when crossed, else 0. `niitThreshold` is whatever the caller passes (fixed $250k) — the
@@ -81,7 +88,9 @@ sentences). Example sequence (keys are illustrative; final keys live in the i18n
 | Ordinary eats all 0% room | ordinaryTaxable ≥ ltcg0Ceiling | `gainAt0 === 0`, full gain at 15%/20%, `roomLeftAt0 === 0` |
 | NIIT trigger | magi > 250k | `niit.crossed === true`, amount = 3.8% of the lesser of gain / excess |
 | IRMAA trigger | magi > irmaaThreshold | `irmaa.crossed === true` |
-| Std-ded flooring | stdDed > gross | `ordinaryTaxable === 0`, `ordinary.tax === 0` |
+| Std-ded flooring | stdDed > gross | `ordinaryTaxable === 0`, `ordinary.tax === 0`, leftover deduction shelters gains |
+| Deduction shelters gains | gross < stdDed, ltcg > 0 | `shelteredByDeduction = min(ltcg, stdDed − gross)`, `taxableGain` reduced, `roomLeftAt0` raised by the unused deduction |
+| Tax-free-gains figure | zero ordinary income | `roomLeftAt0 === ltcg0Ceiling + stdDed` |
 | 20% layer | very large gain above `ltcg15Ceiling` | three LTCG layers; 20% layer dollars > 0 |
 
 ---

@@ -29,7 +29,7 @@
  * Outputs (EstimatorOutput — deeply frozen):
  *   {
  *     ordinary: { gross, standardDeduction, taxable, layers[], tax },
- *     ltcg:     { gain, ordinaryTaxableStacked, layers[], tax },
+ *     ltcg:     { gain, shelteredByDeduction, taxableGain, ordinaryTaxableStacked, layers[], tax },
  *     signals:  { roomLeftAt0, irmaa:{crossed,threshold,magi}, niit:{crossed,threshold,amount} },
  *     marginal: { nextOrdinaryRate, nextLtcgRate },
  *     totalTax, effectiveRate,
@@ -146,12 +146,23 @@ function estimateYearTax(params) {
   const taxable = Math.max(0, gross - standardDeduction);
   const ord = _ordinaryLayers(taxable, ordinaryBrackets);
 
-  // --- LTCG stacking (research D1) ---
+  // --- Standard-deduction shelter on LTCG ---
+  // The standard deduction reduces TOTAL taxable income (ordinary + gains). It
+  // offsets ordinary income first; any portion NOT used by ordinary income then
+  // shelters capital gains (they simply aren't taxable). Only the deduction-
+  // adjusted gain enters the 0%/15%/20% schedule. This is why a MFJ couple with
+  // no other income can realize ltcg0Ceiling + standardDeduction of gain at $0
+  // federal tax (e.g. 2024: $94,050 + $29,200 = $123,250), not just the ceiling.
+  const unusedDeduction = Math.max(0, standardDeduction - gross);
+  const shelteredGain = Math.min(ltcg, unusedDeduction);
+  const taxableGain = ltcg - shelteredGain; // = max(0, ltcg − unusedDeduction)
+
+  // --- LTCG stacking (research D1) — the TAXABLE gain stacks on ordinary taxable. ---
   const zeroRoom = Math.max(0, ltcg0Ceiling - taxable);
-  const gainAt0 = Math.min(ltcg, zeroRoom);
+  const gainAt0 = Math.min(taxableGain, zeroRoom);
   const fifteenRoom = Math.max(0, ltcg15Ceiling - Math.max(taxable, ltcg0Ceiling));
-  const gainAt15 = Math.min(ltcg - gainAt0, fifteenRoom);
-  const gainAt20 = Math.max(0, ltcg - gainAt0 - gainAt15);
+  const gainAt15 = Math.min(taxableGain - gainAt0, fifteenRoom);
+  const gainAt20 = Math.max(0, taxableGain - gainAt0 - gainAt15);
 
   const ltcgLayers = [];
   if (gainAt0 > 0) ltcgLayers.push(Object.freeze({ rate: 0.00, dollars: gainAt0, tax: 0 }));
@@ -160,7 +171,16 @@ function estimateYearTax(params) {
   const ltcgTax = ltcgLayers.reduce((s, l) => s + l.tax, 0);
 
   // --- Signals ---
-  const roomLeftAt0 = Math.max(0, ltcg0Ceiling - taxable - ltcg);
+  // Additional LONG-TERM GAIN that can still be realized this year at 0% federal
+  // tax. Because the unused standard deduction shelters gains, this is measured
+  // against (ceiling + standardDeduction), not the ceiling alone — and it shrinks
+  // dollar-for-dollar as EITHER gains OR ordinary income rise (every added dollar
+  // of either lifts total taxable income toward the ceiling).
+  const roomLeftAt0 = Math.max(0, ltcg0Ceiling + standardDeduction - gross - ltcg);
+  // Total long-term gain realizable at 0% this year given current ordinary income
+  // (the "0% pool"): the ceiling plus whatever standard deduction the ordinary
+  // income doesn't consume. roomLeftAt0 = gainPool − ltcg already realized.
+  const gainPool = Math.max(0, ltcg0Ceiling + standardDeduction - gross);
   const magi = gross + ltcg;
 
   const irmaaCrossed = irmaaThreshold > 0 && magi > irmaaThreshold;
@@ -172,7 +192,7 @@ function estimateYearTax(params) {
   let nextLtcgRate;
   if (roomLeftAt0 > 0) {
     nextLtcgRate = 0;
-  } else if (taxable + ltcg >= ltcg15Ceiling) {
+  } else if (taxable + taxableGain >= ltcg15Ceiling) {
     nextLtcgRate = 0.20;
   } else {
     nextLtcgRate = 0.15;
@@ -193,11 +213,19 @@ function estimateYearTax(params) {
     }));
   }
   steps.push(Object.freeze({ key: 'te.step.ordTotal', args: [ord.tax] }));
+  // Show the deduction sheltering gains whenever ordinary income didn't consume
+  // the whole standard deduction (explains why the taxable gain < the gain you
+  // entered, and why the 0% room is larger than the bare ceiling).
+  if (shelteredGain > 0) {
+    steps.push(Object.freeze({ key: 'te.step.ltcgShelter', args: [shelteredGain, taxableGain] }));
+  }
   steps.push(Object.freeze({ key: 'te.step.ltcgStack', args: [taxable, ltcg0Ceiling, zeroRoom] }));
   for (const l of ltcgLayers) {
     steps.push(Object.freeze({ key: 'te.step.ltcgLayer', args: [l.rate * 100, l.dollars, l.tax] }));
   }
   steps.push(Object.freeze({ key: 'te.step.ltcgTotal', args: [ltcgTax] }));
+  // Bottom-line 0% pool summary: total realizable at 0% − already realized = room left.
+  steps.push(Object.freeze({ key: 'te.step.ltcgPool', args: [gainPool, ltcg, roomLeftAt0] }));
 
   return Object.freeze({
     ordinary: Object.freeze({
@@ -209,6 +237,8 @@ function estimateYearTax(params) {
     }),
     ltcg: Object.freeze({
       gain: ltcg,
+      shelteredByDeduction: shelteredGain,
+      taxableGain: taxableGain,
       ordinaryTaxableStacked: taxable,
       layers: Object.freeze(ltcgLayers),
       tax: ltcgTax,

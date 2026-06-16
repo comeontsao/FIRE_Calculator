@@ -4114,7 +4114,7 @@
        Wave 2a builds the skeleton + auto-pull + room-left headline + breakdown cards;
        a later wave fills #teSignals (marginal/IRMAA/NIIT chips) and the tooltips. -->
   <div class="card span-3 surface--secondary" id="teCard">
-    <div class="card-title"><span data-i18n="te.title">🔬 Year Tax Estimator</span></div>
+    <div class="card-title"><span data-i18n="te.title">🔬 Year Tax Estimator</span> <span class="info-tip" data-i18n-tip="te.tip.method" data-tip="How your capital-gains rate is decided: your ordinary income (after the standard deduction) fills the brackets first, then long-term gains stack on top. The 0%/15%/20% rate depends on where the TOP of that stack lands versus the 0% ceiling — a taxable-income threshold, not a gains-only one. Any standard deduction your ordinary income doesn't use also shelters gains, so with low ordinary income you can realize the 0% ceiling PLUS the unused deduction at $0 tax. Each extra $1 of ordinary income or gains pushes $1 of gain toward the next rate.">ⓘ</span></div>
     <p class="chart-caveat" id="teCaption" data-i18n="te.caption"
        style="margin:0 0 14px 0;padding:8px 12px;background:rgba(108,99,255,0.06);border:1px solid rgba(108,99,255,0.25);border-radius:8px;font-size:0.82em;color:var(--text-dim);line-height:1.5">Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection.</p>
 
@@ -4151,12 +4151,12 @@
         <input type="number" id="teLtcg" value="0" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
       </div>
       <div>
-        <label for="teStdDed" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.standardDeduction">Standard deduction</span> <span class="info-tip" data-i18n-tip="te.tip.standardDeduction" data-tip="Subtracted from gross ordinary income before tax. Auto-seeded inflated to the selected year; edit to model a different deduction.">ⓘ</span></label>
+        <label for="teStdDed" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.standardDeduction">Standard deduction</span><span id="teStdDedYr"></span> <span class="info-tip" data-i18n-tip="te.tip.standardDeduction" data-tip="Subtracted from gross ordinary income before tax. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different deduction.">ⓘ</span></label>
         <input type="number" id="teStdDed" value="30000" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
       </div>
       <div>
         <!-- T008 — NEW input: 0% LTCG ceiling (MFJ 2026 ~$96,700, today's-$; inflated to the year). -->
-        <label for="teLtcg0Ceiling" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.ltcg0Ceiling">0% capital-gains ceiling (MFJ)</span> <span class="info-tip" data-i18n-tip="te.tip.ltcg0Ceiling" data-tip="The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Entered in today's dollars and inflated to the selected year.">ⓘ</span></label>
+        <label for="teLtcg0Ceiling" style="font-size:0.76em;color:var(--text-dim);display:block;margin-bottom:3px"><span data-i18n="te.input.ltcg0Ceiling">0% capital-gains ceiling (MFJ)</span><span id="teLtcg0CeilingYr"></span> <span class="info-tip" data-i18n-tip="te.tip.ltcg0Ceiling" data-tip="The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different ceiling.">ⓘ</span></label>
         <input type="number" id="teLtcg0Ceiling" value="96700" min="0" step="1000" oninput="if (typeof _teRecomputeFromFields === 'function') _teRecomputeFromFields()" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9em">
       </div>
     </div>
@@ -6581,6 +6581,7 @@ const TRANSLATIONS = {
     // ==================== Feature 034 — Year Tax Estimator (RR only) ====================
     // T010 — block chrome + input labels.
     'te.title':                                 '🔬 Year Tax Estimator',
+    'te.tip.method':                            "How your capital-gains rate is decided: your ordinary income (after the standard deduction) fills the brackets first, then long-term gains stack on top. The 0%/15%/20% rate depends on where the TOP of that stack lands versus the 0% ceiling — a taxable-income threshold, not a gains-only one. Any standard deduction your ordinary income doesn't use also shelters gains, so with low ordinary income you can realize the 0% ceiling PLUS the unused deduction at $0 tax. Each extra $1 of ordinary income or gains pushes $1 of gain toward the next rate.",
     'te.caption':                               'Local what-if for a single year. Edits here are a private scratchpad — they do NOT change the Lifecycle chart, lifetime tax, or your plan. Reset restores the auto-pulled projection.',
     'te.yearLabel':                             'Tax year',
     'te.ageLabel':                              'age {0}',
@@ -6594,8 +6595,11 @@ const TRANSLATIONS = {
     'te.zeroState':                             'No projection available for this year yet — pick a retirement year, or enter values above to estimate.',
     // T013 (US1) — room-left headline + tooltip.
     'te.roomLeft.label':                        'Room left at 0% capital gains',
-    'te.roomLeft.tip':                          'How much more in long-term gains you can still sell this year at 0% federal tax. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) shrinks this room.',
+    'te.roomLeft.tip':                          'How much more in long-term gains you can still sell this year at 0% federal tax. The standard deduction shelters gains first, so this room is the 0% ceiling PLUS any deduction your ordinary income did not use. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) OR more gains shrinks it dollar-for-dollar.',
     'te.roomLeft.value':                        '${0}',
+    // Companion headline — the same 0% pool seen from the ordinary-income side.
+    'te.headroom.label':                        'Ordinary-income headroom',
+    'te.headroom.tip':                          'How much more ordinary income (Traditional withdrawal, Roth conversion, or taxable SS + interest) you can add this year before your long-term gains start being taxed at 15%. It draws from the SAME 0% pool as the capital-gains room — adding a dollar of EITHER gains or ordinary income consumes a dollar of room — so the two figures match by design.',
     // T017 (US2) — card headings + show-your-work step templates.
     'te.card.ordinary':                         'Ordinary income tax',
     'te.card.ltcg':                             'Long-term capital gains tax',
@@ -6603,9 +6607,11 @@ const TRANSLATIONS = {
     'te.step.ordMinusStd':                      '${0} gross − ${1} standard deduction = ${2} taxable',
     'te.step.ordLayer':                         '${0}–${1}: ${2} taxed at {3}% = ${4}',
     'te.step.ordTotal':                         'Ordinary tax owed: ${0}',
+    'te.step.ltcgShelter':                      'Your standard deduction shelters ${0} of these gains (your ordinary income didn’t use all of it), so only ${1} of gain is taxable.',
     'te.step.ltcgStack':                        'Gains stack on top of ${0} ordinary taxable income; the 0% band tops out at ${1}, leaving ${2} of 0% room.',
     'te.step.ltcgLayer':                        '{0}% rate: ${1} of gain = ${2}',
     'te.step.ltcgTotal':                        'LTCG tax owed: ${0}',
+    'te.step.ltcgPool':                         'Up to ${0} of long-term gains are taxed at 0% this year (the 0% ceiling plus any unused standard deduction). You’ve realized ${1}, leaving ${2} of 0% room.',
     // T022 (US3) — edit-mode helper text.
     'te.editHelp':                              'Edit any value to explore a what-if — only this estimator updates. Hit “Reset to projection” to restore the auto-pulled numbers.',
     // T023 (US4) — marginal next-dollar chips + shared tooltip.
@@ -6623,8 +6629,8 @@ const TRANSLATIONS = {
     'te.tip.tradWithdrawal':                    'Money pulled from a pre-tax Traditional 401k/IRA. Fully taxed as ordinary income — it fills the brackets first and shrinks your 0% capital-gains room.',
     'te.tip.rothConversion':                    'Moving pre-tax money into a Roth. Counts as ordinary income the year you convert — like a Traditional withdrawal, it consumes bracket space and 0% capital-gains room.',
     'te.tip.ltcg':                              'The gain (sale price minus cost basis) on long-held investments you sell this year. Taxed at 0%/15%/20% depending on where it stacks on top of your ordinary taxable income.',
-    'te.tip.standardDeduction':                 'Subtracted from gross ordinary income before tax. Auto-seeded inflated to the selected year; edit to model a different deduction.',
-    'te.tip.ltcg0Ceiling':                      "The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Entered in today's dollars and inflated to the selected year.",
+    'te.tip.standardDeduction':                 "Subtracted from gross ordinary income before tax. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different deduction.",
+    'te.tip.ltcg0Ceiling':                      "The top of the 0% long-term capital-gains band (taxable income, MFJ). Below it gains are federally tax-free; above it they're taxed at 15%. Shown in the selected year's dollars (auto-seeded inflated to that year); edit to model a different ceiling.",
     'te.tip.ordinary':                          'Ordinary income (wages, Traditional withdrawals, Roth conversions, taxable SS) taxed at the marginal 10–37% brackets after the standard deduction.',
     'te.tip.ltcgCard':                          'Long-term capital gains stack ON TOP of your ordinary taxable income and are taxed at 0% / 15% / 20% depending on where the stack lands.',
   },
@@ -7732,6 +7738,7 @@ const TRANSLATIONS = {
     // ==================== Feature 034 — Year Tax Estimator（僅 RR）====================
     // T010 — 區塊框架 + 輸入欄位標籤。
     'te.title':                                 '🔬 單年稅務估算器',
+    'te.tip.method':                            '你的資本利得稅率如何決定：你的一般收入（扣除標準扣除額後）先填滿級距，長期資本利得再堆疊在其上。0%/15%/20% 的稅率取決於這個堆疊的「頂端」落在 0% 上限的哪個位置 — 這是「應稅所得」門檻，而非僅看利得本身。你一般收入沒用完的標準扣除額也會抵減利得，因此在一般收入很低時，你可以實現「0% 上限加上未用完的扣除額」的利得而完全免稅。每增加 1 美元的一般收入或利得，都會把 1 美元的利得往下一個稅率推。',
     'te.caption':                               '單一年度的本地假設情境。此處的編輯僅為私人草稿 — 不會改變 Lifecycle 圖表、終生稅額或您的計畫。重設會還原自動帶入的預測值。',
     'te.yearLabel':                             '稅務年度',
     'te.ageLabel':                              '{0} 歲',
@@ -7745,8 +7752,11 @@ const TRANSLATIONS = {
     'te.zeroState':                             '此年度尚無可用的預測 — 請選擇退休年份，或在上方輸入數值以估算。',
     // T013（US1）— 0% 級距餘額標題 + 提示。
     'te.roomLeft.label':                        '0% 資本利得剩餘空間',
-    'te.roomLeft.tip':                          '今年你還能以 0% 聯邦稅率賣出多少長期資本利得。增加一般收入（更大的 Traditional 提領或 Roth 轉換）會縮小此空間。',
+    'te.roomLeft.tip':                          '今年你還能以 0% 聯邦稅率賣出多少長期資本利得。標準扣除額會先抵減資本利得，因此這個空間是 0% 上限「加上」你一般收入未用完的扣除額。增加一般收入（更大的 Traditional 提領或 Roth 轉換）或更多利得都會逐元縮小此空間。',
     'te.roomLeft.value':                        '${0}',
+    // 輔助標題 — 相同的 0% 空間，從一般收入的角度來看。
+    'te.headroom.label':                        '一般收入餘裕',
+    'te.headroom.tip':                          '今年你還能再增加多少一般收入（Traditional 提領、Roth 轉換，或應稅的社安 + 利息），長期資本利得才會開始以 15% 課稅。它與資本利得空間使用「同一個」0% 池 — 增加 1 美元的利得或一般收入都會消耗 1 美元的空間 — 因此這兩個數字依設計會相同。',
     // T017（US2）— 卡片標題 + 計算過程範本。
     'te.card.ordinary':                         '一般所得稅',
     'te.card.ltcg':                             '長期資本利得稅',
@@ -7754,9 +7764,11 @@ const TRANSLATIONS = {
     'te.step.ordMinusStd':                      '${0} 總額 − ${1} 標準扣除額 = ${2} 應稅額',
     'te.step.ordLayer':                         '${0}–${1}：${2} 以 {3}% 課稅 = ${4}',
     'te.step.ordTotal':                         '一般所得應繳稅：${0}',
+    'te.step.ltcgShelter':                      '你的標準扣除額抵減了這些利得中的 ${0}（你的一般收入沒有用完扣除額），因此只有 ${1} 的利得需要課稅。',
     'te.step.ltcgStack':                        '資本利得堆疊在 ${0} 一般應稅所得之上；0% 級距上限為 ${1}，剩餘 ${2} 的 0% 空間。',
     'te.step.ltcgLayer':                        '{0}% 稅率：${1} 的利得 = ${2}',
     'te.step.ltcgTotal':                        'LTCG 應繳稅：${0}',
+    'te.step.ltcgPool':                         '今年最多有 ${0} 的長期資本利得以 0% 課稅（0% 上限加上未用完的標準扣除額）。你已實現 ${1}，剩餘 ${2} 的 0% 空間。',
     // T022（US3）— 編輯模式說明文字。
     'te.editHelp':                              '編輯任何數值以探索假設情境 — 只有此估算器會更新。點擊「重設為預測值」即可還原自動帶入的數字。',
     // T023（US4）— 邊際下一元稅率標籤 + 共用提示。
@@ -7774,8 +7786,8 @@ const TRANSLATIONS = {
     'te.tip.tradWithdrawal':                    '從稅前 Traditional 401k/IRA 提領的金額。以一般所得全額課稅 — 會優先填滿級距並縮小你的 0% 資本利得空間。',
     'te.tip.rothConversion':                    '將稅前資金轉入 Roth。轉換當年計為一般收入 — 與 Traditional 提領一樣，會佔用級距空間與 0% 資本利得空間。',
     'te.tip.ltcg':                              '你今年賣出長期持有投資的利得（售價減成本基礎）。依其堆疊在一般應稅所得之上的位置，以 0%/15%/20% 課稅。',
-    'te.tip.standardDeduction':                 '在課稅前從一般收入總額中扣除。自動帶入並通膨調整至所選年份；可編輯以模擬不同扣除額。',
-    'te.tip.ltcg0Ceiling':                      '0% 長期資本利得級距的上限（應稅所得，MFJ）。低於此線的利得聯邦免稅；高於則以 15% 課稅。以今日美元輸入並通膨調整至所選年份。',
+    'te.tip.standardDeduction':                 '在課稅前從一般收入總額中扣除。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同扣除額。',
+    'te.tip.ltcg0Ceiling':                      '0% 長期資本利得級距的上限（應稅所得，MFJ）。低於此線的利得聯邦免稅；高於則以 15% 課稅。以所選年份的美元顯示（自動帶入並通膨調整至該年份）；可編輯以模擬不同上限。',
     'te.tip.ordinary':                          '一般收入（薪資、Traditional 提領、Roth 轉換、應稅 SS）在扣除標準扣除額後，以 10–37% 的邊際級距課稅。',
     'te.tip.ltcgCard':                          '長期資本利得堆疊在你的一般應稅所得之上，依堆疊位置以 0% / 15% / 20% 課稅。',
   }
@@ -15103,12 +15115,15 @@ function renderYearTaxEstimator(inp) {
     var seedRoth = row ? (row.syntheticConversion || 0) * factor : 0;
     var seedLtcg = row ? (row.wStocks || 0) * stockGainPct * factor : 0;
 
-    // Seed the standard deduction inflated to the selected year (today's-$ → nominal).
-    // The 0% LTCG ceiling input stays in today's-$ and is inflated inside
-    // _teComputeAndPaint, so it is NOT re-seeded here (user's choice persists).
+    // Seed BOTH inflation-indexed thresholds to the SELECTED YEAR's nominal dollars
+    // (today's-$ → nominal). Both are then used AS-IS by _teComputeAndPaint — what you
+    // see in the box is the value for that year. Editing models a different year value;
+    // changing the year / Reset re-seeds to that year's projected threshold.
     var brkts = getTaxBrackets(true);
     var stdDedEl = document.getElementById('teStdDed');
+    var ceilEl = document.getElementById('teLtcg0Ceiling');
     var seedStdDed = (brkts.stdDed || 0) * factor;
+    var seedCeil = 96700 * factor; // today's MFJ 0% LTCG ceiling base, inflated to the year
 
     // Write seeds into the editable fields so the user sees auto-pulled nominal values.
     // This is the ONLY place fields are written — the edit path never re-seeds (FR-004).
@@ -15117,8 +15132,14 @@ function renderYearTaxEstimator(inp) {
     document.getElementById('teRothConversion').value = String(Math.round(seedRoth));
     document.getElementById('teLtcg').value = String(Math.round(seedLtcg));
     if (stdDedEl) stdDedEl.value = String(Math.round(seedStdDed));
-    // The 0% LTCG ceiling input holds today's-$ and is inflated inside _teComputeAndPaint;
-    // it is NOT re-seeded so the user's chosen ceiling persists across years/edits.
+    if (ceilEl) ceilEl.value = String(Math.round(seedCeil));
+
+    // Year-stamp the two indexed-threshold labels so it's unambiguous the values
+    // shown are in the SELECTED YEAR's dollars (e.g. "Standard deduction (2036)").
+    var stdYrEl = document.getElementById('teStdDedYr');
+    if (stdYrEl) stdYrEl.textContent = ' (' + selectedYear + ')';
+    var ceilYrEl = document.getElementById('teLtcg0CeilingYr');
+    if (ceilYrEl) ceilYrEl.textContent = ' (' + selectedYear + ')';
 
     // ---- Compute + paint from the (just-seeded) current field values. ----
     _teComputeAndPaint();
@@ -15166,7 +15187,10 @@ function _teComputeAndPaint() {
 
     var brkts = getTaxBrackets(true);
     var ceilEl = document.getElementById('teLtcg0Ceiling');
-    var ceilToday = ceilEl ? (parseFloat(ceilEl.value) || 0) : 96700;
+    // The 0% ceiling field holds the SELECTED YEAR's nominal dollars (seeded
+    // inflated in renderYearTaxEstimator, like the standard deduction), so it is
+    // used AS-IS — NOT inflated a second time. Fallback inflates the today's-$ base.
+    var ceilNominal = ceilEl ? (parseFloat(ceilEl.value) || 0) : (96700 * factor);
     var stdDedEl = document.getElementById('teStdDed');
     var irmaaTodayEl = document.getElementById('irmaaThreshold');
     var irmaaToday = irmaaTodayEl ? (parseFloat(irmaaTodayEl.value) || 0) : 212000;
@@ -15180,7 +15204,7 @@ function _teComputeAndPaint() {
       ltcg: parseFloat(document.getElementById('teLtcg').value) || 0,
       standardDeduction: stdDedEl ? (parseFloat(stdDedEl.value) || 0) : (brkts.stdDed || 0) * factor,
       ordinaryBrackets: _teBuildOrdinaryBrackets(brkts, factor),
-      ltcg0Ceiling: ceilToday * factor,
+      ltcg0Ceiling: ceilNominal,
       ltcg15Ceiling: (brkts.ltcg15Top || 583750) * factor,
       irmaaThreshold: irmaaToday * factor,
       niitThreshold: 250000, // FIXED $250k MFJ — never inflated (D2 / FR-021).
@@ -15229,13 +15253,28 @@ function _teComputeAndPaint() {
  */
 function _tePaintSignals(signalsEl, out) {
   var roomLeft = out.signals.roomLeftAt0;
-  // Dominant headline (US1).
+  // Dominant headline (US1): how much more LTCG can be realized at 0%. This now
+  // correctly accounts for the standard deduction sheltering gains, so it shrinks
+  // as EITHER gains OR ordinary income rise.
   var html =
-    '<div style="display:inline-block;padding:12px 18px;background:rgba(100,220,100,0.08);border:1px solid var(--success);border-radius:10px;vertical-align:top">' +
+    '<div style="display:inline-block;padding:12px 18px;margin-right:10px;background:rgba(100,220,100,0.08);border:1px solid var(--success);border-radius:10px;vertical-align:top">' +
       '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.roomLeft.label') +
         ' <span class="info-tip" data-i18n-tip="te.roomLeft.tip" data-tip="' + _teTipAttr('te.roomLeft.tip') + '">ⓘ</span>' +
       '</div>' +
       '<div style="font-weight:800;font-size:1.6em;color:var(--success);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
+    '</div>';
+
+  // Companion headline — same 0% pool, viewed from the INCOME side: how much more
+  // ordinary income (Traditional / Roth conversion / taxable SS + interest) can be
+  // added before gains start being taxed. Numerically identical to the gains room
+  // (every added dollar of EITHER consumes one dollar of the pool), shown so the
+  // user sees both framings. Reuses roomLeft (do NOT recompute — they are equal).
+  html +=
+    '<div style="display:inline-block;padding:12px 18px;background:rgba(108,99,255,0.08);border:1px solid var(--accent);border-radius:10px;vertical-align:top">' +
+      '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.headroom.label') +
+        ' <span class="info-tip" data-i18n-tip="te.headroom.tip" data-tip="' + _teTipAttr('te.headroom.tip') + '">ⓘ</span>' +
+      '</div>' +
+      '<div style="font-weight:800;font-size:1.6em;color:var(--accent);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
     '</div>';
 
   // Secondary chips row (marginal + IRMAA + NIIT).
