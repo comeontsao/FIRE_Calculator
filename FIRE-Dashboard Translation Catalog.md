@@ -1096,6 +1096,7 @@ Used as a trailing badge on a country card's spend line when `scenarioOverrides[
 |---|---|---|
 | `nav.pill.ss` | Social Security | 社會安全金 |
 | `nav.pill.withdrawal` | Withdrawal Strategy | 提款策略 |
+| `nav.pill.yearTax` _(RR only)_ | Year Tax Estimator | 單年稅務估算器 |
 | `nav.pill.drawdown` | Drawdown | 資產提領 |
 | `nav.pill.lifecycle` | Lifecycle | 完整生命週期 |
 | `nav.pill.milestones` | Milestones | 里程碑 |
@@ -1111,6 +1112,16 @@ Used as a trailing badge on a country card's spend line when `scenarioOverrides[
 | Key | EN | zh-TW |
 |---|---|---|
 | `nav.next` | Next → | 下一步 → |
+
+## Feature 035 — Left-Sidebar Navigation (i18n)
+
+### Mobile drawer toggle (1)
+
+Accessible label (aria-label, applied via the new `data-i18n-aria` hook) and tooltip (`data-i18n-tip`) for the ☰ button that opens the left-nav drawer on narrow viewports.
+
+| Key | EN | zh-TW |
+|---|---|---|
+| `nav.drawerToggle` | Open navigation | 開啟導覽 |
 
 ## Feature 014 — Calc Audit (i18n)
 

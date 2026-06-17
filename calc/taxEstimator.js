@@ -20,6 +20,10 @@
  *     ordinaryBrackets:  { threshold:number, rate:number }[]  — ascending, threshold:0 lowest
  *     ltcg0Ceiling:      number ≥ 0  — top of the 0% LTCG band
  *     ltcg15Ceiling:     number ≥ 0  — 15%→20% breakpoint (Infinity disables 20% layer)
+ *     top12Ceiling:      number ≥ 0  — top of the 12% ORDINARY bracket (taxable income). The
+ *                                      "ordinary-income headroom" signal measures room to here
+ *                                      (the 22%-bracket edge). When absent/0 it falls back to the
+ *                                      threshold of the first ordinaryBrackets band with rate > 12%.
  *     irmaaThreshold:    number ≥ 0  — IRMAA Tier 1 MAGI threshold (0 disables flag)
  *     niitThreshold:     number ≥ 0  — NIIT MAGI threshold, caller-supplied FIXED $250k (NOT inflated here)
  *     niitRate:          number     — 0.038
@@ -30,8 +34,12 @@
  *   {
  *     ordinary: { gross, standardDeduction, taxable, layers[], tax },
  *     ltcg:     { gain, shelteredByDeduction, taxableGain, ordinaryTaxableStacked, layers[], tax },
- *     signals:  { roomLeftAt0, irmaa:{crossed,threshold,magi}, niit:{crossed,threshold,amount} },
+ *     signals:  { roomLeftAt0, ordinaryHeadroom, irmaa:{crossed,threshold,magi}, niit:{crossed,threshold,amount} },
  *     marginal: { nextOrdinaryRate, nextLtcgRate },
+ *     brackets: { ordinary:{currentRate,nextRate,roomToNext,ladder[]},
+ *                 ltcg:{currentRate,nextRate,roomToNext,ladder[]} }  — per-category
+ *                 current band + room (added income/gain $) before the next band; null
+ *                 nextRate/roomToNext when already in the top band.
  *     totalTax, effectiveRate,
  *     steps:    { key:string, args:(string|number)[] }[]  — structured descriptors, NOT sentences
  *   }
@@ -121,6 +129,19 @@ function _bandRate(taxable, brackets) {
 }
 
 /**
+ * Lower threshold (= top of the 12% band) of the first bracket whose rate exceeds 12%.
+ * Used as the fallback "12% bracket top" when the caller doesn't pass top12Ceiling.
+ * Returns Infinity when no band above 12% exists (no ordinary-headroom ceiling).
+ */
+function _top12FromBrackets(brackets) {
+  if (!Array.isArray(brackets)) return Infinity;
+  for (let i = 0; i < brackets.length; i += 1) {
+    if (_num(brackets[i].rate) > 0.12) return _num(brackets[i].threshold);
+  }
+  return Infinity;
+}
+
+/**
  * Estimate a single year's federal tax with LTCG stacking.
  * @param {object} params EstimatorInput
  * @returns {object} frozen EstimatorOutput
@@ -137,6 +158,7 @@ function estimateYearTax(params) {
   const ordinaryBrackets = Array.isArray(p.ordinaryBrackets) ? p.ordinaryBrackets : [];
   const ltcg0Ceiling = _threshold(p.ltcg0Ceiling);
   const ltcg15Ceiling = _threshold(p.ltcg15Ceiling);
+  const top12CeilingInput = _threshold(p.top12Ceiling);
   const irmaaThreshold = _threshold(p.irmaaThreshold);
   const niitThreshold = _threshold(p.niitThreshold);
   const niitRate = _num(p.niitRate);
@@ -183,6 +205,18 @@ function estimateYearTax(params) {
   const gainPool = Math.max(0, ltcg0Ceiling + standardDeduction - gross);
   const magi = gross + ltcg;
 
+  // Additional ORDINARY income (Traditional withdrawal / Roth conversion / taxable
+  // SS + interest) realizable this year before crossing OUT of the 12% bracket into
+  // the 22% bracket. UNLIKE roomLeftAt0 this ignores realized capital gains (gains
+  // are not ordinary income and don't fill the ordinary brackets), so the two
+  // figures diverge whenever gains are present. Ceiling = top of the 12% band
+  // (taxable) + the standard deduction (the gross-income edge of the 22% bracket).
+  const effectiveTop12 = top12CeilingInput > 0 ? top12CeilingInput : _top12FromBrackets(ordinaryBrackets);
+  const ordinaryCeilingGross = effectiveTop12 + standardDeduction; // Infinity when no >12% band
+  const ordinaryHeadroom = Number.isFinite(ordinaryCeilingGross)
+    ? Math.max(0, ordinaryCeilingGross - gross)
+    : gainPool; // degenerate-bracket fallback: reuse the 0% pool framing
+
   const irmaaCrossed = irmaaThreshold > 0 && magi > irmaaThreshold;
   const niitCrossed = magi > niitThreshold;
   const niitAmount = niitCrossed ? niitRate * Math.min(ltcg, magi - niitThreshold) : 0;
@@ -197,6 +231,36 @@ function estimateYearTax(params) {
   } else {
     nextLtcgRate = 0.15;
   }
+
+  // --- Per-category bracket ladder + room to the NEXT bracket boundary ---
+  // Ordinary: find the band containing `taxable`; room is measured in ADDED-INCOME
+  // terms (top-of-band + standardDeduction − gross) so it absorbs any unused
+  // deduction (a sub-deduction earner reads "in the 10% bracket, $X before 12%").
+  let _ordIdx = 0;
+  for (let i = 0; i < ordinaryBrackets.length; i += 1) {
+    if (taxable >= _num(ordinaryBrackets[i].threshold)) _ordIdx = i; else break;
+  }
+  const ordCurrentRate = ordinaryBrackets.length ? _num(ordinaryBrackets[_ordIdx].rate) : 0;
+  const _ordHasNext = _ordIdx + 1 < ordinaryBrackets.length;
+  const ordNextRate = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].rate) : null;
+  const _ordUpper = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].threshold) : Infinity;
+  const ordRoomToNext = _ordHasNext ? Math.max(0, _ordUpper + standardDeduction - gross) : null;
+  const ordLadder = ordinaryBrackets.map(function (bk) { return _num(bk.rate); });
+
+  // LTCG: the next gain dollar's rate IS the current band (nextLtcgRate). Room to the
+  // next band is the 0% pool (when in 0%) or the distance to the 15%→20% breakpoint
+  // (when in 15%); the 20% band is the top — nothing higher to cross into.
+  const ltcgCurrentRate = nextLtcgRate;
+  let ltcgNextRate = null;
+  let ltcgRoomToNext = null;
+  if (ltcgCurrentRate === 0) {
+    ltcgNextRate = 0.15;
+    ltcgRoomToNext = roomLeftAt0;
+  } else if (ltcgCurrentRate === 0.15 && Number.isFinite(ltcg15Ceiling)) {
+    ltcgNextRate = 0.20;
+    ltcgRoomToNext = Math.max(0, ltcg15Ceiling - (taxable + taxableGain));
+  }
+  const ltcgLadder = Number.isFinite(ltcg15Ceiling) ? [0, 0.15, 0.20] : [0, 0.15];
 
   const totalTax = ord.tax + ltcgTax;
   const denom = gross + ltcg;
@@ -213,6 +277,11 @@ function estimateYearTax(params) {
     }));
   }
   steps.push(Object.freeze({ key: 'te.step.ordTotal', args: [ord.tax] }));
+  // Ordinary-income headroom to the 22% bracket (12%-band top in GROSS terms − ordinary
+  // income). Only emitted when the ceiling is finite. args = [ceilingGross, gross, headroom].
+  if (Number.isFinite(ordinaryCeilingGross)) {
+    steps.push(Object.freeze({ key: 'te.step.ordHeadroom', args: [ordinaryCeilingGross, gross, ordinaryHeadroom] }));
+  }
   // Show the deduction sheltering gains whenever ordinary income didn't consume
   // the whole standard deduction (explains why the taxable gain < the gain you
   // entered, and why the 0% room is larger than the bare ceiling).
@@ -245,12 +314,27 @@ function estimateYearTax(params) {
     }),
     signals: Object.freeze({
       roomLeftAt0: roomLeftAt0,
+      ordinaryHeadroom: ordinaryHeadroom,
       irmaa: Object.freeze({ crossed: irmaaCrossed, threshold: irmaaThreshold, magi: magi }),
       niit: Object.freeze({ crossed: niitCrossed, threshold: niitThreshold, amount: niitAmount }),
     }),
     marginal: Object.freeze({
       nextOrdinaryRate: nextOrdinaryRate,
       nextLtcgRate: nextLtcgRate,
+    }),
+    brackets: Object.freeze({
+      ordinary: Object.freeze({
+        currentRate: ordCurrentRate,
+        nextRate: ordNextRate,         // null when already in the top band
+        roomToNext: ordRoomToNext,     // null when in the top band; added-income $ otherwise
+        ladder: Object.freeze(ordLadder),
+      }),
+      ltcg: Object.freeze({
+        currentRate: ltcgCurrentRate,
+        nextRate: ltcgNextRate,        // null when in the top band (or 20% disabled)
+        roomToNext: ltcgRoomToNext,    // null when in the top band; added-gain $ otherwise
+        ladder: Object.freeze(ltcgLadder),
+      }),
     }),
     totalTax: totalTax,
     effectiveRate: effectiveRate,

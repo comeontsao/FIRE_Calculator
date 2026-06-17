@@ -829,8 +829,18 @@
     padding: 8px 12px;
     border-radius: 8px;
     font-size: 11px;
-    white-space: nowrap;
-    z-index: 10;
+    /* Was `white-space: nowrap` — long tooltips became a full-width bar that
+       slid under the left rail. Cap the width and wrap into a readable box. */
+    white-space: normal;
+    width: max-content;
+    max-width: min(320px, 80vw);
+    line-height: 1.45;
+    text-align: left;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    pointer-events: none;
+    /* Must sit ABOVE the sticky chrome — #navRail(50) / #gateSelector(60) /
+       #siteHeader(100). Was z-index:10, which rendered the popup behind them. */
+    z-index: 1000;
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
@@ -1554,10 +1564,14 @@
   /* Feature 026 US3 — clamp() padding lets the header shrink proportionally
      at zoom > 100% without overflowing on 1536/1280 CSS-px viewports.
      At 1920 CSS-px (100% zoom), evaluates to 32px / 28px / 24px (preserved). */
+  /* Feature 035 refinement 1 — trimmed the bottom padding so #gateSelector
+     sits tight directly under the net-worth row from scroll-top (previously
+     ~16-24px of header padding-bottom read as a gap before the gate band; the
+     header→gate geometric gap was already 0). Top/side padding unchanged. */
   .header {
     background: var(--bg-deep);
     border-bottom: 1px solid transparent;
-    padding: clamp(1.25rem, 1.67vw, 2rem) clamp(0.875rem, 1.46vw, 1.75rem) clamp(1rem, 1.25vw, 1.5rem);
+    padding: clamp(1.25rem, 1.67vw, 2rem) clamp(0.875rem, 1.46vw, 1.75rem) clamp(0.5rem, 0.7vw, 0.75rem);
   }
   .header--compact {
     background: color-mix(in oklch, var(--bg-deep) 88%, transparent);
@@ -2869,6 +2883,181 @@
     /* .pill-bar top is var(--tabbar-bottom) which auto-tracks the wrapped tabbar. */
   }
   /* === End Feature 015 ============================================== */
+
+  /* === Feature 035 — Left-Sidebar Navigation =======================
+     Relocates #tabBar + the five per-tab .pill-bar nodes out of the top
+     sticky stack into a persistent, sticky left rail (#navRail) rendered
+     as an accordion. #gateSelector stays in the header band; the top
+     sticky stack reduces to #siteHeader -> #gateSelector. The rail reads
+     --gate-bottom for its sticky top. Layout-only move; no button
+     behavior changes (navigation stays owned by window.tabRouter).
+     NOTE: --navrail-width is distinct from the unrelated --sidebar-width
+     (the Audit flow-diagram panel) and must not be confused with it. */
+  :root { --navrail-width: 210px; }
+
+  /* Two-column row under #gateSelector: rail (left) + content (right). */
+  #navLayout {
+    grid-column: 1 / -1;
+    /* Feature 035 refinement — absorb most of the .dashboard 20px grid row-gap
+       so the rail/content sit tight under the #gateSelector band (was a ~20px
+       floating gap below the Safe/Exact/DWZ row). Leaves ~8px breathing room. */
+    margin-top: -12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    /* As a grid item in the .dashboard `minmax(auto,1fr)` column, min-width:0
+       lets the column clamp to the container so wide content (cards/inputs)
+       cannot blow out the track and force page-level horizontal scroll. */
+    min-width: 0;
+  }
+  #contentArea {
+    flex: 1 1 auto;
+    min-width: 0; /* allow children (charts/tables) to shrink, no overflow */
+  }
+
+  /* The sticky left rail. Sits below the gate band; never overlaps it. */
+  #navRail {
+    flex: 0 0 var(--navrail-width);
+    width: var(--navrail-width);
+    position: sticky;
+    top: var(--gate-bottom, var(--header-height, 0px));
+    max-height: calc(100vh - var(--gate-bottom, var(--header-height, 0px)));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 50;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* #tabBar inside the rail (Feature 035 refinement 2 — "desk-drawer" accordion):
+     `display: contents` dissolves the #tabBar box so its 5 .tab buttons become
+     direct flex children of #navRail, sitting alongside the 5 .pill-bar nodes.
+     CSS `order` (below) then interleaves each pill-bar directly under its own
+     tab button, so the open drawer renders beneath its tab — not after the whole
+     list. tabRouter selectors (`#navRail #tabBar`, `#navRail .pill-bar[...]`)
+     still resolve: #tabBar and the buttons keep their ids/roles/DOM position.
+     The vertical-stack + tab styling that #tabBar used to provide now lives on
+     #navRail itself (already flex-column, gap:6px) and on #navRail .tab. */
+  #navRail #tabBar.tab-bar {
+    display: contents;
+  }
+  #navRail .tab {
+    width: 100%;
+    text-align: left;
+    border-radius: 8px;
+    flex: 0 0 auto;
+  }
+  /* Interleave tabs with their pill-bars: each tab, then its (conditionally
+     shown) pill-bar, then the next tab. */
+  #navRail #tabBtn-plan       { order: 1; }
+  #navRail .pill-bar[data-tab="plan"]       { order: 2; }
+  #navRail #tabBtn-geography  { order: 3; }
+  #navRail .pill-bar[data-tab="geography"]  { order: 4; }
+  #navRail #tabBtn-retirement { order: 5; }
+  #navRail .pill-bar[data-tab="retirement"] { order: 6; }
+  #navRail #tabBtn-history    { order: 7; }
+  #navRail .pill-bar[data-tab="history"]    { order: 8; }
+  #navRail #tabBtn-audit      { order: 9; }
+  #navRail .pill-bar[data-tab="audit"]      { order: 10; }
+
+  /* Accordion: only the active tab's pill-bar is shown, immediately under
+     #tabBar. Visibility is keyed off #navRail[data-active-tab], which the
+     tabRouter onAfterActivate hook keeps in lockstep with the active tab. */
+  #navRail .pill-bar {
+    position: static;
+    top: auto;
+    z-index: auto;
+    display: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-x: visible;
+    gap: 6px;
+    /* Drawer affordance: the open pill list is indented under its tab and
+       carries a left accent border so it reads as "this tab's drawer". */
+    padding: 4px 0 4px 10px;
+    margin: 2px 0 4px 6px;
+    border-bottom: none;
+    border-left: 2px solid var(--accent);
+    background: transparent;
+  }
+  #navRail[data-active-tab="plan"]       .pill-bar[data-tab="plan"],
+  #navRail[data-active-tab="geography"]  .pill-bar[data-tab="geography"],
+  #navRail[data-active-tab="retirement"] .pill-bar[data-tab="retirement"],
+  #navRail[data-active-tab="history"]    .pill-bar[data-tab="history"],
+  #navRail[data-active-tab="audit"]      .pill-bar[data-tab="audit"] {
+    display: flex;
+  }
+  #navRail .pill-bar .pill {
+    width: 100%;
+    text-align: left;
+  }
+
+  /* Mobile drawer toggle (☰) — hidden on desktop, shown < 768px. */
+  #navDrawerToggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    min-height: 34px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 1.1em;
+    line-height: 1;
+    cursor: pointer;
+  }
+  /* Scrim behind the open mobile drawer. */
+  .nav-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 64;
+  }
+
+  @media (max-width: 767px) {
+    /* Rail goes off-canvas as a slide-in overlay drawer. The open drawer must
+       start BELOW the sticky #siteHeader (z-100) + #gateSelector (z-60) band so
+       those higher-z elements never overlap (and intercept clicks on) the
+       rail's top tab buttons. So the drawer's top edge uses the live
+       --gate-bottom (header+gate bottom edge) instead of viewport top, and it
+       scrolls internally for the rest of the column. (BUG 1 fix.) */
+    #navLayout { display: block; }
+    #navRail {
+      position: fixed;
+      top: var(--gate-bottom, var(--header-height, 0px));
+      left: 0;
+      bottom: 0;
+      height: auto;
+      max-height: calc(100vh - var(--gate-bottom, var(--header-height, 0px)));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      width: min(80vw, 280px);
+      flex: none;
+      border-radius: 0;
+      border-right: 1px solid var(--border);
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      z-index: 65;
+    }
+    body.nav-drawer-open #navRail { transform: translateX(0); }
+    body.nav-drawer-open .nav-scrim { display: block; }
+    /* Scrim starts below the gate band too, so it never dims/sits over the
+       still-interactive header + mode/strategy controls. */
+    .nav-scrim { top: var(--gate-bottom, var(--header-height, 0px)); }
+    #navDrawerToggle { display: inline-flex; }
+    /* Tighter controls inside the narrow drawer. */
+    #navRail #tabBar .tab { padding: 0.5rem 0.75rem; }
+    #navRail .pill-bar .pill { padding: 0.4rem 0.65rem; }
+  }
+  /* === End Feature 035 ============================================== */
 </style>
 </head>
 <body>
@@ -2933,19 +3122,30 @@
     </div>
   </div>
 
-  <!-- ==================== Feature 013 — Tabbed Navigation ==================== -->
-  <nav id="tabBar" class="tab-bar" role="tablist" aria-label="Dashboard sections">
-    <button id="tabBtn-plan"       class="tab active" data-tab="plan"       role="tab" aria-controls="tab-plan"       aria-selected="true"  data-i18n="nav.tab.plan">Plan</button>
-    <button id="tabBtn-geography"  class="tab"        data-tab="geography"  role="tab" aria-controls="tab-geography"  aria-selected="false" data-i18n="nav.tab.geography">Geography</button>
-    <button id="tabBtn-retirement" class="tab"        data-tab="retirement" role="tab" aria-controls="tab-retirement" aria-selected="false" data-i18n="nav.tab.retirement">Retirement</button>
-    <button id="tabBtn-history"    class="tab"        data-tab="history"    role="tab" aria-controls="tab-history"    aria-selected="false" data-i18n="nav.tab.history">History</button>
-    <button id="tabBtn-audit"      class="tab"        data-tab="audit"      role="tab" aria-controls="tab-audit"      aria-selected="false" data-i18n="nav.tab.audit">Audit</button>
-  </nav>
+  <!-- ==================== Feature 035 — Left-Sidebar Navigation ====================
+       #tabBar and the five per-tab .pill-bar nodes were relocated here into the
+       persistent sticky left rail (#navRail), rendered as an accordion. The
+       .pill-host content panels stay in #contentArea inside their .tab-panel.
+       Navigation behavior is unchanged — still owned by window.tabRouter. -->
+  <button id="navDrawerToggle" type="button" aria-expanded="false" aria-controls="navRail"
+          aria-label="Open navigation" data-i18n-aria="nav.drawerToggle"
+          data-i18n-tip="nav.drawerToggle" title="Open navigation">☰</button>
+  <div class="nav-scrim" id="navScrim" aria-hidden="true"></div>
 
-  <div id="tabContainer" class="tab-container">
-    <section id="tab-plan" class="tab-panel" data-tab="plan" role="tabpanel" aria-labelledby="tabBtn-plan">
-      <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Plan sections">
+  <div id="navLayout">
+    <div id="navRail" class="nav-rail" data-active-tab="plan">
+      <!-- ==================== Feature 013 — Tabbed Navigation (relocated) ==================== -->
+      <nav id="tabBar" class="tab-bar" role="tablist" aria-label="Dashboard sections">
+        <button id="tabBtn-plan"       class="tab active" data-tab="plan"       role="tab" aria-controls="tab-plan"       aria-selected="true"  data-i18n="nav.tab.plan">Plan</button>
+        <button id="tabBtn-geography"  class="tab"        data-tab="geography"  role="tab" aria-controls="tab-geography"  aria-selected="false" data-i18n="nav.tab.geography">Geography</button>
+        <button id="tabBtn-retirement" class="tab"        data-tab="retirement" role="tab" aria-controls="tab-retirement" aria-selected="false" data-i18n="nav.tab.retirement">Retirement</button>
+        <button id="tabBtn-history"    class="tab"        data-tab="history"    role="tab" aria-controls="tab-history"    aria-selected="false" data-i18n="nav.tab.history">History</button>
+        <button id="tabBtn-audit"      class="tab"        data-tab="audit"      role="tab" aria-controls="tab-audit"      aria-selected="false" data-i18n="nav.tab.audit">Audit</button>
+      </nav>
+
+      <!-- Per-tab pill-bars (relocated from inside each .tab-panel). The bar
+           carries data-tab="X" for the accordion CSS selector. -->
+      <nav class="pill-bar" data-tab="plan" role="tablist" aria-label="Plan sections">
         <button class="pill active" data-tab="plan" data-pill="profile" role="tab" aria-selected="true" data-i18n="nav.pill.profile">Profile</button>
         <button class="pill" data-tab="plan" data-pill="assets" role="tab" aria-selected="false" data-i18n="nav.pill.assets">Assets</button>
         <button class="pill" data-tab="plan" data-pill="investment" role="tab" aria-selected="false" data-i18n="nav.pill.investment">Investment</button>
@@ -2954,6 +3154,31 @@
         <button class="pill" data-tab="plan" data-pill="expenses" role="tab" aria-selected="false" data-i18n="nav.pill.expenses">Expenses</button>
         <button class="pill" data-tab="plan" data-pill="summary" role="tab" aria-selected="false" data-i18n="nav.pill.summary">Summary</button>
       </nav>
+      <nav class="pill-bar" data-tab="geography" role="tablist" aria-label="Geography sections">
+        <button class="pill active" data-tab="geography" data-pill="scenarios" role="tab" aria-selected="true" data-i18n="nav.pill.scenarios">Scenarios</button>
+        <button class="pill" data-tab="geography" data-pill="country-chart" role="tab" aria-selected="false" data-i18n="nav.pill.countryChart">Country Chart</button>
+        <button class="pill" data-tab="geography" data-pill="healthcare" role="tab" aria-selected="false" data-i18n="nav.pill.healthcare">Healthcare</button>
+        <!-- Feature 015 follow-up — Country Deep-Dive pill removed; #scenarioInsight now appears inline under the country grid below. -->
+      </nav>
+      <nav class="pill-bar" data-tab="retirement" role="tablist" aria-label="Retirement sections">
+        <button class="pill active" data-tab="retirement" data-pill="ss" role="tab" aria-selected="true" data-i18n="nav.pill.ss">Social Security</button>
+        <button class="pill" data-tab="retirement" data-pill="withdrawal" role="tab" aria-selected="false" data-i18n="nav.pill.withdrawal">Withdrawal Strategy</button>
+        <button class="pill" data-tab="retirement" data-pill="drawdown" role="tab" aria-selected="false" data-i18n="nav.pill.drawdown">Drawdown</button>
+        <button class="pill" data-tab="retirement" data-pill="lifecycle" role="tab" aria-selected="false" data-i18n="nav.pill.lifecycle">Lifecycle</button>
+        <button class="pill" data-tab="retirement" data-pill="milestones" role="tab" aria-selected="false" data-i18n="nav.pill.milestones">Milestones</button>
+      </nav>
+      <nav class="pill-bar" data-tab="history" role="tablist" aria-label="History sections">
+        <button class="pill active" data-tab="history" data-pill="snapshots" role="tab" aria-selected="true" data-i18n="nav.pill.snapshots">Snapshots</button>
+      </nav>
+      <nav class="pill-bar" data-tab="audit" role="tablist" aria-label="Audit sections">
+        <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
+      </nav>
+    </div><!-- /#navRail -->
+
+    <div id="contentArea">
+  <div id="tabContainer" class="tab-container">
+    <section id="tab-plan" class="tab-panel" data-tab="plan" role="tabpanel" aria-labelledby="tabBtn-plan">
+      <div class="tab-scroll-sentinel" aria-hidden="true"></div>
       <div class="pill-host" data-tab="plan" data-pill="profile">
   <div class="card">
     <div class="card-title"><span class="icon">👤</span> <span data-i18n="sec.profileIncome">Profile & Income</span></div>
@@ -3645,12 +3870,6 @@
 
     <section id="tab-geography" class="tab-panel" data-tab="geography" hidden role="tabpanel" aria-labelledby="tabBtn-geography">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Geography sections">
-        <button class="pill active" data-tab="geography" data-pill="scenarios" role="tab" aria-selected="true" data-i18n="nav.pill.scenarios">Scenarios</button>
-        <button class="pill" data-tab="geography" data-pill="country-chart" role="tab" aria-selected="false" data-i18n="nav.pill.countryChart">Country Chart</button>
-        <button class="pill" data-tab="geography" data-pill="healthcare" role="tab" aria-selected="false" data-i18n="nav.pill.healthcare">Healthcare</button>
-        <!-- Feature 015 follow-up — Country Deep-Dive pill removed; #scenarioInsight now appears inline under the country grid below. -->
-      </nav>
       <div class="pill-host" data-tab="geography" data-pill="scenarios">
   <div class="card span-3">
     <div class="flex-between" style="margin-bottom:16px">
@@ -3754,13 +3973,6 @@
 
     <section id="tab-retirement" class="tab-panel" data-tab="retirement" hidden role="tabpanel" aria-labelledby="tabBtn-retirement">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Retirement sections">
-        <button class="pill active" data-tab="retirement" data-pill="ss" role="tab" aria-selected="true" data-i18n="nav.pill.ss">Social Security</button>
-        <button class="pill" data-tab="retirement" data-pill="withdrawal" role="tab" aria-selected="false" data-i18n="nav.pill.withdrawal">Withdrawal Strategy</button>
-        <button class="pill" data-tab="retirement" data-pill="drawdown" role="tab" aria-selected="false" data-i18n="nav.pill.drawdown">Drawdown</button>
-        <button class="pill" data-tab="retirement" data-pill="lifecycle" role="tab" aria-selected="false" data-i18n="nav.pill.lifecycle">Lifecycle</button>
-        <button class="pill" data-tab="retirement" data-pill="milestones" role="tab" aria-selected="false" data-i18n="nav.pill.milestones">Milestones</button>
-      </nav>
       <div class="pill-host" data-tab="retirement" data-pill="ss">
   <div class="card span-3 surface--secondary">
     <div class="card-title"><span data-i18n="sec.socialSecurity">Social Security — Realistic Estimator & Three-Phase FIRE</span></div>
@@ -4169,9 +4381,6 @@
 
     <section id="tab-history" class="tab-panel" data-tab="history" hidden role="tabpanel" aria-labelledby="tabBtn-history">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="History sections">
-        <button class="pill active" data-tab="history" data-pill="snapshots" role="tab" aria-selected="true" data-i18n="nav.pill.snapshots">Snapshots</button>
-      </nav>
       <div class="pill-host" data-tab="history" data-pill="snapshots">
   <div class="card span-3">
     <div class="card-title"><span class="icon">📸</span> <span data-i18n="sec.snapshots">Snapshot History — Track Your Progress Over Time</span></div>
@@ -4226,9 +4435,6 @@
     <!-- ==================== Feature 014 — Audit tab ==================== -->
     <section id="tab-audit" class="tab-panel" data-tab="audit" hidden role="tabpanel" aria-labelledby="tabBtn-audit">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Audit sections">
-        <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
-      </nav>
       <div class="pill-host" data-tab="audit" data-pill="summary">
         <div class="audit-root">
 
@@ -4369,6 +4575,8 @@
     <!-- ==================== /Feature 014 ==================== -->
   </div>
   <!-- ==================== /Feature 013 ==================== -->
+    </div><!-- /#contentArea -->
+  </div><!-- /#navLayout (Feature 035) -->
 
 </div>
 
@@ -6767,6 +6975,7 @@ const TRANSLATIONS = {
     'nav.pill.milestones':     'Milestones',
     'nav.pill.snapshots':      'Snapshots',
     'nav.next':                'Next →',
+    'nav.drawerToggle':        'Open navigation',
     // === Feature 014: Calc Audit ===
     'nav.tab.audit':                            'Audit',
     'audit.section.flow.title':                 'Calculation Flow',
@@ -7874,6 +8083,7 @@ const TRANSLATIONS = {
     'nav.pill.milestones':     '里程碑',
     'nav.pill.snapshots':      '歷史紀錄',
     'nav.next':                '下一步 →',
+    'nav.drawerToggle':        '開啟導覽',
     // === Feature 014: Calc Audit ===
     'nav.tab.audit':                            '計算審查',
     'audit.section.flow.title':                 '計算流程',
@@ -8002,6 +8212,14 @@ function switchLanguage(lang) {
     const key = el.getAttribute('data-i18n-tip');
     const trans = TRANSLATIONS[currentLang]?.[key];
     if (trans) el.setAttribute('data-tip', trans);
+  });
+  // Feature 035 — translate accessible labels (aria-label) for icon-only
+  // controls (e.g. the nav drawer ☰ toggle). Honors the existing data-i18n-*
+  // attribute convention.
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria');
+    const trans = TRANSLATIONS[currentLang]?.[key];
+    if (trans) el.setAttribute('aria-label', trans);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     const key = el.getAttribute('data-i18n-placeholder');
@@ -19944,12 +20162,14 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
     tabs: window.TABS,
     rootEl: document.body,
     tabBarEl: document.getElementById('tabBar'),
+    // Feature 035 — pill-bars now live in #navRail (left rail), not nested in
+    // each .tab-panel. Resolve them by their data-tab in the rail.
     pillBarsByTab: {
-      plan:       document.querySelector('#tab-plan       > .pill-bar'),
-      geography:  document.querySelector('#tab-geography  > .pill-bar'),
-      retirement: document.querySelector('#tab-retirement > .pill-bar'),
-      history:    document.querySelector('#tab-history    > .pill-bar'),
-      audit:      document.querySelector('#tab-audit      > .pill-bar'),
+      plan:       document.querySelector('#navRail .pill-bar[data-tab="plan"]'),
+      geography:  document.querySelector('#navRail .pill-bar[data-tab="geography"]'),
+      retirement: document.querySelector('#navRail .pill-bar[data-tab="retirement"]'),
+      history:    document.querySelector('#navRail .pill-bar[data-tab="history"]'),
+      audit:      document.querySelector('#navRail .pill-bar[data-tab="audit"]'),
     },
     getTabButton:  function (tabId) { return document.querySelector('#tabBar [data-tab="' + tabId + '"]'); },
     getPillButton: function (tabId, pillId) { return document.querySelector('.pill[data-tab="' + tabId + '"][data-pill="' + pillId + '"]'); },
@@ -19958,6 +20178,10 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
     storage: window.localStorage,
     win: window,
     onAfterActivate: function (state) {
+      // Feature 035 — drive the left-rail accordion: only the active tab's
+      // pill-bar is shown (one CSS attribute, single source of truth = router).
+      var _navRail = document.getElementById('navRail');
+      if (_navRail) _navRail.setAttribute('data-active-tab', state.tab);
       if (typeof window._rebindStickyHeaderObserver === 'function') {
         window._rebindStickyHeaderObserver(state.tab);
       }
@@ -19983,6 +20207,43 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
   if (typeof window._rebindStickyHeaderObserver === 'function') {
     window._rebindStickyHeaderObserver(window.tabRouter.getState().tab);
   }
+  // Feature 035 — seed the left-rail accordion for the initially active tab.
+  var _navRailInit = document.getElementById('navRail');
+  if (_navRailInit) _navRailInit.setAttribute('data-active-tab', window.tabRouter.getState().tab);
+
+  // Feature 035 — mobile drawer controller. Vanilla, file://-safe. The drawer
+  // ONLY controls rail visibility; navigation state stays owned by tabRouter.
+  (function _initNavDrawer() {
+    var toggle = document.getElementById('navDrawerToggle');
+    var scrim = document.getElementById('navScrim');
+    var rail = document.getElementById('navRail');
+    if (!toggle || !scrim || !rail) return;
+    var DRAWER_BP = 767; // matches the @media (max-width: 767px) breakpoint
+    function openDrawer() {
+      document.body.classList.add('nav-drawer-open');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+    function closeDrawer() {
+      document.body.classList.remove('nav-drawer-open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    function toggleDrawer() {
+      if (document.body.classList.contains('nav-drawer-open')) closeDrawer();
+      else openDrawer();
+    }
+    toggle.addEventListener('click', toggleDrawer);
+    scrim.addEventListener('click', closeDrawer);
+    // Close after any tab/pill selection inside the rail (navigation owned by
+    // tabRouter, which already fired by the time this bubbles).
+    rail.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.tab, .pill') : null;
+      if (btn) closeDrawer();
+    });
+    // Force-close when the viewport grows back to desktop width.
+    window.addEventListener('resize', function () {
+      if (window.innerWidth > DRAWER_BP) closeDrawer();
+    });
+  })();
 });
 
 // === FEATURE 011 US2 — --header-height producer ===

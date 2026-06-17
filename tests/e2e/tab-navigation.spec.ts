@@ -407,7 +407,11 @@ for (const dash of DASHBOARDS) {
       await loadWithHash(page, dash.fileName, '#tab=retirement&pill=ss');
       await expectActive(page, 'retirement', 'ss');
 
-      const order = TAB_PILLS.retirement;
+      // Feature 034 (RR-only): the "Year Tax Estimator" pill sits between
+      // Withdrawal Strategy and Drawdown on RR only — Generic has no such pill.
+      const order = dash.key === 'rr'
+        ? ['ss', 'withdrawal', 'year-tax', 'drawdown', 'lifecycle', 'milestones']
+        : TAB_PILLS.retirement;
       for (let i = 0; i < order.length - 1; i += 1) {
         await clickNextInActivePill(page, 'retirement', order[i]);
         await expectActive(page, 'retirement', order[i + 1]);
@@ -420,7 +424,9 @@ for (const dash of DASHBOARDS) {
       await expectActive(page, 'history', 'snapshots');
 
       // Only one pill in the History tab (per `TABS` in `calc/tabRouter.js`).
-      const pillCount = await page.locator('#tab-history .pill').count();
+      // Feature 035 relocated the pill-bars into the left rail (#navRail), so the
+      // pill lives there now, not inside the #tab-history panel.
+      const pillCount = await page.locator('#navRail .pill-bar[data-tab="history"] .pill').count();
       expect(pillCount).toBe(1);
 
       await expectNextDisabled(page, 'history', 'snapshots');
@@ -441,100 +447,34 @@ for (const dash of DASHBOARDS) {
       });
     });
 
-    test('a) tab-bar and every pill-bar use nowrap + overflow-x:auto', async ({ page }) => {
+    // NOTE: Feature 035 replaced the old horizontal mobile pill-bars (nowrap +
+    // overflow-x:auto, single-row, swipe-scroll) with a left-rail ACCORDION behind
+    // a hamburger drawer. The old single-row / horizontal-scroll assertions are
+    // therefore retired. Full mobile drawer interaction (open/close, select-closes,
+    // off-canvas, no horizontal scroll) is covered in
+    // tests/e2e/left-sidebar-nav.spec.ts. These two tests pin the mobile structure
+    // and the scroll-doesn't-activate invariant (the surviving US4 promise).
+
+    test('a) mobile nav lives in the left rail with a hamburger drawer toggle', async ({ page }) => {
       await loadFresh(page, dash.fileName);
 
-      // Tab bar.
-      const tabBarStyles = await page.locator('#tabBar').evaluate((el) => {
-        const cs = getComputedStyle(el);
-        return { flexWrap: cs.flexWrap, overflowX: cs.overflowX };
-      });
-      expect(tabBarStyles.flexWrap).toBe('nowrap');
-      expect(tabBarStyles.overflowX).toBe('auto');
-
-      // Every pill-bar — NOTE: use `evaluateAll` so we can inspect each
-      // one even if some are inside hidden tab panels (their CSS still
-      // resolves to nowrap/auto; computed style reflects the rules even
-      // when an ancestor has `display:none`).
-      const pillBarStyles = await page.locator('.pill-bar').evaluateAll((els) =>
-        els.map((el) => {
-          const cs = getComputedStyle(el);
-          return { flexWrap: cs.flexWrap, overflowX: cs.overflowX };
-        }),
-      );
-      expect(pillBarStyles.length).toBeGreaterThanOrEqual(5);
-      for (const styles of pillBarStyles) {
-        expect(styles.flexWrap).toBe('nowrap');
-        expect(styles.overflowX).toBe('auto');
-      }
+      // The 5 tab buttons and all 5 pill-bars now live inside #navRail (vertical
+      // accordion), and the ☰ toggle is shown at mobile width.
+      await expect(page.locator('#navRail #tabBar')).toHaveCount(1);
+      await expect(page.locator('#navRail .pill-bar')).toHaveCount(5);
+      await expect(page.locator('#navDrawerToggle')).toBeVisible();
     });
 
-    test('b) no .tab or .pill wraps to a second row', async ({ page }) => {
+    test('b) scrolling the page does not change the active tab/pill', async ({ page }) => {
       await loadFresh(page, dash.fileName);
 
-      // Top tabs — all 5 tab buttons share a single baseline.
-      // Feature 014 added the Audit tab (5th tab).
-      const tabTops = await page.locator('#tabBar .tab').evaluateAll((els) =>
-        els.map((el) => Math.round(el.getBoundingClientRect().top)),
-      );
-      expect(tabTops.length).toBe(5);
-      const tabBaseline = tabTops[0];
-      for (const t of tabTops) {
-        expect(Math.abs(t - tabBaseline)).toBeLessThanOrEqual(ROW_TOLERANCE_PX);
-      }
-
-      // Plan-tab pills (currently visible). Walk every tab to verify each
-      // pill bar's row alignment, since hidden tab panels do not lay out.
-      for (const tabId of Object.keys(TAB_PILLS)) {
-        await clickTab(page, tabId);
-        const pillTops = await page
-          .locator(`#tab-${tabId} .pill-bar .pill`)
-          .evaluateAll((els) =>
-            els.map((el) => Math.round(el.getBoundingClientRect().top)),
-          );
-        expect(pillTops.length).toBe(TAB_PILLS[tabId].length);
-        const baseline = pillTops[0];
-        for (const t of pillTops) {
-          expect(Math.abs(t - baseline)).toBeLessThanOrEqual(ROW_TOLERANCE_PX);
-        }
-      }
-    });
-
-    test('c) horizontal scroll on a pill-bar shifts pills without activating', async ({ page }) => {
-      await loadFresh(page, dash.fileName);
-
-      // Pick the Retirement tab — it has 5 pills, more likely to overflow
-      // at 375px. Switch to it first so its pill-bar lays out.
-      await clickTab(page, 'retirement');
-      await expectActive(page, 'retirement', 'ss');
-
-      const pillBar = page.locator('#tab-retirement .pill-bar');
-      const beforeLeft = await pillBar
-        .locator('.pill[data-pill="ss"]')
-        .evaluate((el) => Math.round(el.getBoundingClientRect().left));
-
-      // Programmatically scroll the bar — does NOT dispatch a click.
-      await pillBar.evaluate((el) => {
-        (el as HTMLElement).scrollLeft = 120;
-      });
+      // The surviving US4 promise: passive scrolling must never activate a
+      // different tab/pill (the accordion has no swipe-to-activate behavior).
+      const before = await getRouterState(page);
+      await page.evaluate(() => window.scrollBy(0, 200));
       await page.waitForTimeout(150);
 
-      const afterLeft = await pillBar
-        .locator('.pill[data-pill="ss"]')
-        .evaluate((el) => Math.round(el.getBoundingClientRect().left));
-
-      // The ss pill's viewport-left should have moved (scrolled out of
-      // view to the left). If the pill-bar isn't actually scrollable at
-      // this viewport, scrollLeft stays at 0 — which is also acceptable
-      // behavior, just nothing to assert. We assert the pill DID NOT
-      // change activation as a result of scrolling, which is the core
-      // promise of US4.
-      void beforeLeft; void afterLeft; // Kept for diagnostic purposes.
-
-      // The active pill is still SS — scroll did not activate Withdrawal.
-      const state = await getRouterState(page);
-      expect(state).toEqual({ tab: 'retirement', pill: 'ss' });
-      await expectActive(page, 'retirement', 'ss');
+      expect(await getRouterState(page)).toEqual(before);
     });
   });
 }
@@ -588,16 +528,28 @@ test.describe('T029 lockstep DOM-diff (SC-009)', () => {
         collectStructure(pageGeneric, 'FIRE-Dashboard-Generic.html'),
       ]);
 
+      // Feature 034 (RR-only divergence): the "Year Tax Estimator" pill + its
+      // pill-host exist ONLY on RR (Generic has no #teCard). Assert that
+      // divergence explicitly, then compare the SHARED structure with the RR-only
+      // extras removed so the rest of the nav stays byte-for-byte in lockstep.
+      const RR_ONLY = 'retirement:year-tax';
+      expect(rr.pills).toContain(RR_ONLY);
+      expect(generic.pills).not.toContain(RR_ONLY);
+      expect(rr.hosts).toContain(RR_ONLY);
+      expect(generic.hosts).not.toContain(RR_ONLY);
+
       expect(rr.tabs).toEqual(generic.tabs);
-      expect(rr.pills).toEqual(generic.pills);
-      expect(rr.hosts).toEqual(generic.hosts);
+      expect(rr.pills.filter((p) => p !== RR_ONLY)).toEqual(generic.pills);
+      expect(rr.hosts.filter((h) => h !== RR_ONLY)).toEqual(generic.hosts);
       expect(rr.panels).toEqual(generic.panels);
 
-      // Defensive: assert the canonical 5 tabs and 17 pill-hosts to catch
+      // Defensive: assert the canonical 5 tabs and pill-host counts to catch
       // any drift from the spec entity table (`calc/tabRouter.js > TABS`).
-      // Feature 014 added the Audit tab (5th tab, +1 pill-host).
+      // Feature 014 added the Audit tab (5th tab, +1 pill-host); feature 034
+      // adds 1 RR-only pill-host (year-tax) → Generic 17, RR 18.
       expect(rr.tabs).toEqual(['plan', 'geography', 'retirement', 'history', 'audit']);
-      expect(rr.hosts.length).toBe(17);
+      expect(generic.hosts.length).toBe(17);
+      expect(rr.hosts.length).toBe(18);
       expect(rr.panels).toEqual([
         'tab-plan',
         'tab-geography',

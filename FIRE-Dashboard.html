@@ -824,8 +824,18 @@
     padding: 8px 12px;
     border-radius: 8px;
     font-size: 11px;
-    white-space: nowrap;
-    z-index: 10;
+    /* Was `white-space: nowrap` — long tooltips became a full-width bar that
+       slid under the left rail. Cap the width and wrap into a readable box. */
+    white-space: normal;
+    width: max-content;
+    max-width: min(320px, 80vw);
+    line-height: 1.45;
+    text-align: left;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    pointer-events: none;
+    /* Must sit ABOVE the sticky chrome — #navRail(50) / #gateSelector(60) /
+       #siteHeader(100). Was z-index:10, which rendered the popup behind them. */
+    z-index: 1000;
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
@@ -1521,10 +1531,14 @@
   /* Feature 026 US3 — clamp() padding lets the header shrink proportionally
      at zoom > 100% without overflowing on 1536/1280 CSS-px viewports.
      At 1920 CSS-px (100% zoom), evaluates to 32px / 28px / 24px (preserved). */
+  /* Feature 035 refinement 1 — trimmed the bottom padding so #gateSelector
+     sits tight directly under the net-worth row from scroll-top (previously
+     ~16-24px of header padding-bottom read as a gap before the gate band; the
+     header→gate geometric gap was already 0). Top/side padding unchanged. */
   .header {
     background: var(--bg-deep);
     border-bottom: 1px solid transparent;
-    padding: clamp(1.25rem, 1.67vw, 2rem) clamp(0.875rem, 1.46vw, 1.75rem) clamp(1rem, 1.25vw, 1.5rem);
+    padding: clamp(1.25rem, 1.67vw, 2rem) clamp(0.875rem, 1.46vw, 1.75rem) clamp(0.5rem, 0.7vw, 0.75rem);
   }
   .header--compact {
     background: color-mix(in oklch, var(--bg-deep) 88%, transparent);
@@ -2857,6 +2871,181 @@
     .header__inline-kpis { font-size: 0.78em; gap: 12px; }
   }
   /* === End Feature 015 ============================================== */
+
+  /* === Feature 035 — Left-Sidebar Navigation =======================
+     Relocates #tabBar + the five per-tab .pill-bar nodes out of the top
+     sticky stack into a persistent, sticky left rail (#navRail) rendered
+     as an accordion. #gateSelector stays in the header band; the top
+     sticky stack reduces to #siteHeader -> #gateSelector. The rail reads
+     --gate-bottom for its sticky top. Layout-only move; no button
+     behavior changes (navigation stays owned by window.tabRouter).
+     NOTE: --navrail-width is distinct from the unrelated --sidebar-width
+     (the Audit flow-diagram panel) and must not be confused with it. */
+  :root { --navrail-width: 210px; }
+
+  /* Two-column row under #gateSelector: rail (left) + content (right). */
+  #navLayout {
+    grid-column: 1 / -1;
+    /* Feature 035 refinement — absorb most of the .dashboard 20px grid row-gap
+       so the rail/content sit tight under the #gateSelector band (was a ~20px
+       floating gap below the Safe/Exact/DWZ row). Leaves ~8px breathing room. */
+    margin-top: -12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    /* As a grid item in the .dashboard `minmax(auto,1fr)` column, min-width:0
+       lets the column clamp to the container so wide content (cards/inputs)
+       cannot blow out the track and force page-level horizontal scroll. */
+    min-width: 0;
+  }
+  #contentArea {
+    flex: 1 1 auto;
+    min-width: 0; /* allow children (charts/tables) to shrink, no overflow */
+  }
+
+  /* The sticky left rail. Sits below the gate band; never overlaps it. */
+  #navRail {
+    flex: 0 0 var(--navrail-width);
+    width: var(--navrail-width);
+    position: sticky;
+    top: var(--gate-bottom, var(--header-height, 0px));
+    max-height: calc(100vh - var(--gate-bottom, var(--header-height, 0px)));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    z-index: 50;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* #tabBar inside the rail (Feature 035 refinement 2 — "desk-drawer" accordion):
+     `display: contents` dissolves the #tabBar box so its 5 .tab buttons become
+     direct flex children of #navRail, sitting alongside the 5 .pill-bar nodes.
+     CSS `order` (below) then interleaves each pill-bar directly under its own
+     tab button, so the open drawer renders beneath its tab — not after the whole
+     list. tabRouter selectors (`#navRail #tabBar`, `#navRail .pill-bar[...]`)
+     still resolve: #tabBar and the buttons keep their ids/roles/DOM position.
+     The vertical-stack + tab styling that #tabBar used to provide now lives on
+     #navRail itself (already flex-column, gap:6px) and on #navRail .tab. */
+  #navRail #tabBar.tab-bar {
+    display: contents;
+  }
+  #navRail .tab {
+    width: 100%;
+    text-align: left;
+    border-radius: 8px;
+    flex: 0 0 auto;
+  }
+  /* Interleave tabs with their pill-bars: each tab, then its (conditionally
+     shown) pill-bar, then the next tab. */
+  #navRail #tabBtn-plan       { order: 1; }
+  #navRail .pill-bar[data-tab="plan"]       { order: 2; }
+  #navRail #tabBtn-geography  { order: 3; }
+  #navRail .pill-bar[data-tab="geography"]  { order: 4; }
+  #navRail #tabBtn-retirement { order: 5; }
+  #navRail .pill-bar[data-tab="retirement"] { order: 6; }
+  #navRail #tabBtn-history    { order: 7; }
+  #navRail .pill-bar[data-tab="history"]    { order: 8; }
+  #navRail #tabBtn-audit      { order: 9; }
+  #navRail .pill-bar[data-tab="audit"]      { order: 10; }
+
+  /* Accordion: only the active tab's pill-bar is shown, immediately under
+     #tabBar. Visibility is keyed off #navRail[data-active-tab], which the
+     tabRouter onAfterActivate hook keeps in lockstep with the active tab. */
+  #navRail .pill-bar {
+    position: static;
+    top: auto;
+    z-index: auto;
+    display: none;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-x: visible;
+    gap: 6px;
+    /* Drawer affordance: the open pill list is indented under its tab and
+       carries a left accent border so it reads as "this tab's drawer". */
+    padding: 4px 0 4px 10px;
+    margin: 2px 0 4px 6px;
+    border-bottom: none;
+    border-left: 2px solid var(--accent);
+    background: transparent;
+  }
+  #navRail[data-active-tab="plan"]       .pill-bar[data-tab="plan"],
+  #navRail[data-active-tab="geography"]  .pill-bar[data-tab="geography"],
+  #navRail[data-active-tab="retirement"] .pill-bar[data-tab="retirement"],
+  #navRail[data-active-tab="history"]    .pill-bar[data-tab="history"],
+  #navRail[data-active-tab="audit"]      .pill-bar[data-tab="audit"] {
+    display: flex;
+  }
+  #navRail .pill-bar .pill {
+    width: 100%;
+    text-align: left;
+  }
+
+  /* Mobile drawer toggle (☰) — hidden on desktop, shown < 768px. */
+  #navDrawerToggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    min-height: 34px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 1.1em;
+    line-height: 1;
+    cursor: pointer;
+  }
+  /* Scrim behind the open mobile drawer. */
+  .nav-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 64;
+  }
+
+  @media (max-width: 767px) {
+    /* Rail goes off-canvas as a slide-in overlay drawer. The open drawer must
+       start BELOW the sticky #siteHeader (z-100) + #gateSelector (z-60) band so
+       those higher-z elements never overlap (and intercept clicks on) the
+       rail's top tab buttons. So the drawer's top edge uses the live
+       --gate-bottom (header+gate bottom edge) instead of viewport top, and it
+       scrolls internally for the rest of the column. (BUG 1 fix.) */
+    #navLayout { display: block; }
+    #navRail {
+      position: fixed;
+      top: var(--gate-bottom, var(--header-height, 0px));
+      left: 0;
+      bottom: 0;
+      height: auto;
+      max-height: calc(100vh - var(--gate-bottom, var(--header-height, 0px)));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      width: min(80vw, 280px);
+      flex: none;
+      border-radius: 0;
+      border-right: 1px solid var(--border);
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      z-index: 65;
+    }
+    body.nav-drawer-open #navRail { transform: translateX(0); }
+    body.nav-drawer-open .nav-scrim { display: block; }
+    /* Scrim starts below the gate band too, so it never dims/sits over the
+       still-interactive header + mode/strategy controls. */
+    .nav-scrim { top: var(--gate-bottom, var(--header-height, 0px)); }
+    #navDrawerToggle { display: inline-flex; }
+    /* Tighter controls inside the narrow drawer. */
+    #navRail #tabBar .tab { padding: 0.5rem 0.75rem; }
+    #navRail .pill-bar .pill { padding: 0.4rem 0.65rem; }
+  }
+  /* === End Feature 035 ============================================== */
 </style>
 </head>
 <body>
@@ -2923,19 +3112,30 @@
     </div>
   </div>
 
-  <!-- ==================== Feature 013 — Tabbed Navigation ==================== -->
-  <nav id="tabBar" class="tab-bar" role="tablist" aria-label="Dashboard sections">
-    <button id="tabBtn-plan"       class="tab active" data-tab="plan"       role="tab" aria-controls="tab-plan"       aria-selected="true"  data-i18n="nav.tab.plan">Plan</button>
-    <button id="tabBtn-geography"  class="tab"        data-tab="geography"  role="tab" aria-controls="tab-geography"  aria-selected="false" data-i18n="nav.tab.geography">Geography</button>
-    <button id="tabBtn-retirement" class="tab"        data-tab="retirement" role="tab" aria-controls="tab-retirement" aria-selected="false" data-i18n="nav.tab.retirement">Retirement</button>
-    <button id="tabBtn-history"    class="tab"        data-tab="history"    role="tab" aria-controls="tab-history"    aria-selected="false" data-i18n="nav.tab.history">History</button>
-    <button id="tabBtn-audit"      class="tab"        data-tab="audit"      role="tab" aria-controls="tab-audit"      aria-selected="false" data-i18n="nav.tab.audit">Audit</button>
-  </nav>
+  <!-- ==================== Feature 035 — Left-Sidebar Navigation ====================
+       #tabBar and the five per-tab .pill-bar nodes were relocated here into the
+       persistent sticky left rail (#navRail), rendered as an accordion. The
+       .pill-host content panels stay in #contentArea inside their .tab-panel.
+       Navigation behavior is unchanged — still owned by window.tabRouter. -->
+  <button id="navDrawerToggle" type="button" aria-expanded="false" aria-controls="navRail"
+          aria-label="Open navigation" data-i18n-aria="nav.drawerToggle"
+          data-i18n-tip="nav.drawerToggle" title="Open navigation">☰</button>
+  <div class="nav-scrim" id="navScrim" aria-hidden="true"></div>
 
-  <div id="tabContainer" class="tab-container">
-    <section id="tab-plan" class="tab-panel" data-tab="plan" role="tabpanel" aria-labelledby="tabBtn-plan">
-      <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Plan sections">
+  <div id="navLayout">
+    <div id="navRail" class="nav-rail" data-active-tab="plan">
+      <!-- ==================== Feature 013 — Tabbed Navigation (relocated) ==================== -->
+      <nav id="tabBar" class="tab-bar" role="tablist" aria-label="Dashboard sections">
+        <button id="tabBtn-plan"       class="tab active" data-tab="plan"       role="tab" aria-controls="tab-plan"       aria-selected="true"  data-i18n="nav.tab.plan">Plan</button>
+        <button id="tabBtn-geography"  class="tab"        data-tab="geography"  role="tab" aria-controls="tab-geography"  aria-selected="false" data-i18n="nav.tab.geography">Geography</button>
+        <button id="tabBtn-retirement" class="tab"        data-tab="retirement" role="tab" aria-controls="tab-retirement" aria-selected="false" data-i18n="nav.tab.retirement">Retirement</button>
+        <button id="tabBtn-history"    class="tab"        data-tab="history"    role="tab" aria-controls="tab-history"    aria-selected="false" data-i18n="nav.tab.history">History</button>
+        <button id="tabBtn-audit"      class="tab"        data-tab="audit"      role="tab" aria-controls="tab-audit"      aria-selected="false" data-i18n="nav.tab.audit">Audit</button>
+      </nav>
+
+      <!-- Per-tab pill-bars (relocated from inside each .tab-panel). The bar
+           carries data-tab="X" for the accordion CSS selector. -->
+      <nav class="pill-bar" data-tab="plan" role="tablist" aria-label="Plan sections">
         <button class="pill active" data-tab="plan" data-pill="profile" role="tab" aria-selected="true" data-i18n="nav.pill.profile">Profile</button>
         <button class="pill" data-tab="plan" data-pill="assets" role="tab" aria-selected="false" data-i18n="nav.pill.assets">Assets</button>
         <button class="pill" data-tab="plan" data-pill="investment" role="tab" aria-selected="false" data-i18n="nav.pill.investment">Investment</button>
@@ -2944,6 +3144,33 @@
         <button class="pill" data-tab="plan" data-pill="expenses" role="tab" aria-selected="false" data-i18n="nav.pill.expenses">Expenses</button>
         <button class="pill" data-tab="plan" data-pill="summary" role="tab" aria-selected="false" data-i18n="nav.pill.summary">Summary</button>
       </nav>
+      <nav class="pill-bar" data-tab="geography" role="tablist" aria-label="Geography sections">
+        <button class="pill active" data-tab="geography" data-pill="scenarios" role="tab" aria-selected="true" data-i18n="nav.pill.scenarios">Scenarios</button>
+        <button class="pill" data-tab="geography" data-pill="country-chart" role="tab" aria-selected="false" data-i18n="nav.pill.countryChart">Country Chart</button>
+        <button class="pill" data-tab="geography" data-pill="healthcare" role="tab" aria-selected="false" data-i18n="nav.pill.healthcare">Healthcare</button>
+        <!-- Feature 015 follow-up — Country Deep-Dive pill removed; #scenarioInsight now appears inline under the country grid below. -->
+      </nav>
+      <nav class="pill-bar" data-tab="retirement" role="tablist" aria-label="Retirement sections">
+        <button class="pill active" data-tab="retirement" data-pill="ss" role="tab" aria-selected="true" data-i18n="nav.pill.ss">Social Security</button>
+        <button class="pill" data-tab="retirement" data-pill="withdrawal" role="tab" aria-selected="false" data-i18n="nav.pill.withdrawal">Withdrawal Strategy</button>
+        <!-- Feature 034 (RR only) — Year Tax Estimator promoted to its own sub-tab, between Withdrawal Strategy and Drawdown. -->
+        <button class="pill" data-tab="retirement" data-pill="year-tax" role="tab" aria-selected="false" data-i18n="nav.pill.yearTax">Year Tax Estimator</button>
+        <button class="pill" data-tab="retirement" data-pill="drawdown" role="tab" aria-selected="false" data-i18n="nav.pill.drawdown">Drawdown</button>
+        <button class="pill" data-tab="retirement" data-pill="lifecycle" role="tab" aria-selected="false" data-i18n="nav.pill.lifecycle">Lifecycle</button>
+        <button class="pill" data-tab="retirement" data-pill="milestones" role="tab" aria-selected="false" data-i18n="nav.pill.milestones">Milestones</button>
+      </nav>
+      <nav class="pill-bar" data-tab="history" role="tablist" aria-label="History sections">
+        <button class="pill active" data-tab="history" data-pill="snapshots" role="tab" aria-selected="true" data-i18n="nav.pill.snapshots">Snapshots</button>
+      </nav>
+      <nav class="pill-bar" data-tab="audit" role="tablist" aria-label="Audit sections">
+        <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
+      </nav>
+    </div><!-- /#navRail -->
+
+    <div id="contentArea">
+  <div id="tabContainer" class="tab-container">
+    <section id="tab-plan" class="tab-panel" data-tab="plan" role="tabpanel" aria-labelledby="tabBtn-plan">
+      <div class="tab-scroll-sentinel" aria-hidden="true"></div>
       <div class="pill-host" data-tab="plan" data-pill="profile">
   <div class="card">
     <div class="card-title"><span class="icon">👤</span> <span data-i18n="sec.profileIncome">Profile & Income</span></div>
@@ -3700,12 +3927,6 @@
 
     <section id="tab-geography" class="tab-panel" data-tab="geography" hidden role="tabpanel" aria-labelledby="tabBtn-geography">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Geography sections">
-        <button class="pill active" data-tab="geography" data-pill="scenarios" role="tab" aria-selected="true" data-i18n="nav.pill.scenarios">Scenarios</button>
-        <button class="pill" data-tab="geography" data-pill="country-chart" role="tab" aria-selected="false" data-i18n="nav.pill.countryChart">Country Chart</button>
-        <button class="pill" data-tab="geography" data-pill="healthcare" role="tab" aria-selected="false" data-i18n="nav.pill.healthcare">Healthcare</button>
-        <!-- Feature 015 follow-up — Country Deep-Dive pill removed; #scenarioInsight now appears inline under the country grid below. -->
-      </nav>
       <div class="pill-host" data-tab="geography" data-pill="scenarios">
   <div class="card span-3">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -3800,13 +4021,6 @@
 
     <section id="tab-retirement" class="tab-panel" data-tab="retirement" hidden role="tabpanel" aria-labelledby="tabBtn-retirement">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Retirement sections">
-        <button class="pill active" data-tab="retirement" data-pill="ss" role="tab" aria-selected="true" data-i18n="nav.pill.ss">Social Security</button>
-        <button class="pill" data-tab="retirement" data-pill="withdrawal" role="tab" aria-selected="false" data-i18n="nav.pill.withdrawal">Withdrawal Strategy</button>
-        <button class="pill" data-tab="retirement" data-pill="drawdown" role="tab" aria-selected="false" data-i18n="nav.pill.drawdown">Drawdown</button>
-        <button class="pill" data-tab="retirement" data-pill="lifecycle" role="tab" aria-selected="false" data-i18n="nav.pill.lifecycle">Lifecycle</button>
-        <button class="pill" data-tab="retirement" data-pill="milestones" role="tab" aria-selected="false" data-i18n="nav.pill.milestones">Milestones</button>
-      </nav>
       <div class="pill-host" data-tab="retirement" data-pill="ss">
   <div class="card span-3 surface--secondary">
     <div class="card-title"><span data-i18n="sec.socialSecurity">Social Security — Realistic Estimator &amp; Three-Phase FIRE</span></div>
@@ -4105,6 +4319,14 @@
       </details>
     </div>
   </div>
+        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
+      </div>
+      <!-- Feature 034 (RR only) — Year Tax Estimator is now its own Retirement sub-tab
+           (data-pill="year-tax"), between Withdrawal Strategy and Drawdown. The #teCard
+           block + its renderYearTaxEstimator wiring are UNCHANGED — only relocated into
+           this pill-host. The original Next button + closing </div> below now close THIS
+           host. The Generic dashboard has no such pill/host (documented RR-only divergence). -->
+      <div class="pill-host" data-tab="retirement" data-pill="year-tax" hidden>
   <!-- ==================== Feature 034 — Year Tax Estimator (RR only) ====================
        A self-contained single-year federal tax microscope. Auto-pulls the displayed
        strategy's projected income/gains for the selected retirement year, converts them to
@@ -4255,9 +4477,6 @@
 
     <section id="tab-history" class="tab-panel" data-tab="history" hidden role="tabpanel" aria-labelledby="tabBtn-history">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="History sections">
-        <button class="pill active" data-tab="history" data-pill="snapshots" role="tab" aria-selected="true" data-i18n="nav.pill.snapshots">Snapshots</button>
-      </nav>
       <div class="pill-host" data-tab="history" data-pill="snapshots">
   <div class="card span-3">
     <div class="card-title"><span class="icon">📸</span> <span data-i18n="sec.snapshots">Snapshot History — Track Your Progress Over Time</span></div>
@@ -4313,9 +4532,6 @@
     <!-- ==================== Feature 014 — Audit tab ==================== -->
     <section id="tab-audit" class="tab-panel" data-tab="audit" hidden role="tabpanel" aria-labelledby="tabBtn-audit">
       <div class="tab-scroll-sentinel" aria-hidden="true"></div>
-      <nav class="pill-bar" role="tablist" aria-label="Audit sections">
-        <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
-      </nav>
       <div class="pill-host" data-tab="audit" data-pill="summary">
         <div class="audit-root">
 
@@ -4456,6 +4672,8 @@
     <!-- ==================== /Feature 014 ==================== -->
   </div>
   <!-- ==================== /Feature 013 ==================== -->
+    </div><!-- /#contentArea -->
+  </div><!-- /#navLayout (Feature 035) -->
 
 </div>
 
@@ -6479,11 +6697,13 @@ const TRANSLATIONS = {
     // pill was retired and #scenarioInsight is now inline under the country grid.
     'nav.pill.ss':             'Social Security',
     'nav.pill.withdrawal':     'Withdrawal Strategy',
+    'nav.pill.yearTax':        'Year Tax Estimator',
     'nav.pill.drawdown':       'Drawdown',
     'nav.pill.lifecycle':      'Lifecycle',
     'nav.pill.milestones':     'Milestones',
     'nav.pill.snapshots':      'Snapshots',
     'nav.next':                'Next →',
+    'nav.drawerToggle':        'Open navigation',
     // === Feature 014: Calc Audit ===
     'nav.tab.audit':                            'Audit',
     'audit.section.flow.title':                 'Calculation Flow',
@@ -6597,9 +6817,16 @@ const TRANSLATIONS = {
     'te.roomLeft.label':                        'Room left at 0% capital gains',
     'te.roomLeft.tip':                          'How much more in long-term gains you can still sell this year at 0% federal tax. The standard deduction shelters gains first, so this room is the 0% ceiling PLUS any deduction your ordinary income did not use. Adding ordinary income (a bigger Traditional withdrawal or Roth conversion) OR more gains shrinks it dollar-for-dollar.',
     'te.roomLeft.value':                        '${0}',
-    // Companion headline — the same 0% pool seen from the ordinary-income side.
+    // Companion headline — the ORDINARY-bracket framing (room to the 22% bracket).
     'te.headroom.label':                        'Ordinary-income headroom',
-    'te.headroom.tip':                          'How much more ordinary income (Traditional withdrawal, Roth conversion, or taxable SS + interest) you can add this year before your long-term gains start being taxed at 15%. It draws from the SAME 0% pool as the capital-gains room — adding a dollar of EITHER gains or ordinary income consumes a dollar of room — so the two figures match by design.',
+    'te.headroom.tip':                          'How much more ordinary income (Traditional withdrawal, Roth conversion, or taxable SS + interest) you can add this year before crossing from the 12% bracket into the 22% bracket. Unlike the 0% capital-gains room, this ignores any long-term gains you realize (gains aren’t ordinary income and don’t fill the ordinary brackets) — so the two figures differ whenever you have gains.',
+    // Bracket-ladder signals row — current band per category + room to the next band.
+    'te.ladder.title':                          'Which bracket are you in?',
+    'te.ladder.tip':                            'For each kind of income the highlighted rate is the bracket your NEXT dollar lands in. The line below is how much more of that income you can add before crossing into the next bracket. Ordinary income (Traditional withdrawals, Roth conversions, taxable SS + interest) and long-term capital gains climb separate ladders — and the standard deduction is already accounted for, so the 10% band reflects income above your deduction.',
+    'te.ladder.ordinaryLabel':                  'Ordinary income',
+    'te.ladder.ltcgLabel':                      'Capital gains',
+    'te.ladder.roomBeforeNext':                 '${0} more before the {1}% bracket',
+    'te.ladder.topBracket':                     'Top bracket — nothing higher to cross into',
     // T017 (US2) — card headings + show-your-work step templates.
     'te.card.ordinary':                         'Ordinary income tax',
     'te.card.ltcg':                             'Long-term capital gains tax',
@@ -6607,6 +6834,7 @@ const TRANSLATIONS = {
     'te.step.ordMinusStd':                      '${0} gross − ${1} standard deduction = ${2} taxable',
     'te.step.ordLayer':                         '${0}–${1}: ${2} taxed at {3}% = ${4}',
     'te.step.ordTotal':                         'Ordinary tax owed: ${0}',
+    'te.step.ordHeadroom':                      'Ordinary-income headroom: ${0} top of the 12% bracket (after deduction) − ${1} ordinary income = ${2} of room before the 22% bracket.',
     'te.step.ltcgShelter':                      'Your standard deduction shelters ${0} of these gains (your ordinary income didn’t use all of it), so only ${1} of gain is taxable.',
     'te.step.ltcgStack':                        'Gains stack on top of ${0} ordinary taxable income; the 0% band tops out at ${1}, leaving ${2} of 0% room.',
     'te.step.ltcgLayer':                        '{0}% rate: ${1} of gain = ${2}',
@@ -7636,11 +7864,13 @@ const TRANSLATIONS = {
     // Feature 015 follow-up — nav.pill.countryDeepDive removed (pill retired).
     'nav.pill.ss':             '社會安全金',
     'nav.pill.withdrawal':     '提款策略',
+    'nav.pill.yearTax':        '單年稅務估算器',
     'nav.pill.drawdown':       '資產提領',
     'nav.pill.lifecycle':      '完整生命週期',
     'nav.pill.milestones':     '里程碑',
     'nav.pill.snapshots':      '歷史紀錄',
     'nav.next':                '下一步 →',
+    'nav.drawerToggle':        '開啟導覽',
     // === Feature 014: Calc Audit ===
     'nav.tab.audit':                            '計算審查',
     'audit.section.flow.title':                 '計算流程',
@@ -7754,9 +7984,16 @@ const TRANSLATIONS = {
     'te.roomLeft.label':                        '0% 資本利得剩餘空間',
     'te.roomLeft.tip':                          '今年你還能以 0% 聯邦稅率賣出多少長期資本利得。標準扣除額會先抵減資本利得，因此這個空間是 0% 上限「加上」你一般收入未用完的扣除額。增加一般收入（更大的 Traditional 提領或 Roth 轉換）或更多利得都會逐元縮小此空間。',
     'te.roomLeft.value':                        '${0}',
-    // 輔助標題 — 相同的 0% 空間，從一般收入的角度來看。
+    // 輔助標題 — 一般稅級的角度（距離 22% 稅級的餘裕）。
     'te.headroom.label':                        '一般收入餘裕',
-    'te.headroom.tip':                          '今年你還能再增加多少一般收入（Traditional 提領、Roth 轉換，或應稅的社安 + 利息），長期資本利得才會開始以 15% 課稅。它與資本利得空間使用「同一個」0% 池 — 增加 1 美元的利得或一般收入都會消耗 1 美元的空間 — 因此這兩個數字依設計會相同。',
+    'te.headroom.tip':                          '今年你還能再增加多少一般收入（Traditional 提領、Roth 轉換，或應稅的社安 + 利息），才會從 12% 稅級跨入 22% 稅級。與 0% 資本利得空間不同，這不計入你實現的任何長期資本利得（資本利得不算一般收入、不會填滿一般稅級）— 因此當你有資本利得時，這兩個數字會不同。',
+    // 稅級階梯訊號列 — 各類別目前稅級 + 距離下一稅級的餘裕。
+    'te.ladder.title':                          '你目前在哪個稅級？',
+    'te.ladder.tip':                            '對每一種收入，高亮的稅率是你「下一元」會落入的稅級。下方的數字是在跨入下一個稅級前，你還能再增加多少該類收入。一般收入（Traditional 提領、Roth 轉換、應稅社安＋利息）與長期資本利得各自有獨立的階梯 — 標準扣除額已計入，因此 10% 級距反映的是扣除額以上的收入。',
+    'te.ladder.ordinaryLabel':                  '一般收入',
+    'te.ladder.ltcgLabel':                      '資本利得',
+    'te.ladder.roomBeforeNext':                 '還可再增加 ${0} 才會進入 {1}% 稅級',
+    'te.ladder.topBracket':                     '已在最高稅級 — 沒有更高的稅級',
     // T017（US2）— 卡片標題 + 計算過程範本。
     'te.card.ordinary':                         '一般所得稅',
     'te.card.ltcg':                             '長期資本利得稅',
@@ -7764,6 +8001,7 @@ const TRANSLATIONS = {
     'te.step.ordMinusStd':                      '${0} 總額 − ${1} 標準扣除額 = ${2} 應稅額',
     'te.step.ordLayer':                         '${0}–${1}：${2} 以 {3}% 課稅 = ${4}',
     'te.step.ordTotal':                         '一般所得應繳稅：${0}',
+    'te.step.ordHeadroom':                      '一般收入餘裕：12% 稅級上限（含扣除額）${0} − 一般收入 ${1} = 距離 22% 稅級還有 ${2}。',
     'te.step.ltcgShelter':                      '你的標準扣除額抵減了這些利得中的 ${0}（你的一般收入沒有用完扣除額），因此只有 ${1} 的利得需要課稅。',
     'te.step.ltcgStack':                        '資本利得堆疊在 ${0} 一般應稅所得之上；0% 級距上限為 ${1}，剩餘 ${2} 的 0% 空間。',
     'te.step.ltcgLayer':                        '{0}% 稅率：${1} 的利得 = ${2}',
@@ -7824,6 +8062,14 @@ function switchLanguage(lang) {
     const key = el.getAttribute('data-i18n-tip');
     const trans = TRANSLATIONS[currentLang]?.[key];
     if (trans) el.setAttribute('data-tip', trans);
+  });
+  // Feature 035 — translate accessible labels (aria-label) for icon-only
+  // controls (e.g. the nav drawer ☰ toggle). Honors the existing data-i18n-*
+  // attribute convention.
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria');
+    const trans = TRANSLATIONS[currentLang]?.[key];
+    if (trans) el.setAttribute('aria-label', trans);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     const key = el.getAttribute('data-i18n-placeholder');
@@ -15206,6 +15452,8 @@ function _teComputeAndPaint() {
       ordinaryBrackets: _teBuildOrdinaryBrackets(brkts, factor),
       ltcg0Ceiling: ceilNominal,
       ltcg15Ceiling: (brkts.ltcg15Top || 583750) * factor,
+      top12Ceiling: (brkts.top12 || 0) * factor, // 12%-bracket top → ordinary-income headroom
+
       irmaaThreshold: irmaaToday * factor,
       niitThreshold: 250000, // FIXED $250k MFJ — never inflated (D2 / FR-021).
       niitRate: 0.038,
@@ -15247,52 +15495,54 @@ function _teComputeAndPaint() {
 }
 
 /**
- * Paint the signals row: the dominant room-left-at-0% headline plus the marginal
- * next-dollar chips (ordinary + LTCG, T023), the IRMAA Tier 1 chip (T024, conditional),
- * and the NIIT 3.8% chip (T025, conditional). Pure DOM paint from the frozen output.
+ * Build one bracket-ladder row: a label, the rate badges with the CURRENT band
+ * highlighted, and a "$X before the Y% bracket" line (or "top bracket"). `info` is
+ * out.brackets.ordinary | out.brackets.ltcg (currentRate, nextRate, roomToNext, ladder[]).
+ */
+function _teLadderRow(labelKey, info) {
+  if (!info) return '';
+  var ladder = Array.isArray(info.ladder) ? info.ladder : [];
+  var badges = '';
+  for (var i = 0; i < ladder.length; i += 1) {
+    if (i > 0) badges += '<span style="color:var(--text-dim);margin:0 5px">─</span>';
+    var isCur = Math.abs(ladder[i] - info.currentRate) < 1e-9;
+    var pct = _teFmtRate(ladder[i] * 100) + '%';
+    badges += isCur
+      ? '<span style="display:inline-block;padding:3px 11px;border-radius:7px;background:var(--accent);color:#fff;font-weight:800">' + pct + '</span>'
+      : '<span style="display:inline-block;padding:3px 9px;border-radius:7px;border:1px solid var(--border);color:var(--text-dim)">' + pct + '</span>';
+  }
+  var roomLine = (info.roomToNext == null || info.nextRate == null)
+    ? t('te.ladder.topBracket')
+    : t('te.ladder.roomBeforeNext', _teFmt(info.roomToNext), _teFmtRate(info.nextRate * 100));
+  return '<div style="margin-bottom:12px">' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<span style="min-width:108px;font-size:0.8em;color:var(--text-dim)">' + t(labelKey) + '</span>' +
+        '<span style="font-size:0.92em">' + badges + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.9em;color:var(--accent);font-weight:700;margin-top:5px;padding-left:2px">' + roomLine + '</div>' +
+    '</div>';
+}
+
+/**
+ * Paint the signals row: a per-category bracket ladder (ordinary + LTCG) showing the
+ * CURRENT bracket and how much more income / gain fits before the next bracket, plus the
+ * conditional IRMAA Tier 1 (T024) and NIIT 3.8% (T025) chips. Pure DOM paint from the
+ * frozen output. (The standalone marginal next-dollar chips were folded into the ladder:
+ * the highlighted band IS the next dollar's rate.)
  */
 function _tePaintSignals(signalsEl, out) {
-  var roomLeft = out.signals.roomLeftAt0;
-  // Dominant headline (US1): how much more LTCG can be realized at 0%. This now
-  // correctly accounts for the standard deduction sheltering gains, so it shrinks
-  // as EITHER gains OR ordinary income rise.
+  var b = out.brackets || {};
   var html =
-    '<div style="display:inline-block;padding:12px 18px;margin-right:10px;background:rgba(100,220,100,0.08);border:1px solid var(--success);border-radius:10px;vertical-align:top">' +
-      '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.roomLeft.label') +
-        ' <span class="info-tip" data-i18n-tip="te.roomLeft.tip" data-tip="' + _teTipAttr('te.roomLeft.tip') + '">ⓘ</span>' +
+    '<div style="padding:13px 16px;background:rgba(108,99,255,0.05);border:1px solid var(--accent);border-radius:10px">' +
+      '<div style="font-size:0.78em;color:var(--text-dim);margin-bottom:10px">' + t('te.ladder.title') +
+        ' <span class="info-tip" data-i18n-tip="te.ladder.tip" data-tip="' + _teTipAttr('te.ladder.tip') + '">ⓘ</span>' +
       '</div>' +
-      '<div style="font-weight:800;font-size:1.6em;color:var(--success);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
+      _teLadderRow('te.ladder.ordinaryLabel', b.ordinary) +
+      _teLadderRow('te.ladder.ltcgLabel', b.ltcg) +
     '</div>';
 
-  // Companion headline — same 0% pool, viewed from the INCOME side: how much more
-  // ordinary income (Traditional / Roth conversion / taxable SS + interest) can be
-  // added before gains start being taxed. Numerically identical to the gains room
-  // (every added dollar of EITHER consumes one dollar of the pool), shown so the
-  // user sees both framings. Reuses roomLeft (do NOT recompute — they are equal).
-  html +=
-    '<div style="display:inline-block;padding:12px 18px;background:rgba(108,99,255,0.08);border:1px solid var(--accent);border-radius:10px;vertical-align:top">' +
-      '<div style="font-size:0.78em;color:var(--text-dim)">' + t('te.headroom.label') +
-        ' <span class="info-tip" data-i18n-tip="te.headroom.tip" data-tip="' + _teTipAttr('te.headroom.tip') + '">ⓘ</span>' +
-      '</div>' +
-      '<div style="font-weight:800;font-size:1.6em;color:var(--accent);line-height:1.2">$' + _teFmt(roomLeft) + '</div>' +
-    '</div>';
-
-  // Secondary chips row (marginal + IRMAA + NIIT).
+  // Secondary chips row (IRMAA + NIIT only).
   var chips = '';
-  // T023 — marginal next-dollar (ordinary).
-  chips +=
-    '<span style="display:inline-block;padding:7px 12px;background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.4);border-radius:8px;font-size:0.82em">' +
-      '<span style="color:var(--text-dim)">' + t('te.marginal.ordinary') + '</span> ' +
-      '<strong style="color:var(--text)">' + _teFmtRate(out.marginal.nextOrdinaryRate * 100) + '%</strong>' +
-      ' <span class="info-tip" data-i18n-tip="te.marginal.tip" data-tip="' + _teTipAttr('te.marginal.tip') + '">ⓘ</span>' +
-    '</span>';
-  // T023 — marginal next-dollar (LTCG).
-  chips +=
-    '<span style="display:inline-block;padding:7px 12px;background:rgba(100,220,255,0.08);border:1px solid rgba(100,220,255,0.4);border-radius:8px;font-size:0.82em">' +
-      '<span style="color:var(--text-dim)">' + t('te.marginal.ltcg') + '</span> ' +
-      '<strong style="color:var(--text)">' + _teFmtRate(out.marginal.nextLtcgRate * 100) + '%</strong>' +
-      ' <span class="info-tip" data-i18n-tip="te.marginal.tip" data-tip="' + _teTipAttr('te.marginal.tip') + '">ⓘ</span>' +
-    '</span>';
   // T024 — IRMAA Tier 1 chip (only when crossed).
   if (out.signals.irmaa && out.signals.irmaa.crossed) {
     chips +=
@@ -15310,7 +15560,7 @@ function _tePaintSignals(signalsEl, out) {
       '</span>';
   }
 
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center">' + chips + '</div>';
+  if (chips) html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center">' + chips + '</div>';
   signalsEl.innerHTML = html;
 }
 
@@ -20285,16 +20535,32 @@ window._rebindStickyHeaderObserver();
 // the module's exports are guaranteed to be on `window`.
 document.addEventListener('DOMContentLoaded', function _initTabRouter() {
   if (!window.tabRouter || !window.TABS) return;
+  // Feature 034 (RR-only) — inject the "Year Tax Estimator" pill into the
+  // Retirement tab, between Withdrawal Strategy and Drawdown, so tabRouter manages
+  // its show/hide + Next workflow + persistence like any other pill. RR-only
+  // divergence: the Generic dashboard keeps the shared window.TABS (it has no
+  // #teCard). window.TABS entries are frozen, so build a fresh array.
+  var _rrTabs = window.TABS.map(function (t) {
+    if (t.id !== 'retirement') return t;
+    var pills = [];
+    t.pills.forEach(function (p) {
+      pills.push(p);
+      if (p.id === 'withdrawal') pills.push({ id: 'year-tax', labelKey: 'nav.pill.yearTax' });
+    });
+    return Object.assign({}, t, { pills: pills });
+  });
   window.tabRouter.init({
-    tabs: window.TABS,
+    tabs: _rrTabs,
     rootEl: document.body,
     tabBarEl: document.getElementById('tabBar'),
+    // Feature 035 — pill-bars now live in #navRail (left rail), not nested in
+    // each .tab-panel. Resolve them by their data-tab in the rail.
     pillBarsByTab: {
-      plan:       document.querySelector('#tab-plan       > .pill-bar'),
-      geography:  document.querySelector('#tab-geography  > .pill-bar'),
-      retirement: document.querySelector('#tab-retirement > .pill-bar'),
-      history:    document.querySelector('#tab-history    > .pill-bar'),
-      audit:      document.querySelector('#tab-audit      > .pill-bar'),
+      plan:       document.querySelector('#navRail .pill-bar[data-tab="plan"]'),
+      geography:  document.querySelector('#navRail .pill-bar[data-tab="geography"]'),
+      retirement: document.querySelector('#navRail .pill-bar[data-tab="retirement"]'),
+      history:    document.querySelector('#navRail .pill-bar[data-tab="history"]'),
+      audit:      document.querySelector('#navRail .pill-bar[data-tab="audit"]'),
     },
     getTabButton:  function (tabId) { return document.querySelector('#tabBar [data-tab="' + tabId + '"]'); },
     getPillButton: function (tabId, pillId) { return document.querySelector('.pill[data-tab="' + tabId + '"][data-pill="' + pillId + '"]'); },
@@ -20303,6 +20569,10 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
     storage: window.localStorage,
     win: window,
     onAfterActivate: function (state) {
+      // Feature 035 — drive the left-rail accordion: only the active tab's
+      // pill-bar is shown (one CSS attribute, single source of truth = router).
+      var _navRail = document.getElementById('navRail');
+      if (_navRail) _navRail.setAttribute('data-active-tab', state.tab);
       if (typeof window._rebindStickyHeaderObserver === 'function') {
         window._rebindStickyHeaderObserver(state.tab);
       }
@@ -20331,6 +20601,43 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
   if (typeof window._rebindStickyHeaderObserver === 'function') {
     window._rebindStickyHeaderObserver(window.tabRouter.getState().tab);
   }
+  // Feature 035 — seed the left-rail accordion for the initially active tab.
+  var _navRailInit = document.getElementById('navRail');
+  if (_navRailInit) _navRailInit.setAttribute('data-active-tab', window.tabRouter.getState().tab);
+
+  // Feature 035 — mobile drawer controller. Vanilla, file://-safe. The drawer
+  // ONLY controls rail visibility; navigation state stays owned by tabRouter.
+  (function _initNavDrawer() {
+    var toggle = document.getElementById('navDrawerToggle');
+    var scrim = document.getElementById('navScrim');
+    var rail = document.getElementById('navRail');
+    if (!toggle || !scrim || !rail) return;
+    var DRAWER_BP = 767; // matches the @media (max-width: 767px) breakpoint
+    function openDrawer() {
+      document.body.classList.add('nav-drawer-open');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+    function closeDrawer() {
+      document.body.classList.remove('nav-drawer-open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    function toggleDrawer() {
+      if (document.body.classList.contains('nav-drawer-open')) closeDrawer();
+      else openDrawer();
+    }
+    toggle.addEventListener('click', toggleDrawer);
+    scrim.addEventListener('click', closeDrawer);
+    // Close after any tab/pill selection inside the rail (navigation owned by
+    // tabRouter, which already fired by the time this bubbles).
+    rail.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.tab, .pill') : null;
+      if (btn) closeDrawer();
+    });
+    // Force-close when the viewport grows back to desktop width.
+    window.addEventListener('resize', function () {
+      if (window.innerWidth > DRAWER_BP) closeDrawer();
+    });
+  })();
 });
 
 // Feature 006 (US2) — initial placeholder render so the chips show '—' at

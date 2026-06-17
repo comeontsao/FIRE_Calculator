@@ -35,6 +35,7 @@ const ORDINARY_BRACKETS = Object.freeze([
 
 const STD_DED = 29200;
 const LTCG0_CEILING = 94050;
+const TOP12_CEILING = 94300; // top of the 12% ordinary bracket (taxable) — 22% starts here
 const LTCG15_CEILING = 583750;
 const IRMAA_THRESHOLD = 206000;
 const NIIT_THRESHOLD = 250000;
@@ -52,6 +53,7 @@ function makeInput(overrides = {}) {
     ordinaryBrackets: ORDINARY_BRACKETS,
     ltcg0Ceiling: LTCG0_CEILING,
     ltcg15Ceiling: LTCG15_CEILING,
+    top12Ceiling: TOP12_CEILING,
     irmaaThreshold: IRMAA_THRESHOLD,
     niitThreshold: NIIT_THRESHOLD,
     niitRate: NIIT_RATE,
@@ -456,6 +458,128 @@ test('SD: te.step.ltcgShelter emitted only when gains are sheltered; args = [she
 
   const notSheltered = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
   assert.ok(!notSheltered.steps.some(s => s.key === 'te.step.ltcgShelter'));
+});
+
+// ===========================================================================
+// signals.ordinaryHeadroom — room to the 22% bracket (12%-bracket framing).
+//   ordinaryHeadroom = max(0, top12Ceiling + standardDeduction − grossOrdinary)
+//   Distinct from roomLeftAt0: it IGNORES realized LTCG (gains aren't ordinary
+//   income), so the two diverge whenever gains are present.
+// ===========================================================================
+test('OH: equals top12Ceiling + stdDed − gross, independent of realized gains', () => {
+  const noGain = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 0 }));
+  const withGain = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  const expected = Math.max(0, TOP12_CEILING + STD_DED - 60000); // 63500
+  assert.ok(approx(noGain.signals.ordinaryHeadroom, expected));
+  // Adding $40k of gains does NOT change the ordinary headroom.
+  assert.ok(approx(withGain.signals.ordinaryHeadroom, expected));
+});
+
+test('OH: diverges from roomLeftAt0 when gains are present (the user-requested split)', () => {
+  // gross 60k ordinary + 40k LTCG — matches the design preview.
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  assert.ok(approx(out.signals.ordinaryHeadroom, 63500), `ordHeadroom ${out.signals.ordinaryHeadroom}`);
+  assert.ok(approx(out.signals.roomLeftAt0, 23250), `roomLeftAt0 ${out.signals.roomLeftAt0}`);
+  assert.ok(out.signals.ordinaryHeadroom !== out.signals.roomLeftAt0);
+});
+
+test('OH: clamps to 0 when gross ordinary income exceeds the 22%-bracket edge', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 200000, ltcg: 0 }));
+  assert.strictEqual(out.signals.ordinaryHeadroom, 0);
+});
+
+test('OH: falls back to the first >12% bracket threshold when top12Ceiling absent', () => {
+  const inp = makeInput({ tradWithdrawal: 60000, ltcg: 40000 });
+  delete inp.top12Ceiling;
+  const out = estimateYearTax(inp);
+  // First bracket with rate > 0.12 is the 0.22 band at threshold 94300 → same ceiling.
+  assert.ok(approx(out.signals.ordinaryHeadroom, Math.max(0, 94300 + STD_DED - 60000)));
+});
+
+test('OH: te.step.ordHeadroom emitted with args [ceilingGross, gross, headroom]', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  const step = out.steps.find(s => s.key === 'te.step.ordHeadroom');
+  assert.ok(step, 'ordinary-headroom step present');
+  assert.ok(approx(step.args[0], TOP12_CEILING + STD_DED)); // 123500 gross ceiling
+  assert.ok(approx(step.args[1], 60000));                   // gross ordinary income
+  assert.ok(approx(step.args[2], out.signals.ordinaryHeadroom));
+  // Step lands in the ORDINARY card (prefix-matched by the renderer).
+  assert.ok(step.key.indexOf('te.step.ord') === 0);
+});
+
+// ===========================================================================
+// brackets — per-category current band + room to the NEXT band (ladder UI).
+//   brackets.ordinary / brackets.ltcg = { currentRate, nextRate, roomToNext, ladder }
+//   roomToNext/nextRate are null in the top band.
+// ===========================================================================
+test('BL: ordinary in the 10% band → current 10%, next 12%, room absorbs unused deduction', () => {
+  // gross 40k − 29.2k = 10.8k taxable → 10% band (0..23200).
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 40000 }));
+  const o = out.brackets.ordinary;
+  assert.ok(approx(o.currentRate, 0.10));
+  assert.ok(approx(o.nextRate, 0.12));
+  // room = top10 (23200) + stdDed (29200) − gross (40000) = 12400
+  assert.ok(approx(o.roomToNext, 23200 + STD_DED - 40000));
+  assert.deepStrictEqual(o.ladder, [0.10, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]);
+});
+
+test('BL: ordinary in the 12% band → current 12%, next 22%, room to the 22% edge', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 60000 }));
+  const o = out.brackets.ordinary;
+  assert.ok(approx(o.currentRate, 0.12));
+  assert.ok(approx(o.nextRate, 0.22));
+  assert.ok(approx(o.roomToNext, 94300 + STD_DED - 60000)); // 63500
+});
+
+test('BL: ordinary in the top band → nextRate null, roomToNext null', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 800000 }));
+  const o = out.brackets.ordinary;
+  assert.ok(approx(o.currentRate, 0.37));
+  assert.strictEqual(o.nextRate, null);
+  assert.strictEqual(o.roomToNext, null);
+});
+
+test('BL: LTCG in the 0% band → current 0%, next 15%, room === roomLeftAt0', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 40000, ltcg: 10000 }));
+  const g = out.brackets.ltcg;
+  assert.strictEqual(g.currentRate, 0);
+  assert.ok(approx(g.nextRate, 0.15));
+  assert.ok(approx(g.roomToNext, out.signals.roomLeftAt0));
+  assert.deepStrictEqual(g.ladder, [0, 0.15, 0.20]);
+});
+
+test('BL: LTCG in the 15% band → current 15%, next 20%, room to the 15%→20% breakpoint', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 200000, ltcg: 60000 }));
+  const g = out.brackets.ltcg;
+  assert.ok(approx(g.currentRate, 0.15));
+  assert.ok(approx(g.nextRate, 0.20));
+  const stackTop = (200000 - STD_DED) + 60000; // taxable + taxableGain
+  assert.ok(approx(g.roomToNext, LTCG15_CEILING - stackTop));
+});
+
+test('BL: LTCG in the 20% band → current 20%, next null, room null', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 400000, ltcg: 300000 }));
+  const g = out.brackets.ltcg;
+  assert.ok(approx(g.currentRate, 0.20));
+  assert.strictEqual(g.nextRate, null);
+  assert.strictEqual(g.roomToNext, null);
+});
+
+test('BL: ltcg15Ceiling Infinity → ladder [0,0.15], 15% band has no next band', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 200000, ltcg: 60000, ltcg15Ceiling: Infinity }));
+  const g = out.brackets.ltcg;
+  assert.deepStrictEqual(g.ladder, [0, 0.15]);
+  assert.ok(approx(g.currentRate, 0.15));
+  assert.strictEqual(g.nextRate, null);
+  assert.strictEqual(g.roomToNext, null);
+});
+
+test('BL: brackets sub-objects are frozen', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 60000, ltcg: 40000 }));
+  assert.ok(Object.isFrozen(out.brackets));
+  assert.ok(Object.isFrozen(out.brackets.ordinary));
+  assert.ok(Object.isFrozen(out.brackets.ltcg));
+  assert.ok(Object.isFrozen(out.brackets.ordinary.ladder));
 });
 
 // ===========================================================================

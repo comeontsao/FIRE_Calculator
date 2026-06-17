@@ -80,15 +80,16 @@ async function loadDashboard(page: Page, fileName: string): Promise<void> {
 }
 
 /**
- * Activate Retirement → Withdrawal Strategy so the `#teCard` block lays out.
+ * Activate Retirement → Year Tax Estimator so the `#teCard` block lays out.
  * Uses the same tab-bar / pill-bar selectors as `tab-navigation.spec.ts`.
- * The estimator block lives at the bottom of the withdrawal pill-host, so it
- * is rendered once that pill is active.
+ * The estimator now lives in its own `data-pill="year-tax"` sub-section
+ * (between Withdrawal Strategy and Drawdown), so it is rendered once that
+ * pill is active.
  */
 async function openWithdrawalPill(page: Page): Promise<void> {
   await page.click('#tabBar .tab[data-tab="retirement"]');
   await page.waitForTimeout(SETTLE_MS / 2);
-  await page.click('.pill[data-tab="retirement"][data-pill="withdrawal"]');
+  await page.click('.pill[data-tab="retirement"][data-pill="year-tax"]');
   await page.waitForTimeout(SETTLE_MS);
   // The estimator paints on the recalc/tab-render path; wait until the year
   // picker has at least one option (proves renderYearTaxEstimator ran).
