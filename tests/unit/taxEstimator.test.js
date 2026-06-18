@@ -520,7 +520,29 @@ test('BL: ordinary in the 10% band → current 10%, next 12%, room absorbs unuse
   assert.ok(approx(o.nextRate, 0.12));
   // room = top10 (23200) + stdDed (29200) − gross (40000) = 12400
   assert.ok(approx(o.roomToNext, 23200 + STD_DED - 40000));
-  assert.deepStrictEqual(o.ladder, [0.10, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]);
+  // ladder carries the leading 0% deduction-shelter band (gross-income frame).
+  assert.deepStrictEqual(o.ladder, [0, 0.10, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]);
+});
+
+test('BL: ordinary under the deduction → current 0% (sheltered), next 10%, room = unused deduction', () => {
+  // gross 0 < stdDed 29200 → the deduction shelters the first $29,200 at 0%; the 10%
+  // bracket only bites once the deduction is exhausted.
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 0 }));
+  const o = out.brackets.ordinary;
+  assert.strictEqual(o.currentRate, 0);
+  assert.ok(approx(o.nextRate, 0.10));
+  assert.ok(approx(o.roomToNext, STD_DED - 0)); // 29200 before the 10% bracket
+  assert.deepStrictEqual(o.ladder, [0, 0.10, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]);
+  // marginal next-dollar rate is 0% too — the next ordinary dollar is deduction-absorbed.
+  assert.strictEqual(out.marginal.nextOrdinaryRate, 0);
+});
+
+test('BL: ordinary partway into the deduction → still 0% band, room shrinks dollar-for-dollar', () => {
+  const out = estimateYearTax(makeInput({ tradWithdrawal: 20000 })); // 20000 < 29200
+  const o = out.brackets.ordinary;
+  assert.strictEqual(o.currentRate, 0);
+  assert.ok(approx(o.nextRate, 0.10));
+  assert.ok(approx(o.roomToNext, STD_DED - 20000)); // 9200 before the 10% bracket
 });
 
 test('BL: ordinary in the 12% band → current 12%, next 22%, room to the 22% edge', () => {

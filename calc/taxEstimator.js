@@ -222,7 +222,10 @@ function estimateYearTax(params) {
   const niitAmount = niitCrossed ? niitRate * Math.min(ltcg, magi - niitThreshold) : 0;
 
   // --- Marginal next-dollar rates ---
-  const nextOrdinaryRate = _bandRate(taxable, ordinaryBrackets);
+  // While gross ordinary income is under the standard deduction, the next ordinary
+  // dollar is absorbed by the deduction (taxable stays 0) → its marginal rate is 0%,
+  // not the first-bracket rate. Above the deduction it's the band rate as usual.
+  const nextOrdinaryRate = gross < standardDeduction ? 0 : _bandRate(taxable, ordinaryBrackets);
   let nextLtcgRate;
   if (roomLeftAt0 > 0) {
     nextLtcgRate = 0;
@@ -233,19 +236,40 @@ function estimateYearTax(params) {
   }
 
   // --- Per-category bracket ladder + room to the NEXT bracket boundary ---
-  // Ordinary: find the band containing `taxable`; room is measured in ADDED-INCOME
-  // terms (top-of-band + standardDeduction − gross) so it absorbs any unused
-  // deduction (a sub-deduction earner reads "in the 10% bracket, $X before 12%").
+  // The ORDINARY ladder is expressed in GROSS-income terms with a leading 0%
+  // "deduction-shelter" band: the first `standardDeduction` of ordinary income is
+  // taxed at 0% (the deduction absorbs it), then the real brackets follow. The
+  // highlighted band tracks gross income — a sub-deduction earner reads "in the 0%
+  // band, $X before the 10% bracket"; once the deduction is exhausted the 10% band
+  // lights up and the line reads "$Y before the 12% bracket". Room is measured in
+  // ADDED-INCOME terms (next-band gross edge − gross) so it absorbs any unused
+  // deduction. The 0% band is omitted only when there is no standard deduction at
+  // all (degenerate input).
+  const _hasDeductionBand = standardDeduction > 0;
+  const _subDeduction = _hasDeductionBand && gross < standardDeduction;
   let _ordIdx = 0;
   for (let i = 0; i < ordinaryBrackets.length; i += 1) {
     if (taxable >= _num(ordinaryBrackets[i].threshold)) _ordIdx = i; else break;
   }
-  const ordCurrentRate = ordinaryBrackets.length ? _num(ordinaryBrackets[_ordIdx].rate) : 0;
-  const _ordHasNext = _ordIdx + 1 < ordinaryBrackets.length;
-  const ordNextRate = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].rate) : null;
-  const _ordUpper = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].threshold) : Infinity;
-  const ordRoomToNext = _ordHasNext ? Math.max(0, _ordUpper + standardDeduction - gross) : null;
-  const ordLadder = ordinaryBrackets.map(function (bk) { return _num(bk.rate); });
+  let ordCurrentRate;
+  let ordNextRate;
+  let ordRoomToNext;
+  if (_subDeduction) {
+    // 0% deduction-shelter band: the next dollar past the unused deduction enters the
+    // first real ordinary bracket (10%); room = the unused standard deduction.
+    ordCurrentRate = 0;
+    ordNextRate = ordinaryBrackets.length ? _num(ordinaryBrackets[0].rate) : null;
+    ordRoomToNext = ordNextRate == null ? null : Math.max(0, standardDeduction - gross);
+  } else {
+    ordCurrentRate = ordinaryBrackets.length ? _num(ordinaryBrackets[_ordIdx].rate) : 0;
+    const _ordHasNext = _ordIdx + 1 < ordinaryBrackets.length;
+    ordNextRate = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].rate) : null;
+    const _ordUpper = _ordHasNext ? _num(ordinaryBrackets[_ordIdx + 1].threshold) : Infinity;
+    ordRoomToNext = _ordHasNext ? Math.max(0, _ordUpper + standardDeduction - gross) : null;
+  }
+  const ordLadder = (_hasDeductionBand ? [0] : []).concat(
+    ordinaryBrackets.map(function (bk) { return _num(bk.rate); })
+  );
 
   // LTCG: the next gain dollar's rate IS the current band (nextLtcgRate). Room to the
   // next band is the 0% pool (when in 0%) or the distance to the 15%→20% breakpoint
