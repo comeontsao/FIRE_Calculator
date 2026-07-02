@@ -69,7 +69,7 @@ const TAB_PILLS: Record<string, readonly string[]> = {
   plan:       ['profile', 'assets', 'investment', 'mortgage', 'payoff-invest', 'expenses', 'summary'],
   geography:  ['scenarios', 'country-chart', 'healthcare'],
   retirement: ['ss', 'withdrawal', 'drawdown', 'lifecycle', 'milestones'],
-  history:    ['snapshots'],
+  history:    ['snapshots', 'analytics'], // Feature 036 — analytics pill
   audit:      ['summary'],
 };
 
@@ -419,17 +419,20 @@ for (const dash of DASHBOARDS) {
       await expectNextDisabled(page, 'retirement', 'milestones');
     });
 
-    test('e) History/Snapshots is a single-pill tab with disabled Next', async ({ page }) => {
+    test('e) History walkthrough ends with Analytics disabled', async ({ page }) => {
       await loadWithHash(page, dash.fileName, '#tab=history&pill=snapshots');
       await expectActive(page, 'history', 'snapshots');
 
-      // Only one pill in the History tab (per `TABS` in `calc/tabRouter.js`).
-      // Feature 035 relocated the pill-bars into the left rail (#navRail), so the
-      // pill lives there now, not inside the #tab-history panel.
+      // Feature 036 added the Analytics pill after Snapshots (per `TABS` in
+      // `calc/tabRouter.js`). Feature 035 relocated the pill-bars into the left
+      // rail (#navRail), so the pills live there, not inside the #tab-history panel.
       const pillCount = await page.locator('#navRail .pill-bar[data-tab="history"] .pill').count();
-      expect(pillCount).toBe(1);
+      expect(pillCount).toBe(2);
 
-      await expectNextDisabled(page, 'history', 'snapshots');
+      // Snapshots -> Analytics via Next; Analytics is the terminal pill.
+      await clickNextInActivePill(page, 'history', 'snapshots');
+      await expectActive(page, 'history', 'analytics');
+      await expectNextDisabled(page, 'history', 'analytics');
     });
   });
 }
@@ -546,10 +549,11 @@ test.describe('T029 lockstep DOM-diff (SC-009)', () => {
       // Defensive: assert the canonical 5 tabs and pill-host counts to catch
       // any drift from the spec entity table (`calc/tabRouter.js > TABS`).
       // Feature 014 added the Audit tab (5th tab, +1 pill-host); feature 034
-      // adds 1 RR-only pill-host (year-tax) → Generic 17, RR 18.
+      // adds 1 RR-only pill-host (year-tax); feature 036 adds the shared
+      // history:analytics pill-host to both → Generic 18, RR 19.
       expect(rr.tabs).toEqual(['plan', 'geography', 'retirement', 'history', 'audit']);
-      expect(generic.hosts.length).toBe(17);
-      expect(rr.hosts.length).toBe(18);
+      expect(generic.hosts.length).toBe(18);
+      expect(rr.hosts.length).toBe(19);
       expect(rr.panels).toEqual([
         'tab-plan',
         'tab-geography',

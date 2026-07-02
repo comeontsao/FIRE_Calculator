@@ -76,7 +76,7 @@ const TAB_PILLS: Record<string, readonly string[]> = {
   plan: ['profile', 'assets', 'investment', 'mortgage', 'payoff-invest', 'expenses', 'summary'],
   geography: ['scenarios', 'country-chart', 'healthcare'],
   retirement: ['ss', 'withdrawal', 'drawdown', 'lifecycle', 'milestones'],
-  history: ['snapshots'],
+  history: ['snapshots', 'analytics'], // Feature 036 — analytics pill
   audit: ['summary'],
 };
 

@@ -2281,6 +2281,34 @@
   }
   .pill-host[hidden] { display: none; }
 
+  /* Feature 036 — Analytics KPI tiles */
+  .analytics-kpi {
+    background: var(--card-sunk);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+  }
+  .analytics-kpi .ak-label {
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .analytics-kpi .ak-value {
+    font-size: 1.35em;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .analytics-kpi .ak-value.pos { color: var(--accent2); }
+  .analytics-kpi .ak-value.neg { color: var(--danger); }
+  .analytics-kpi .ak-sub {
+    font-size: 0.75em;
+    color: var(--text-faint);
+    margin-top: 3px;
+  }
+
   /* Tab panel — show/hide via [hidden] */
   .tab-panel[hidden] { display: none; }
 
@@ -3169,6 +3197,7 @@
       </nav>
       <nav class="pill-bar" data-tab="history" role="tablist" aria-label="History sections">
         <button class="pill active" data-tab="history" data-pill="snapshots" role="tab" aria-selected="true" data-i18n="nav.pill.snapshots">Snapshots</button>
+        <button class="pill" data-tab="history" data-pill="analytics" role="tab" aria-selected="false" data-i18n="nav.pill.analytics">Analytics</button>
       </nav>
       <nav class="pill-bar" data-tab="audit" role="tablist" aria-label="Audit sections">
         <button class="pill active" data-tab="audit" data-pill="summary" role="tab" aria-selected="true" data-i18n="nav.pill.summary">Summary</button>
@@ -4428,6 +4457,67 @@
       </div>
     </div>
   </div>
+        <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next">Next →</button>
+      </div>
+
+      <!-- ==================== Feature 036 — Analytics pill ==================== -->
+      <div class="pill-host" data-tab="history" data-pill="analytics" hidden>
+        <div class="card span-3" id="analyticsEmpty" style="display:none;text-align:center;color:var(--text-dim);padding:44px 24px">
+          <div style="font-size:2.2em;margin-bottom:12px">📈</div>
+          <div style="font-size:1.05em" data-i18n="analytics.empty">Save at least 2 snapshots to see trends over time.</div>
+        </div>
+
+        <div class="card span-3" data-analytics-content>
+          <div class="card-title"><span class="icon">📊</span> <span data-i18n="analytics.statsTitle">Growth Stats</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-top:4px">
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.totalGain">Total Gain</div>
+              <div class="ak-value" id="akTotalGain">—</div>
+              <div class="ak-sub" id="akTotalGainSub">—</div>
+            </div>
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.avgMonthly">Avg Monthly Growth</div>
+              <div class="ak-value" id="akAvgMonthly">—</div>
+              <div class="ak-sub" data-i18n="analytics.kpi.perMonth">per month</div>
+            </div>
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.best">Best Period</div>
+              <div class="ak-value" id="akBest">—</div>
+              <div class="ak-sub" id="akBestSub">—</div>
+            </div>
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.worst">Worst Period</div>
+              <div class="ak-value" id="akWorst">—</div>
+              <div class="ak-sub" id="akWorstSub">—</div>
+            </div>
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.pctThere">% to FIRE</div>
+              <div class="ak-value" id="akPct">—</div>
+              <div class="ak-sub" data-i18n="analytics.kpi.ofTarget">of FIRE target</div>
+            </div>
+            <div class="analytics-kpi">
+              <div class="ak-label" data-i18n="analytics.kpi.pace">Est. Pace to Target</div>
+              <div class="ak-value" id="akPace">—</div>
+              <div class="ak-sub" data-i18n="analytics.kpi.atCurrentPace">at current pace</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card span-3" data-analytics-content>
+          <div class="card-title"><span class="icon">💰</span> <span data-i18n="analytics.nwTitle">Net Worth Over Time</span></div>
+          <div style="position:relative;height:320px;margin-top:8px"><canvas id="analyticsNwChart"></canvas></div>
+        </div>
+
+        <div class="card span-3" data-analytics-content>
+          <div class="card-title"><span class="icon">🧩</span> <span data-i18n="analytics.allocTitle">Asset Allocation Over Time</span></div>
+          <div style="position:relative;height:320px;margin-top:8px"><canvas id="analyticsAllocChart"></canvas></div>
+        </div>
+
+        <div class="card span-3" data-analytics-content>
+          <div class="card-title"><span class="icon">🎯</span> <span data-i18n="analytics.progressTitle">Savings Rate &amp; FIRE Progress</span></div>
+          <div style="position:relative;height:320px;margin-top:8px"><canvas id="analyticsProgressChart"></canvas></div>
+        </div>
+
         <button type="button" class="next-pill-btn" data-action="next-pill" data-i18n="nav.next" disabled>Next →</button>
       </div>
     </section>
@@ -6974,6 +7064,27 @@ const TRANSLATIONS = {
     'nav.pill.lifecycle':      'Lifecycle',
     'nav.pill.milestones':     'Milestones',
     'nav.pill.snapshots':      'Snapshots',
+    'nav.pill.analytics':      'Analytics',
+    'analytics.empty':             'Save at least 2 snapshots to see trends over time.',
+    'analytics.statsTitle':        'Growth Stats',
+    'analytics.nwTitle':           'Net Worth Over Time',
+    'analytics.allocTitle':        'Asset Allocation Over Time',
+    'analytics.progressTitle':     'Savings Rate & FIRE Progress',
+    'analytics.kpi.totalGain':     'Total Gain',
+    'analytics.kpi.avgMonthly':    'Avg Monthly Growth',
+    'analytics.kpi.best':          'Best Period',
+    'analytics.kpi.worst':         'Worst Period',
+    'analytics.kpi.pctThere':      '% to FIRE',
+    'analytics.kpi.pace':          'Est. Pace to Target',
+    'analytics.kpi.perMonth':      'per month',
+    'analytics.kpi.ofTarget':      'of FIRE target',
+    'analytics.kpi.atCurrentPace': 'at current pace',
+    'analytics.sub.overMonths':    'over {0} mo',
+    'analytics.pace.reached':      'Reached 🎉',
+    'analytics.pace.years':        '{0} yr',
+    'analytics.pace.stalled':      'no progress',
+    'analytics.alloc.roth':        'Roth IRA',
+    'analytics.alloc.other':       'Other',
     'nav.next':                'Next →',
     'nav.drawerToggle':        'Open navigation',
     // === Feature 014: Calc Audit ===
@@ -8082,6 +8193,27 @@ const TRANSLATIONS = {
     'nav.pill.lifecycle':      '完整生命週期',
     'nav.pill.milestones':     '里程碑',
     'nav.pill.snapshots':      '歷史紀錄',
+    'nav.pill.analytics':      '分析',
+    'analytics.empty':             '儲存至少 2 筆快照即可查看趨勢。',
+    'analytics.statsTitle':        '成長統計',
+    'analytics.nwTitle':           '淨資產走勢',
+    'analytics.allocTitle':        '資產配置走勢',
+    'analytics.progressTitle':     '儲蓄率與 FIRE 進度',
+    'analytics.kpi.totalGain':     '總成長',
+    'analytics.kpi.avgMonthly':    '平均月成長',
+    'analytics.kpi.best':          '最佳期間',
+    'analytics.kpi.worst':          '最差期間',
+    'analytics.kpi.pctThere':      'FIRE 進度',
+    'analytics.kpi.pace':          '預估達標速度',
+    'analytics.kpi.perMonth':      '每月',
+    'analytics.kpi.ofTarget':      '距 FIRE 目標',
+    'analytics.kpi.atCurrentPace': '依目前速度',
+    'analytics.sub.overMonths':    '歷時 {0} 個月',
+    'analytics.pace.reached':      '已達標 🎉',
+    'analytics.pace.years':        '{0} 年',
+    'analytics.pace.stalled':      '無進展',
+    'analytics.alloc.roth':        'Roth IRA',
+    'analytics.alloc.other':       '其他',
     'nav.next':                '下一步 →',
     'nav.drawerToggle':        '開啟導覽',
     // === Feature 014: Calc Audit ===
@@ -19371,6 +19503,7 @@ function renderSnapshotHistory() {
 
   if (all.length === 0) {
     tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;color:var(--text-dim);padding:30px">${t('snap.empty')}</td></tr>`;
+    if (typeof renderSnapshotAnalytics === 'function') { try { renderSnapshotAnalytics(); } catch (_e) {} }
     return;
   }
 
@@ -19416,6 +19549,161 @@ function renderSnapshotHistory() {
     `;
     tbody.appendChild(tr);
   });
+  if (typeof renderSnapshotAnalytics === 'function') { try { renderSnapshotAnalytics(); } catch (_e) {} }
+}
+
+// ==================== Feature 036 — Snapshot Analytics ====================
+// Reads getSnapshots() (oldest→newest) and renders a growth-stats KPI row plus
+// three Chart.js time series (net worth, asset allocation, savings/progress).
+// Charts are (re)built when the Analytics pill is active — a Chart.js canvas
+// inside a hidden pill-host would size to 0×0, so the tabRouter onAfterActivate
+// hook drives the render once the host is visible.
+let _analyticsCharts = { nw: null, alloc: null, progress: null };
+
+function _akMoney(v) {
+  const a = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (a >= 1e6) return sign + '$' + (a / 1e6).toFixed(2) + 'M';
+  if (a >= 1e3) return sign + '$' + Math.round(a / 1e3) + 'K';
+  return sign + '$' + Math.round(a);
+}
+function _akAxisMoney(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+  return '$' + v;
+}
+function _akSetSigned(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = (v >= 0 ? '+' : '') + _akMoney(v);
+  el.classList.remove('pos', 'neg');
+  el.classList.add(v >= 0 ? 'pos' : 'neg');
+}
+
+function renderSnapshotAnalytics() {
+  const host = document.querySelector('.pill-host[data-tab="history"][data-pill="analytics"]');
+  if (!host || typeof Chart === 'undefined') return;
+  const all = getSnapshots();               // oldest -> newest
+  const emptyEl = document.getElementById('analyticsEmpty');
+  const contentEls = host.querySelectorAll('[data-analytics-content]');
+  const hasData = all.length >= 2;
+
+  if (emptyEl) emptyEl.style.display = hasData ? 'none' : '';
+  contentEls.forEach(el => { el.style.display = hasData ? '' : 'none'; });
+
+  const _destroyAll = () => ['nw', 'alloc', 'progress'].forEach(k => {
+    if (_analyticsCharts[k]) { try { _analyticsCharts[k].destroy(); } catch (_e) {} _analyticsCharts[k] = null; }
+  });
+
+  if (!hasData) { _destroyAll(); return; }
+
+  const labels = all.map(s => new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }));
+
+  // ---------- Growth stats (cheap; always refreshed) ----------
+  const first = all[0], last = all[all.length - 1];
+  const totalGain = (last.netWorth || 0) - (first.netWorth || 0);
+  const daysSpan = Math.max(1, (new Date(last.date) - new Date(first.date)) / 86400000);
+  const monthsSpan = daysSpan / 30.4375;
+  const avgMonthly = totalGain / monthsSpan;
+
+  let best = null, bestIdx = -1, worst = null, worstIdx = -1;
+  for (let i = 1; i < all.length; i++) {
+    const d = (all[i].netWorth || 0) - (all[i - 1].netWorth || 0);
+    if (best === null || d > best) { best = d; bestIdx = i; }
+    if (worst === null || d < worst) { worst = d; worstIdx = i; }
+  }
+  const pctThere = (last.fireTarget > 0) ? Math.min(999, (last.accessible / last.fireTarget) * 100) : 0;
+
+  _akSetSigned('akTotalGain', totalGain);
+  const tgSub = document.getElementById('akTotalGainSub');
+  if (tgSub) tgSub.textContent = t('analytics.sub.overMonths', Math.max(1, Math.round(monthsSpan)));
+  _akSetSigned('akAvgMonthly', Math.round(avgMonthly));
+  _akSetSigned('akBest', best || 0);
+  _akSetSigned('akWorst', worst || 0);
+  const bestSub = document.getElementById('akBestSub');
+  if (bestSub) bestSub.textContent = bestIdx > 0 ? labels[bestIdx] : '—';
+  const worstSub = document.getElementById('akWorstSub');
+  if (worstSub) worstSub.textContent = worstIdx > 0 ? labels[worstIdx] : '—';
+  const pctEl = document.getElementById('akPct');
+  if (pctEl) { pctEl.textContent = pctThere.toFixed(1) + '%'; pctEl.classList.remove('pos', 'neg'); }
+  const paceEl = document.getElementById('akPace');
+  if (paceEl) {
+    paceEl.classList.remove('pos', 'neg');
+    const gap = (last.fireTarget || 0) - (last.accessible || 0);
+    if (gap <= 0) paceEl.textContent = t('analytics.pace.reached');
+    else if (avgMonthly <= 0) paceEl.textContent = t('analytics.pace.stalled');
+    else paceEl.textContent = t('analytics.pace.years', (gap / avgMonthly / 12).toFixed(1));
+  }
+
+  // Building charts on a 0×0 (hidden) canvas produces a broken render; defer to
+  // the next activation, which re-invokes this function once the host is shown.
+  if (host.offsetParent === null) return;
+
+  const txt = _css('--text-dim', '#8b8fa3');
+  const grid = _css('--border-soft', 'rgba(150,150,150,0.15)');
+  const legendCfg = { labels: { color: txt, font: { size: 11 }, boxWidth: 12, usePointStyle: true } };
+  const xScale = () => ({ ticks: { color: txt, font: { size: 10 }, maxRotation: 0, autoSkip: true }, grid: { color: grid } });
+  const moneyMode = { plugins: { legend: legendCfg, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${_akMoney(c.parsed.y)}` } } } };
+
+  _destroyAll();
+
+  // 1. Net worth over time — total + accessible + FIRE target (dashed).
+  const nwCtx = document.getElementById('analyticsNwChart');
+  if (nwCtx) {
+    _analyticsCharts.nw = new Chart(nwCtx.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: t('snap.netWorth'),   data: all.map(s => s.netWorth || 0),   borderColor: window.__fireChartColor('accent'),  backgroundColor: window.__fireChartColorAlpha('accent', 0.12), fill: true,  tension: 0.25, pointRadius: 2, borderWidth: 2 },
+        { label: t('snap.accessible'), data: all.map(s => s.accessible || 0), borderColor: window.__fireChartColor('accent2'), backgroundColor: 'transparent',                              fill: false, tension: 0.25, pointRadius: 2, borderWidth: 2 },
+        { label: t('snap.fireTarget'), data: all.map(s => s.fireTarget || 0), borderColor: window.__fireChartColor('cash'),    backgroundColor: 'transparent', borderDash: [6, 4],           fill: false, tension: 0,    pointRadius: 0, borderWidth: 1.5 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: moneyMode.plugins,
+        scales: { x: xScale(), y: { ticks: { color: txt, font: { size: 10 }, callback: _akAxisMoney }, grid: { color: grid } } } },
+    });
+  }
+
+  // 2. Asset allocation over time — stacked area (Generic pools).
+  const allocCtx = document.getElementById('analyticsAllocChart');
+  if (allocCtx) {
+    const allocSeries = [
+      { label: t('snap.k401'),             get: s => s.person1_401k || 0,   color: window.__fireChartColor('trad') },
+      { label: t('snap.person1Stocks'),    get: s => s.person1Stocks || 0,  color: window.__fireChartColor('taxable') },
+      { label: t('snap.person2Stocks'),    get: s => s.person2Stocks || 0,  color: window.__fireChartColor('taxable2') },
+      { label: t('snap.cash'),             get: s => s.cashSavings || 0,    color: window.__fireChartColor('cash') },
+      { label: t('analytics.alloc.other'), get: s => s.otherAssets || 0,    color: window.__fireChartColor('accent3') },
+    ];
+    _analyticsCharts.alloc = new Chart(allocCtx.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: allocSeries.map(b => ({
+        label: b.label, data: all.map(b.get), borderColor: b.color, backgroundColor: b.color,
+        fill: true, tension: 0.2, pointRadius: 0, borderWidth: 1,
+      })) },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: moneyMode.plugins,
+        scales: { x: xScale(), y: { stacked: true, beginAtZero: true, ticks: { color: txt, font: { size: 10 }, callback: _akAxisMoney }, grid: { color: grid } } } },
+    });
+  }
+
+  // 3. Savings rate (%) + years-to-FIRE (dual axis).
+  const progCtx = document.getElementById('analyticsProgressChart');
+  if (progCtx) {
+    _analyticsCharts.progress = new Chart(progCtx.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: t('snap.savingsRate'), data: all.map(s => s.savingsRate || 0), borderColor: window.__fireChartColor('accent'),  backgroundColor: 'transparent', yAxisID: 'yRate',  tension: 0.25, pointRadius: 2, borderWidth: 2 },
+        { label: t('snap.yearsToFire'), data: all.map(s => s.yearsToFire || 0), borderColor: window.__fireChartColor('ss'), backgroundColor: 'transparent', yAxisID: 'yYears', tension: 0.25, pointRadius: 2, borderWidth: 2 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: legendCfg },
+        scales: {
+          x: xScale(),
+          yRate:  { position: 'left',  beginAtZero: true, ticks: { color: txt, font: { size: 10 }, callback: v => v + '%' }, grid: { color: grid } },
+          yYears: { position: 'right', beginAtZero: true, ticks: { color: txt, font: { size: 10 } }, grid: { drawOnChartArea: false } },
+        } },
+    });
+  }
 }
 
 // ==================== RESET TO DEFAULTS ====================
@@ -20199,6 +20487,14 @@ document.addEventListener('DOMContentLoaded', function _initTabRouter() {
         try { layoutTimelineSerpentine(); } catch (_e) {}
         requestAnimationFrame(() => {
           try { layoutTimelineSerpentine(); } catch (_e) {}
+        });
+      }
+      // Feature 036 — build the snapshot analytics charts once the Analytics
+      // pill-host is visible (Chart.js needs a non-zero canvas to size against).
+      if (state.tab === 'history' && state.pill === 'analytics'
+          && typeof renderSnapshotAnalytics === 'function') {
+        requestAnimationFrame(() => {
+          try { renderSnapshotAnalytics(); } catch (_e) {}
         });
       }
     },

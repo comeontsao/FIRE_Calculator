@@ -1467,3 +1467,31 @@ Edit-mode helper text (T022), marginal/IRMAA/NIIT chips + tooltips (T023-T025), 
 | `te.tip.ordinary` | Ordinary income (wages, Traditional withdrawals, Roth conversions, taxable SS) taxed at the marginal 10–37% brackets after the standard deduction. | 一般收入（薪資、Traditional 提領、Roth 轉換、應稅 SS）在扣除標準扣除額後，以 10–37% 的邊際級距課稅。 |
 | `te.tip.ltcgCard` | Long-term capital gains stack ON TOP of your ordinary taxable income and are taxed at 0% / 15% / 20% depending on where the stack lands. | 長期資本利得堆疊在你的一般應稅所得之上，依堆疊位置以 0% / 15% / 20% 課稅。 |
 
+
+**Snapshot Analytics (`nav.pill.analytics`, `analytics.*`) — Feature 036 (both dashboards)**
+
+New History sub-tab that charts snapshot history over time (net worth, asset allocation, savings-rate/FIRE-progress) plus a growth-stats KPI row.
+
+| Key | EN | zh-TW |
+|-----|----|----|
+| `nav.pill.analytics` | Analytics | 分析 |
+| `analytics.empty` | Save at least 2 snapshots to see trends over time. | 儲存至少 2 筆快照即可查看趨勢。 |
+| `analytics.statsTitle` | Growth Stats | 成長統計 |
+| `analytics.nwTitle` | Net Worth Over Time | 淨資產走勢 |
+| `analytics.allocTitle` | Asset Allocation Over Time | 資產配置走勢 |
+| `analytics.progressTitle` | Savings Rate & FIRE Progress | 儲蓄率與 FIRE 進度 |
+| `analytics.kpi.totalGain` | Total Gain | 總成長 |
+| `analytics.kpi.avgMonthly` | Avg Monthly Growth | 平均月成長 |
+| `analytics.kpi.best` | Best Period | 最佳期間 |
+| `analytics.kpi.worst` | Worst Period | 最差期間 |
+| `analytics.kpi.pctThere` | % to FIRE | FIRE 進度 |
+| `analytics.kpi.pace` | Est. Pace to Target | 預估達標速度 |
+| `analytics.kpi.perMonth` | per month | 每月 |
+| `analytics.kpi.ofTarget` | of FIRE target | 距 FIRE 目標 |
+| `analytics.kpi.atCurrentPace` | at current pace | 依目前速度 |
+| `analytics.sub.overMonths` | over {0} mo | 歷時 {0} 個月 |
+| `analytics.pace.reached` | Reached 🎉 | 已達標 🎉 |
+| `analytics.pace.years` | {0} yr | {0} 年 |
+| `analytics.pace.stalled` | no progress | 無進展 |
+| `analytics.alloc.roth` | Roth IRA | Roth IRA |
+| `analytics.alloc.other` | Other | 其他 |

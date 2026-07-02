@@ -116,6 +116,7 @@ const TABS = Object.freeze([
     labelKey: 'nav.tab.history',
     pills: Object.freeze([
       Object.freeze({ id: 'snapshots', labelKey: 'nav.pill.snapshots' }),
+      Object.freeze({ id: 'analytics', labelKey: 'nav.pill.analytics' }), // Feature 036
     ]),
   }),
   Object.freeze({
