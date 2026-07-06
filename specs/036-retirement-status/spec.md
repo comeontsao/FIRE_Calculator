@@ -74,7 +74,7 @@ For users who are **not** retired, the existing FIRE-marker drag ("plan to retir
 **Acceptance Scenarios**:
 
 1. **Given** retirement status OFF, **When** the user drags the FIRE marker, **Then** the planned retirement age updates as it does today.
-2. **Given** retirement status ON, **When** the user views the FIRE marker, **Then** it reflects the actual retirement date and the drag no longer changes the transition.
+2. **Given** retirement status ON, **When** the user drags the FIRE marker, **Then** it reflects and edits the actual retirement date — the Retirement-year field updates in lockstep — rather than creating a separate planning override (revised 2026-07-03).
 
 ---
 
@@ -135,7 +135,7 @@ On the generic dashboard, a two-earner household can retire the two people at di
 - **FR-008**: Retirement status and the retirement date MUST persist across reloads, stored separately for each dashboard.
 - **FR-009**: The user MUST be able to turn retirement status OFF, which fully reverts the projection to feasibility-driven behavior with no residual effect.
 - **FR-010**: While retirement status is OFF, the existing FIRE-marker drag ("plan to retire at age X") MUST continue to function as a forward-looking planning what-if.
-- **FR-011**: While retirement status is ON, the FIRE-marker drag MUST NOT change the retirement transition — the actual date takes precedence — and the two controls MUST NOT be simultaneously active.
+- **FR-011**: While retirement status is ON, the FIRE-marker drag MUST remain usable and MUST edit the **actual retirement date** (writing the Retirement-year field / the latest earner's date on Generic), NOT create a separate planning override. The marker and the Retirement-year field stay in sync as a single source of truth, so there are never two conflicting retirement ages. *(Revised 2026-07-03 — originally the drag was inert when ON; changed to direct-manipulation of the date after the dead marker tested as confusing UX.)*
 - **FR-012**: The system SHOULD surface a non-blocking, dismissible suggestion to mark oneself retired when a not-yet-retired user's money and current age cross the earliest-feasible line; the suggestion MUST NOT change any projection unless accepted, and MUST NOT nag repeatedly within a session once dismissed.
 - **FR-013**: If the retirement date is on or before today, the system MUST treat the user as retired from now using currently entered balances, without reconstructing historical years.
 - **FR-014**: The primary status headline MUST never tell a retired user they will reach FIRE in the future (e.g., "FIRE in 0 years"); it must reflect their retired state.

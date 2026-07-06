@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 30_000,
+  timeout: 45_000,
   expect: { timeout: 5_000 },
   reporter: [
     ['list'],
@@ -23,9 +23,14 @@ export default defineConfig({
    * (matches `start-local-generic.cmd`) so the tab-navigation spec can serve
    * the dashboards over http://. The pre-existing Feature 011 spec keeps
    * using file:// via `helpers.ts > loadDashboard` — both schemes coexist.
+   *
+   * Feature 036: use a MULTI-THREADED server (tests/e2e/serve.py) instead of
+   * `python -m http.server` (single-threaded). The full parallel suite fetches
+   * ~15 modules per load across many workers; a single-threaded server
+   * serialized them and module-heavy tests brushed the per-test timeout.
    */
   webServer: {
-    command: 'python -m http.server 8766',
+    command: 'python tests/e2e/serve.py',
     url: 'http://127.0.0.1:8766/FIRE-Dashboard-Generic.html',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

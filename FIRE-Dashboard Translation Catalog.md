@@ -1495,3 +1495,24 @@ New History sub-tab that charts snapshot history over time (net worth, asset all
 | `analytics.pace.stalled` | no progress | 無進展 |
 | `analytics.alloc.roth` | Roth IRA | Roth IRA |
 | `analytics.alloc.other` | Other | 其他 |
+
+---
+
+## Feature 036 — Explicit Retirement Status (2026-07-02)
+
+New user-visible strings. All keys added to `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in BOTH HTML files (Principle VII). RR uses a single household toggle; Generic (US5) reuses the per-person label keys.
+
+| Key | English | 繁體中文 |
+|-----|---------|---------|
+| `retire.toggle` | I've retired | 我已退休 |
+| `retire.toggle.tip` | Turn on once you've actually stopped working. The projection then runs pure drawdown from your retirement year — no more income or contributions — regardless of whether the tool thinks it's 'safe' yet. | 當你實際已停止工作後開啟。專案將從你的退休年份起以純提領方式推算——不再有收入或新提撥——無論工具是否認為現在退休「安全」。 |
+| `retire.year` | Retirement year | 退休年份 |
+| `retire.verdict.sustainable` | 🟢 Retired — sustainable to age {0} | 🟢 已退休 — 可支撐至 {0} 歲 |
+| `retire.verdict.atRisk` | ⚠️ Retired — at risk · shortfall in {0} | ⚠️ 已退休 — 有風險 · {0} 年出現短缺 |
+| `retire.suggest.prompt` | Looks like you could retire as of {0} — mark yourself retired? | 看起來你在 {0} 年就可以退休了 — 要標記為已退休嗎？ |
+| `retire.suggest.accept` | Mark retired | 標記已退休 |
+| `retire.suggest.dismiss` | Not yet | 尚未 |
+| `retire.person1` | Person 1 | 成員 1 |
+| `retire.person2` | Person 2 | 成員 2 |
+| `retire.income.person1` | Person 1 income | 成員 1 收入 |
+| `retire.income.person2` | Person 2 income | 成員 2 收入 |

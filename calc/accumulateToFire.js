@@ -1,15 +1,34 @@
 /*
  * =============================================================================
- * MODULE: calc/accumulateToFire.js  (v7 — feature 033)
+ * MODULE: calc/accumulateToFire.js  (v8 — feature 036)
  *
- * Feature: 033-math-assumptions-cleanup (US1 cash-growth registry + US2
- *          shortfall funding ladder). Extends 032 (v6 Roth IRA pool),
- *          023-accumulation-spend-separation (v5), 021 progressive-bracket,
- *          022 frame-fix, 020 v2 cash-flow rewrite, 019 accumulation-drift fix.
- * Spec:    specs/033-math-assumptions-cleanup/spec.md US1 + US2
- * Contract: specs/033-math-assumptions-cleanup/contracts/assumptions.contract.md
- *           §"Shortfall funding ladder" (NON-NEGOTIABLE ordering)
- *           specs/023-accumulation-spend-separation/contracts/accumulateToFire-options-bag.contract.md
+ * Feature: 036-retirement-status (C-1: optional options.retirement descriptor).
+ *          Extends 033 (v7 assumptions registry + shortfall funding ladder),
+ *          032 (v6 Roth IRA pool), 023-accumulation-spend-separation (v5),
+ *          021 progressive-bracket, 022 frame-fix, 020 v2 cash-flow rewrite,
+ *          019 accumulation-drift fix.
+ * Spec:    specs/036-retirement-status/data-model.md
+ * Contract: specs/036-retirement-status/contracts/retirement-status.contract.md §C-1
+ *
+ * v8 changes vs v7 (feature 036):
+ *   - NEW optional `options.retirement = { households: [{income, retirementAge}] }`.
+ *     Backwards-compatible: absent/undefined ⇒ byte-identical to v7 (INV-1;
+ *     multiplying by a contribution scale of exactly 1 is a no-op in IEEE754).
+ *     When present:
+ *       (1) Per-year employment income is masked: workingIncome(age) = Σ
+ *           households[i].income where households[i].retirementAge > age.
+ *           This REPLACES inp.annualIncome as the grossIncome trajectory base
+ *           for that year (raise-rate/Fisher trajectory still applies).
+ *       (2) Per-year contribution scale = workingIncome(age) / totalIncome
+ *           (totalIncome = Σ households[i].income, pre-raise). Applied to
+ *           contrib401kTrad, contrib401kRoth, empMatch, and the discretionary
+ *           stockContribution. Fully-retired year ⇒ scale 0 ⇒ zero new
+ *           contributions.
+ *       (3) SS/pension are NOT modeled here (INV-3) — untouched, handled
+ *           downstream in the retirement-phase drawdown loop via ssClaimAge.
+ *     Caller contract (not enforced here): when options.retirement is
+ *     present, `fireAge` MUST equal the household transition age
+ *     (max of households[i].retirementAge) — see contract C-1.1.
  *
  * v7 changes vs v6 (feature 033):
  *   - US1: cash growth derives from calc/assumptions.js CASH_REAL_RETURN
@@ -76,6 +95,9 @@
  *     (real-$/yr); dashboard fallback similar; default 0 until US4b ships
  *     the contribution-input UI.
  *   options fields: see Predecessor v2 contract.
+ *   - options.retirement (feature 036, OPTIONAL) — {households: Array<{income,
+ *     retirementAge}>}. See v8 changes note above + contract C-1. Absent ⇒
+ *     no behavior change.
  *
  * Outputs: { end: { pTrad, pRoth, pStocks, pCash, pRothIra }, perYearRows: [...] }
  *   perYearRows v3 fields (additive over v2):
@@ -496,8 +518,25 @@ function accumulateToFire(inp, fireAge, options) {
   const emp401kTrad = inp.contrib401kTrad || 0;   // employee Trad deferral
   const emp401kRoth = inp.contrib401kRoth || 0;   // employee Roth deferral
   const empMatchAmt = inp.empMatch || 0;           // employer match (non-cash, pTrad only)
-  const tradContrib = emp401kTrad + empMatchAmt;   // total into pTrad (employee + match)
-  const rothContrib = emp401kRoth;                 // total into pRoth
+  // Feature 036 — renamed *Base: these are the FULL (unscaled) per-year totals.
+  // The retirement descriptor (below) scales these down per-year when present;
+  // absent ⇒ scale is always 1 ⇒ byte-identical to pre-036 tradContrib/rothContrib.
+  const tradContribBase = emp401kTrad + empMatchAmt;   // total into pTrad (employee + match)
+  const rothContribBase = emp401kRoth;                 // total into pRoth
+
+  // --- Feature 036 (C-1) — optional retirement-status descriptor. ---
+  // options.retirement = { households: Array<{income, retirementAge}> }.
+  // Absent/undefined ⇒ _retirement stays null ⇒ every per-year scale below
+  // resolves to exactly 1 (INV-1 off-revert-parity; multiplying by 1 is an
+  // IEEE754 no-op, so the default path is provably unaffected).
+  const _retirement = (opts.retirement && Array.isArray(opts.retirement.households))
+    ? opts.retirement
+    : null;
+  // totalIncome (contract C-1.3): sum of ALL households' income, regardless
+  // of retirement age — the denominator for the per-year contribution scale.
+  const _retirementTotalIncome = _retirement
+    ? _retirement.households.reduce((sum, h) => sum + (Number(h && h.income) || 0), 0)
+    : 0;
 
   // --- v2 Cash-flow inputs ---
   const annualIncomeBase = inp.annualIncome || 0;   // gross annual income at currentAge
@@ -710,15 +749,36 @@ function accumulateToFire(inp, fireAge, options) {
       ? _h2AnnualCarryAtYear(h2, yearsFromNow, yrsToFire)
       : 0;
 
+    // --- Feature 036 (C-1) — per-year working-income mask + contribution scale. ---
+    // Absent descriptor ⇒ _workingIncomeRaw stays null and _contribScale is
+    // exactly 1 (IEEE754 no-op multiply below) ⇒ byte-identical to pre-036.
+    let _workingIncomeRaw = null;
+    let _contribScale = 1;
+    if (_retirement) {
+      _workingIncomeRaw = _retirement.households.reduce((sum, h) => {
+        const stillWorking = h && typeof h.retirementAge === 'number' && h.retirementAge > age;
+        return sum + (stillWorking ? (Number(h.income) || 0) : 0);
+      }, 0);
+      _contribScale = _retirementTotalIncome > 0 ? (_workingIncomeRaw / _retirementTotalIncome) : 0;
+    }
+
     // --- Effective annual savings (line 9605) ---
     // v2: stockContribution is the taxable-brokerage deposit (formerly effectiveAnnualSavings).
     // Adjusted for mortgage/college/h2 carry drains (same as v1).
+    // Feature 036 (C-1.3): scaled by the per-year contribution scale (1 when
+    // the retirement descriptor is absent — no behavior change).
     const stockContribution = Math.max(
       0,
       (inp.monthlySavings || 0) * 12 - mtgSavingsAdjust - collegeDrain - h2Drain
-    );
+    ) * _contribScale;
     // Keep v1 alias for backwards-compatible row field.
     const effectiveAnnualSavings = stockContribution;
+
+    // Feature 036 (C-1.2/1.3) — per-year scaled 401(k) contributions. Scale is
+    // 1 when the retirement descriptor is absent (byte-identical to pre-036
+    // tradContribBase/rothContribBase).
+    const tradContrib = tradContribBase * _contribScale;
+    const rothContrib = rothContribBase * _contribScale;
 
     // --- v4 Cash-flow accounting (feature 022 US3 — single-frame real-$) ---
     // Step 1: Gross income in real-$ frame. (1 + realRate(raiseRate, inflation))^t
@@ -726,12 +786,17 @@ function accumulateToFire(inp, fireAge, options) {
     //        constant; > → real growth; < → real wage cut. Per FR-012 / FR-013.
     // FRAME: real-$ — income converted from nominal to real before residual.
     // Feature 033 (US3) — real wage growth via Fisher realRate (was subtraction).
-    const grossIncome = annualIncomeBase * Math.pow(1 + _realRate(raiseRate, inflationRate), yearsFromNow);
+    // Feature 036 (C-1.2) — when the retirement descriptor is present, the
+    // masked per-year working-income sum REPLACES annualIncomeBase as the
+    // trajectory base; the raise-rate/Fisher trajectory still applies on top.
+    const _incomeBaseForYear = _retirement ? _workingIncomeRaw : annualIncomeBase;
+    const grossIncome = _incomeBaseForYear * Math.pow(1 + _realRate(raiseRate, inflationRate), yearsFromNow);
 
     // Step 2: Pre-tax 401(k) employee contributions.
     // FRAME: real-$ — 401k contribution caps are constant in today's $ (the
     //        slider sets contribution amount in today's purchasing power).
-    const pretax401kEmployee = emp401kTrad + emp401kRoth;
+    // Feature 036 (C-1.3): scaled (1 when descriptor absent).
+    const pretax401kEmployee = (emp401kTrad + emp401kRoth) * _contribScale;
 
     // Step 3: Tax computation in real-$ frame.
     // FRAME: real-$ — _computeYearTax invoked with REAL income. 2024 IRS brackets

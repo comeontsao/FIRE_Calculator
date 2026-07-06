@@ -3101,6 +3101,30 @@
     <div id="sidebarMortgageStatus" class="sidebar-mortgage-status" data-i18n="sidebar.mortgageStatus.placeholder" style="font-size: 0.85em; color: var(--text-dim); margin-top: 6px;">
       <!-- populated by recomputePayoffVsInvest -->
     </div>
+    <!-- Feature 036 (US1) — Retirement Status: a durable "I've retired" fact.
+         When ON, the retirement year drives the accumulation→drawdown transition
+         (supersedes the FIRE-marker drag). -->
+    <div id="retirementStatusControl" class="retirement-status-control" style="margin-top:8px;font-size:0.85em;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-dim)">
+        <input type="checkbox" id="retirementToggle" onchange="onRetirementToggle()">
+        <span data-i18n="retire.toggle">I've retired</span>
+      </label>
+      <span class="info-tip" data-i18n-tip="retire.toggle.tip" data-tip="Turn on once you've actually stopped working. The projection then runs pure drawdown from your retirement year — no more income or contributions — regardless of whether the tool thinks it's 'safe' yet.">?</span>
+      <span id="retirementYearWrap" style="display:none;align-items:center;gap:6px;">
+        <label for="retirementYear" data-i18n="retire.year" style="color:var(--text-dim)">Retirement year</label>
+        <input type="number" id="retirementYear" min="1990" max="2100" step="1" value="2026" onchange="onRetirementYearChange()" style="width:5.5em;padding:2px 4px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+      </span>
+    </div>
+    <!-- Feature 036 (US4) — auto-suggest: gentle, dismissible, session-scoped
+         nudge shown only when NOT retired AND feasible today. Inline (no z-index
+         concern); message populated by maybeShowRetirementSuggest(). -->
+    <div id="retirementSuggestBanner" class="retirement-suggest-banner" style="display:none;margin-top:8px;padding:8px 10px;background:var(--card);border:1px solid var(--accent);border-radius:6px;font-size:0.85em;">
+      <span id="retirementSuggestMsg">Looks like you could retire — mark yourself retired?</span>
+      <span style="display:inline-flex;gap:6px;margin-left:8px;">
+        <button type="button" onclick="onRetirementSuggestAccept()" data-i18n="retire.suggest.accept" style="padding:2px 8px;border:none;border-radius:4px;background:var(--accent);color:#fff;cursor:pointer">Mark retired</button>
+        <button type="button" onclick="onRetirementSuggestDismiss()" data-i18n="retire.suggest.dismiss" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-dim);cursor:pointer">Not yet</button>
+      </span>
+    </div>
   </div>
   <div class="header__controls">
     <div class="header__lang-toggle">
@@ -5758,6 +5782,19 @@ const TRANSLATIONS = {
     'header.title': 'Roger & Rebecca FIRE Command Center',
     'header.subtitle': 'Financial Independence, Retire Early — Fat FIRE with Geo-Arbitrage Strategy',
     'status.onTrack': 'On Track',
+    // Feature 036 — Retirement Status (US1) + verdict reframe (US2) + auto-suggest (US4)
+    'retire.toggle': "I've retired",
+    'retire.toggle.tip': "Turn on once you've actually stopped working. The projection then runs pure drawdown from your retirement year — no more income or contributions — regardless of whether the tool thinks it's 'safe' yet.",
+    'retire.year': 'Retirement year',
+    'retire.verdict.sustainable': '🟢 Retired — sustainable to age {0}',
+    'retire.verdict.atRisk': '⚠️ Retired — at risk · shortfall in {0}',
+    'retire.suggest.prompt': 'Looks like you could retire as of {0} — mark yourself retired?',
+    'retire.suggest.accept': 'Mark retired',
+    'retire.suggest.dismiss': 'Not yet',
+    'retire.person1': 'Person 1',
+    'retire.person2': 'Person 2',
+    'retire.income.person1': 'Person 1 income',
+    'retire.income.person2': 'Person 2 income',
     'status.warning': 'Warning',
     'status.behind': 'Behind',
     'kpi.netWorth': 'Whole Portfolio Net Worth',
@@ -6977,6 +7014,19 @@ const TRANSLATIONS = {
     'header.title': 'Roger & Rebecca FIRE 指揮中心',
     'header.subtitle': '財務自由，提早退休 — Fat FIRE 地理套利策略',
     'status.onTrack': '正軌',
+    // Feature 036 — Retirement Status (US1) + verdict reframe (US2) + auto-suggest (US4)
+    'retire.toggle': '我已退休',
+    'retire.toggle.tip': '當你實際已停止工作後開啟。專案將從你的退休年份起以純提領方式推算——不再有收入或新提撥——無論工具是否認為現在退休「安全」。',
+    'retire.year': '退休年份',
+    'retire.verdict.sustainable': '🟢 已退休 — 可支撐至 {0} 歲',
+    'retire.verdict.atRisk': '⚠️ 已退休 — 有風險 · {0} 年出現短缺',
+    'retire.suggest.prompt': '看起來你在 {0} 年就可以退休了 — 要標記為已退休嗎？',
+    'retire.suggest.accept': '標記已退休',
+    'retire.suggest.dismiss': '尚未',
+    'retire.person1': '成員 1',
+    'retire.person2': '成員 2',
+    'retire.income.person1': '成員 1 收入',
+    'retire.income.person2': '成員 2 收入',
     'status.warning': '注意',
     'status.behind': '落後',
     'kpi.netWorth': '總投資組合淨資產',
@@ -8773,6 +8823,15 @@ function _setCalculatedFire(age, feasible) {
   const cs = _cs();
   if (cs) cs.setCalculated(age, !!feasible);
   else { _fireStateFallback.calculatedFireAge = age; _fireStateFallback.overrideFireAge = null; }
+  // Feature 036 — Retirement Status owns the accumulation→drawdown transition.
+  // setCalculated wipes the override slot; when the user has declared retirement,
+  // re-pin the actual retirement age so effectiveFireAge (= override ?? calculated)
+  // stays on the retirement age through every recalc pass (Principle III). No-op
+  // when not retired (flag false).
+  if (typeof window !== 'undefined' && window._retirementOverrideActive
+      && typeof window._retirementTransitionAge === 'number') {
+    _setOverrideFire(window._retirementTransitionAge);
+  }
 }
 function _setOverrideFire(age) {
   const cs = _cs();
@@ -8787,6 +8846,129 @@ function _clearOverrideFire() {
 function _fireFeasible() {
   const cs = _cs();
   return cs ? cs.state.feasible : _fireStateFallback.feasible;
+}
+
+// ===========================================================================
+// Feature 036 — Explicit Retirement Status (US1)
+// ---------------------------------------------------------------------------
+// A durable, user-asserted fact separate from the feasibility scan. When ON,
+// the actual retirement age is the accumulation→drawdown transition used by
+// EVERY chart/KPI (resolved through the single effectiveFireAge slot below,
+// Principle III) and supersedes the FIRE-marker drag override (FR-011).
+// RR uses a single household shape { retired, retirementYear }. The Generic
+// dashboard extends this to per-person `persons[]` in feature 036 US5.
+// RETIREMENT_BASE_YEAR mirrors projectFullLifecycle's hardcoded year axis
+// (`2026 + (age - currentAge)`) so a retirement YEAR maps to the same age grid.
+// ===========================================================================
+const RETIREMENT_BASE_YEAR = 2026;
+let _retirementStatus = { retired: false, retirementYear: RETIREMENT_BASE_YEAR };
+function getRetirementStatus() { return _retirementStatus; }
+function setRetirementStatus(next) {
+  _retirementStatus = Object.assign({}, _retirementStatus, next || {});
+}
+// Feature 036 — debounce the heavy recalc for rapid retirement-year edits.
+// A retired recalcAll is ~1.5s (7-strategy scoring + lifecycle sims); spinner
+// clicks fire onchange repeatedly, so coalesce them into ONE recalc after the
+// user settles (Performance floor: interactive edits must stay responsive).
+let _retirementRecalcDebounce = null;
+function _scheduleRetirementRecalc() {
+  if (_retirementRecalcDebounce) clearTimeout(_retirementRecalcDebounce);
+  _retirementRecalcDebounce = setTimeout(() => {
+    _retirementRecalcDebounce = null;
+    saveState();
+    recalcAll();
+  }, 250);
+}
+// Map a retirement year to the model's age axis. Retroactive / current-year
+// dates clamp to "now" (= currentAge), i.e. retired-from-today (FR-013).
+// Returns null when the household is NOT (fully) retired, so the resolver
+// falls through to feasibility-driven behavior (INV-1 / SC-004).
+function resolveRetirementTransitionAge(inp, status) {
+  const cur = (inp && typeof inp.ageRoger === 'number') ? inp.ageRoger
+            : (inp && typeof inp.agePerson1 === 'number' ? inp.agePerson1 : 0);
+  if (!status) return null;
+  const ageFromYear = (yr) => Math.max(cur, cur + ((typeof yr === 'number' ? yr : RETIREMENT_BASE_YEAR) - RETIREMENT_BASE_YEAR));
+  // Generic per-person (US5): household fully retired = latest retired earner.
+  // An earner not marked retired keeps earning to plan end (no full transition
+  // from them), so they do not pull the transition earlier.
+  if (Array.isArray(status.persons)) {
+    let maxAge = null;
+    const anyWorking = status.persons.some(p => p && !p.retired);
+    status.persons.forEach(p => {
+      if (p && p.retired) {
+        const a = ageFromYear(p.retirementYear);
+        if (maxAge == null || a > maxAge) maxAge = a;
+      }
+    });
+    // If at least one earner is still working, the household is not fully
+    // retired — income masking (options.retirement) handles the partial stop,
+    // but there is no single "full retirement" transition age to force.
+    return anyWorking ? null : maxAge;
+  }
+  if (!status.retired) return null;
+  return ageFromYear(status.retirementYear);
+}
+// --- US1 UI glue: read the year input, sync controls, handle gestures. ---
+function _readRetirementYearInput() {
+  const el = document.getElementById('retirementYear');
+  const v = el ? parseInt(el.value, 10) : NaN;
+  return Number.isFinite(v) ? v : RETIREMENT_BASE_YEAR;
+}
+// Push _retirementStatus → the DOM controls (called on restore + after gestures).
+function syncRetirementStatusUI() {
+  const st = getRetirementStatus();
+  const cb = document.getElementById('retirementToggle');
+  const wrap = document.getElementById('retirementYearWrap');
+  const yrEl = document.getElementById('retirementYear');
+  if (cb) cb.checked = !!st.retired;
+  if (yrEl && typeof st.retirementYear === 'number') yrEl.value = st.retirementYear;
+  if (wrap) wrap.style.display = st.retired ? '' : 'none';
+}
+function onRetirementToggle() {
+  const cb = document.getElementById('retirementToggle');
+  setRetirementStatus({ retired: !!(cb && cb.checked), retirementYear: _readRetirementYearInput() });
+  syncRetirementStatusUI();
+  saveState();
+  recalcAll();
+}
+function onRetirementYearChange() {
+  // Update state immediately (cheap) so the value is captured; defer the heavy
+  // recalc via debounce so clicking through years doesn't queue N × 1.5s recalcs.
+  setRetirementStatus({ retirementYear: _readRetirementYearInput() });
+  _scheduleRetirementRecalc();
+}
+// --- US4 auto-suggest: gentle, dismissible, session-scoped nudge. ---
+// Shown only when NOT retired AND feasible today. The switch — never this
+// detector — is the source of truth (FR-012); dismiss is session-scoped so it
+// never nags twice in a session but can reappear in a genuinely new session.
+function maybeShowRetirementSuggest(inp, yrsToFire, feasible) {
+  const banner = document.getElementById('retirementSuggestBanner');
+  if (!banner) return;
+  const st = getRetirementStatus();
+  const alreadyRetired = !!(st && (st.retired || (Array.isArray(st.persons) && st.persons.some(p => p && p.retired))));
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem('fire:retireSuggestDismissed') === '1'; } catch (_e) {}
+  if (!alreadyRetired && feasible && yrsToFire <= 0 && !dismissed) {
+    const msgEl = document.getElementById('retirementSuggestMsg');
+    if (msgEl) msgEl.textContent = t('retire.suggest.prompt', RETIREMENT_BASE_YEAR);
+    banner.style.display = '';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+function onRetirementSuggestAccept() {
+  const cb = document.getElementById('retirementToggle');
+  const yr = document.getElementById('retirementYear');
+  if (yr) yr.value = String(RETIREMENT_BASE_YEAR);
+  if (cb) cb.checked = true;
+  const b = document.getElementById('retirementSuggestBanner');
+  if (b) b.style.display = 'none';
+  onRetirementToggle();
+}
+function onRetirementSuggestDismiss() {
+  try { sessionStorage.setItem('fire:retireSuggestDismissed', '1'); } catch (_e) {}
+  const b = document.getElementById('retirementSuggestBanner');
+  if (b) b.style.display = 'none';
 }
 
 // ---------------------------------------------------------------------------
@@ -14105,6 +14287,21 @@ function recalcAll() {
   // the synchronous banner listener reads a fresh value on this transition.
   _lastDeficitReal = _feasibleNow ? 0 : _computeDeficitReal(inp, effectiveSpend, fireAge, fireMode);
   _setCalculatedFire(fireAge, _feasibleNow);
+  // Feature 036 (US1) — Retirement Status supersedes the drag override.
+  // _setCalculatedFire just wiped any override; when the user has declared
+  // retirement, re-assert the actual retirement age into the single override
+  // slot so every renderer reading effectiveFireAge (= fireAgeOverride ??
+  // calculatedFireAge) transitions to drawdown there (Principle III). The
+  // FIRE-marker drag is gated inert while this is active (US3, FR-011).
+  const _retStatus = getRetirementStatus();
+  const _retTransAge = resolveRetirementTransitionAge(inp, _retStatus);
+  window._retirementOverrideActive = (_retTransAge != null);
+  window._retirementTransitionAge = _retTransAge; // read by _setCalculatedFire to re-pin
+  if (_retTransAge != null) {
+    _setOverrideFire(_retTransAge);
+  }
+  // Feature 036 (US4) — auto-suggest marking retired when feasible today.
+  if (typeof maybeShowRetirementSuggest === 'function') maybeShowRetirementSuggest(inp, yrsToFire, _feasibleNow);
   // Hide override banner
   const overrideBanner = document.getElementById('fireOverrideBanner');
   if (overrideBanner) overrideBanner.classList.remove('active');
@@ -14118,7 +14315,13 @@ function recalcAll() {
   // the winner banner + compare panel (Phase 4) + objective-toggle re-sort.
   try {
     const inpForScoring = Object.assign({}, inp, { annualSpend: effectiveSpend });
-    _lastStrategyResults = scoreAndRank(inpForScoring, fireAge, fireMode, _currentObjective);
+    // Feature 036 (US2/US3) — when retired, score strategies at the ACTUAL
+    // retirement transition age (the same age the Lifecycle chart + effectiveFireAge
+    // use), NOT the feasibility FIRE age. The Withdrawal Strategy chart and the
+    // Year Tax Estimator swap in these scored winner rows, so this is what makes
+    // them transition at the retirement year too (Principle III).
+    const _strategyFireAge = (typeof window._retirementTransitionAge === 'number') ? window._retirementTransitionAge : fireAge;
+    _lastStrategyResults = scoreAndRank(inpForScoring, _strategyFireAge, fireMode, _currentObjective);
   } catch (_e) {
     _lastStrategyResults = null;
     // Hot-fix 022: include input diagnostic context so we can reproduce the
@@ -14508,7 +14711,50 @@ function recalcAll() {
     && (_vFireRes.searchMethod === 'month-precision'
         || _vFireRes.searchMethod === 'month-precision-fallback')
     && Number.isFinite(inp.ageRoger));
-  if (yrsToFire <= 12) {
+  if (window._retirementOverrideActive) {
+    // Feature 036 (US2) — Retired: reframe the verdict as a sustainability
+    // readout, never a countdown (FR-006/FR-014). Probe the resolved lifecycle
+    // at the ACTUAL retirement transition age under the active strategy and read
+    // the existing per-year hasShortfall / negative-total signal (Principle VIII).
+    const _endAge = inp.endAge || 95;
+    const _curAge = (typeof inp.ageRoger === 'number') ? inp.ageRoger
+                  : (typeof inp.agePerson1 === 'number' ? inp.agePerson1 : 0);
+    let _shortfallYear = null;
+    try {
+      const _transAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null) ? fireAgeOverride : fireAge;
+      // Perf (feature 036): reuse the Lifecycle chart's just-computed rows when
+      // they match this transition age (same data the chart drew — Principle III),
+      // avoiding a 2nd full projection. Fall back to a fresh sim if unavailable or
+      // stale (e.g. a drag preview pinned a different age).
+      let _rChart = null;
+      const _lc = (typeof window !== 'undefined') ? window._lastLifecycleCache : null;
+      if (_lc && !_lc.previewActive && _lc.fireAge === _transAge && Array.isArray(_lc.rows)) {
+        _rChart = _lc.rows;
+      } else {
+        const _rStrat = (typeof getActiveChartStrategyOptions === 'function') ? getActiveChartStrategyOptions() : undefined;
+        const _rMort = (typeof getActiveMortgageStrategyOptions === 'function') ? getActiveMortgageStrategyOptions() : {};
+        _rChart = projectFullLifecycle(inp, effectiveSpend, _transAge, true, Object.assign({}, _rStrat, _rMort));
+      }
+      if (Array.isArray(_rChart)) {
+        for (const r of _rChart) {
+          if (typeof r.age === 'number' && r.age >= _transAge
+              && (r.hasShortfall === true || (typeof r.total === 'number' && r.total < 0))) {
+            _shortfallYear = (typeof r.year === 'number') ? r.year : (RETIREMENT_BASE_YEAR + Math.round(r.age - _curAge));
+            break;
+          }
+        }
+      }
+    } catch (_e) {
+      if (typeof console !== 'undefined' && console.error) console.error('[retire-verdict] probe threw:', _e);
+    }
+    if (_shortfallYear != null) {
+      statusEl.className = 'fire-status behind';
+      statusEl.textContent = t('retire.verdict.atRisk', _shortfallYear);
+    } else {
+      statusEl.className = 'fire-status on-track';
+      statusEl.textContent = t('retire.verdict.sustainable', _endAge);
+    }
+  } else if (yrsToFire <= 12) {
     statusEl.className = 'fire-status on-track';
     if (_useMonthVerdict) {
       const _vYears = Math.max(0, _vFireRes.years - inp.ageRoger);
@@ -14554,7 +14800,9 @@ function recalcAll() {
     const _stopGapWinnerId = (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults)
       ? _lastStrategyResults.winnerId : null;
     const _stopGapOnTrack = statusEl.classList.contains('on-track');
-    if (_stopGapOnTrack && _stopGapWinnerId
+    // Feature 036 (US2) — skip the stop-gap when retired; the retired verdict
+    // branch above already probed the correct transition age.
+    if (!window._retirementOverrideActive && _stopGapOnTrack && _stopGapWinnerId
         && _stopGapWinnerId !== 'bracket-fill-smoothed'
         && typeof getActiveChartStrategyOptions === 'function'
         && typeof projectFullLifecycle === 'function') {
@@ -15108,7 +15356,11 @@ function renderHealthcareCard(inp) {
   const postIsOverride = (!isNaN(overridePost) && overridePost > 0);
 
   // Estimated impact on FIRE number — blended delta
-  const fireAge = calculatedFireAge != null ? calculatedFireAge : (inp.ageRoger + yearsToFIREcache);
+  // Feature 036 — honor the retirement/override transition so the healthcare
+  // bridge length (pre-65 expensive years) reflects an early retirement, not the
+  // feasibility age (Principle III).
+  const fireAge = fireAgeOverride != null ? fireAgeOverride
+    : (calculatedFireAge != null ? calculatedFireAge : (inp.ageRoger + yearsToFIREcache));
   const blendedDelta = getBlendedHealthcareDelta(selectedScenario, fireAge, inp.endAge);
   const annualImpact = blendedDelta;
 
@@ -16463,7 +16715,7 @@ function setupFireDragListeners() {
   _fireDrag.listenersAttached = true;
 
   canvas.addEventListener('mousedown', (e) => {
-    if (!calculatedFireAge || _fireDrag.rendering) return;
+    if (!calculatedFireAge || _fireDrag.rendering) return; // Feature 036 US3 (revised): drag stays live when retired but sets the retirement YEAR on confirm
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -16507,7 +16759,13 @@ function setupFireDragListeners() {
       // Clamp: can only drag AFTER the calculated FIRE age, up to age 70 or SS-1
       const inp = getInputs();
       const maxAge = Math.min(70, inp.ssClaimAge - 1);
-      const clamped = Math.max(calculatedFireAge, Math.min(age, maxAge));
+      // Feature 036 (US3 revision): when retired, the drag sets the retirement
+      // YEAR, so it may go as early as the current age (retire-now) — not just
+      // ≥ the feasibility age. Otherwise keep the planning-what-if floor.
+      const _dragFloor = window._retirementOverrideActive
+        ? ((inp.ageRoger != null ? inp.ageRoger : inp.agePerson1) || calculatedFireAge)
+        : calculatedFireAge;
+      const clamped = Math.max(_dragFloor, Math.min(age, maxAge));
 
       if (clamped !== _dragPreview.previewAge) {
         // Throttle re-renders for smooth drag
@@ -16625,7 +16883,7 @@ function setupSidebarFireDragListeners() {
   canvas.dataset.fireDragBound = '1';
 
   canvas.addEventListener('mousedown', (e) => {
-    if (!calculatedFireAge || _fireDrag.rendering) return;
+    if (!calculatedFireAge || _fireDrag.rendering) return; // Feature 036 US3 (revised): drag stays live when retired but sets the retirement YEAR on confirm
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -16660,7 +16918,13 @@ function setupSidebarFireDragListeners() {
       if (age == null || !calculatedFireAge) return;
       const inp = getInputs();
       const maxAge = Math.min(70, inp.ssClaimAge - 1);
-      const clamped = Math.max(calculatedFireAge, Math.min(age, maxAge));
+      // Feature 036 (US3 revision): when retired, the drag sets the retirement
+      // YEAR, so it may go as early as the current age (retire-now) — not just
+      // ≥ the feasibility age. Otherwise keep the planning-what-if floor.
+      const _dragFloor = window._retirementOverrideActive
+        ? ((inp.ageRoger != null ? inp.ageRoger : inp.agePerson1) || calculatedFireAge)
+        : calculatedFireAge;
+      const clamped = Math.max(_dragFloor, Math.min(age, maxAge));
       if (clamped !== _dragPreview.previewAge) {
         const now = Date.now();
         if (now - _fireDrag.lastRenderTime < _fireDrag.throttleMs) return;
@@ -16764,6 +17028,35 @@ function _cancelPreviewAndRevert() {
 
 // Apply-click: promote the preview into an actual override via chartState.
 // All subscribers registered in T021 fan out automatically from here.
+// Feature 036 (US3 revised) — commit a drag when retired by writing the
+// retirement YEAR (single source of truth), keeping the marker and the
+// Retirement-year field in sync. Handles both the RR single-household shape
+// and the Generic per-person shape (shifts the latest-retiring earner — the
+// one that drives the household transition the marker sits on).
+function applyRetirementDragAge(age) {
+  const inp = getInputs();
+  const cur = (typeof inp.ageRoger === 'number') ? inp.ageRoger
+            : (typeof inp.agePerson1 === 'number' ? inp.agePerson1 : 0);
+  const year = RETIREMENT_BASE_YEAR + Math.max(0, Math.round(age - cur));
+  const st = getRetirementStatus();
+  if (Array.isArray(st.persons)) {
+    const persons = st.persons.slice();
+    let latestIdx = -1, latestYr = -Infinity;
+    persons.forEach((p, i) => {
+      if (p && p.retired && (p.retirementYear || 0) >= latestYr) { latestYr = p.retirementYear || 0; latestIdx = i; }
+    });
+    if (latestIdx >= 0) {
+      persons[latestIdx] = Object.assign({}, persons[latestIdx], { retirementYear: year });
+      setRetirementStatus({ persons: persons });
+    }
+  } else {
+    setRetirementStatus({ retirementYear: year });
+  }
+  if (typeof syncRetirementStatusUI === 'function') syncRetirementStatusUI();
+  saveState();
+  recalcAll();
+}
+
 function _applyConfirmedOverride() {
   const main = document.getElementById('overrideConfirm');
   const side = document.getElementById('sidebarOverrideConfirm');
@@ -16781,6 +17074,20 @@ function _applyConfirmedOverride() {
   if (!Number.isFinite(age)) {
     console.warn('[applyOverride] no valid previewAge on overlay; aborting', overlay.dataset);
     _hideConfirmOverlay();
+    return;
+  }
+  // Feature 036 (US3 revised) — when retired, the drag edits the retirement
+  // YEAR (the single source of truth), not a planning override. Marker + year
+  // field stay in sync; recalcAll re-pins the transition to the new age.
+  // Read ground-truth retirement status here (not the cached window flag) so
+  // the routing is correct even if a recalc hasn't refreshed the flag.
+  const _rsAtConfirm = (typeof getRetirementStatus === 'function') ? getRetirementStatus() : null;
+  const _retiredAtConfirm = !!(_rsAtConfirm && (_rsAtConfirm.retired
+    || (Array.isArray(_rsAtConfirm.persons) && _rsAtConfirm.persons.some(p => p && p.retired))));
+  if (_retiredAtConfirm) {
+    _previewFireAge = null;
+    _hideConfirmOverlay();
+    applyRetirementDragAge(age);
     return;
   }
   console.log('[applyOverride] applying override for age', age);
@@ -17958,6 +18265,13 @@ function renderGrowthChart(inp) {
     _chartStrategyId ? { strategyOverride: _chartStrategyId, thetaOverride: _chartThetaOverride } : null,
     _mortgageOpts);
   const lifecycle = projectFullLifecycle(inp, scenarioSpend, effectiveFireAge, true, _chartOpts);
+  // Feature 036 (perf) — cache the authoritative chart lifecycle so the retired
+  // sustainability verdict can REUSE it (same rows the chart drew — Principle III)
+  // instead of running a 2nd full projection each recalc. Tagged with the age +
+  // a drag-preview flag; the verdict validates both before reusing.
+  try {
+    window._lastLifecycleCache = { rows: lifecycle, fireAge: effectiveFireAge, previewActive: !!_fireDragPreviewActive };
+  } catch (_e) { /* cache is best-effort */ }
   const fireAge = effectiveFireAge;
   const yrsToFire = fireAge - inp.ageRoger;
   // FRAME: conversion (Wave 4b / FR-008d) — extend lifecycle rows with *BookValue
@@ -19174,6 +19488,8 @@ function saveState() {
   scenarios.forEach(s => { state._visaCosts[s.id] = s.visaCostAnnual || 0; });
   // Save FIRE mode
   state._fireMode = fireMode;
+  // Feature 036 (US1) — Retirement Status (durable user-asserted fact).
+  state._retirementStatus = _retirementStatus;
   // Save language and lifestyle
   state._lang = currentLang;
   state._lifestyleMode = lifestyleMode;
@@ -19309,6 +19625,13 @@ function restoreState() {
       window.fireMode = fireMode; // sync for calc/shims.js
       // Defer button styling to after DOM is ready
       setTimeout(() => setFireMode(fireMode), 0);
+    }
+
+    // Feature 036 (US1) — Restore Retirement Status (durable fact).
+    if (state._retirementStatus && typeof state._retirementStatus === 'object') {
+      setRetirementStatus(state._retirementStatus);
+      // Defer UI sync until the retirement controls exist in the DOM.
+      setTimeout(() => { if (typeof syncRetirementStatusUI === 'function') syncRetirementStatusUI(); }, 0);
     }
 
     // Restore SS claim age + button state
