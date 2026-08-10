@@ -3384,9 +3384,26 @@
     </div>
     <div style="padding:8px 10px;background:rgba(255,217,61,0.08);border:1px solid rgba(255,217,61,0.2);border-radius:8px;margin-bottom:10px">
       <div style="font-size:0.72em;text-transform:uppercase;letter-spacing:1px;color:var(--warning);margin-bottom:6px" data-i18n="assets.locked">🔒 Locked until 59.5 (401K)</div>
-      <div class="input-group" style="margin-bottom:4px">
-        <label data-i18n="assets.roger401kTrad">Roger's Traditional 401K</label>
-        <input type="number" id="roger401k" value="25000" onchange="recalcAll()">
+      <!-- Roger's Traditional 401K is split into the two sources that fund it:
+           his own pre-tax deferrals and the employer match (always Traditional
+           regardless of his contribution type). They are ONE pool for every
+           calculation — getInputs() sums them into inp.roger401kTrad. The split
+           is bookkeeping only: it lets snapshot history track each source
+           separately. Legacy single-field state migrates in restoreState(). -->
+      <div style="border-left:2px solid rgba(255,217,61,0.35);padding-left:9px;margin-bottom:8px">
+        <div style="font-size:0.92em;font-weight:600;margin-bottom:5px" data-i18n="assets.roger401kTrad">Roger's Traditional 401K</div>
+        <div class="input-group" style="margin-bottom:4px">
+          <label data-i18n="assets.roger401kTradSelf">My Contribution</label>
+          <input type="number" id="roger401kSelf" min="0" step="1" value="25000" onchange="recalcAll()">
+        </div>
+        <div class="input-group" style="margin-bottom:2px">
+          <label data-i18n="assets.roger401kTradMatch">Employer Match</label>
+          <input type="number" id="roger401kMatch" min="0" step="1" value="0" onchange="recalcAll()">
+        </div>
+        <div style="text-align:right;font-size:0.78em;color:var(--text-dim);margin-top:4px">
+          <span data-i18n="assets.roger401kTradTotal">Traditional total</span>:
+          <span style="font-weight:700;color:var(--warning)" id="roger401kTradTotal">—</span>
+        </div>
       </div>
       <div class="input-group" style="margin-bottom:4px">
         <label data-i18n="assets.roger401kRoth">Roger's Roth 401K</label>
@@ -5879,6 +5896,11 @@ const TRANSLATIONS = {
     'assets.other': 'Other (Crypto, etc.)',
     'assets.roger401k': "Roger's 401K",
     'assets.roger401kTrad': "Roger's Traditional 401K",
+    // Traditional 401K split by funding source (bookkeeping only — both halves
+    // are summed into the single Traditional pool for every calculation).
+    'assets.roger401kTradSelf': 'My Contribution',
+    'assets.roger401kTradMatch': 'Employer Match',
+    'assets.roger401kTradTotal': 'Traditional total',
     'assets.roger401kRoth': "Roger's Roth 401K",
     // Feature 032 (US1) — Roth IRA accounts. RR-only.
     'assets.rothIraGroup': '🔒 Roth IRA',
@@ -6017,6 +6039,9 @@ const TRANSLATIONS = {
     'snap.netWorth': 'Net Worth',
     'snap.accessible': 'Accessible',
     'snap.k401': '401K',
+    // Traditional-401K funding-source sub-line under the 401K history cell.
+    'snap.k401Self': 'self',
+    'snap.k401Match': 'match',
     'snap.rogerStocks': 'Roger Stocks',
     'snap.rebeccaStocks': 'Rebecca Stocks',
     'snap.rogerRothIra': "Roger's Roth IRA",
@@ -7111,6 +7136,9 @@ const TRANSLATIONS = {
     'assets.other': '其他（加密貨幣等）',
     'assets.roger401k': 'Roger 的 401K',
     'assets.roger401kTrad': 'Roger 的傳統 401K (稅前)',
+    'assets.roger401kTradSelf': '自提部分',
+    'assets.roger401kTradMatch': '雇主提撥',
+    'assets.roger401kTradTotal': '傳統合計',
     'assets.roger401kRoth': 'Roger 的 Roth 401K (稅後)',
     // Feature 032 (US1) — Roth IRA accounts. RR-only.
     'assets.rothIraGroup': '🔒 Roth IRA',
@@ -7248,6 +7276,8 @@ const TRANSLATIONS = {
     'snap.netWorth': '淨資產',
     'snap.accessible': '可用',
     'snap.k401': '401K',
+    'snap.k401Self': '自提',
+    'snap.k401Match': '雇主',
     'snap.rogerStocks': 'Roger 股票',
     'snap.rebeccaStocks': 'Rebecca 股票',
     'snap.rogerRothIra': 'Roger 的 Roth IRA',
@@ -8562,10 +8592,16 @@ function getInputs() {
       return parseFloat(document.getElementById('taxRate').value) / 100;
     })(),
     // 401K is split into Traditional (pre-tax) + Roth (after-tax).
-    // #roger401k stays as the Traditional balance (for CSV back-compat).
-    // #roger401kRoth is the new Roth balance input.
+    // #roger401kRoth is the Roth balance input.
     // inp.roger401k is kept as the TOTAL (trad+roth) for chart totals/net worth.
-    roger401kTrad: parseFloat(document.getElementById('roger401k').value) || 0,
+    //
+    // The Traditional balance itself is entered as TWO inputs by funding source:
+    //   #roger401kSelf  — Roger's own pre-tax deferrals
+    //   #roger401kMatch — employer match (always Traditional)
+    // Every downstream calculation consumes ONLY their sum (roger401kTrad); the
+    // split is carried on inp for snapshot history + Copy Debug transparency.
+    roger401kSelf:  parseFloat((document.getElementById('roger401kSelf')||{}).value)  || 0,
+    roger401kMatch: parseFloat((document.getElementById('roger401kMatch')||{}).value) || 0,
     roger401kRoth: parseFloat((document.getElementById('roger401kRoth')||{}).value) || 0,
     // Feature 032 (US1) — Roth IRA balances. Locked-pool inputs (FR-019).
     // Default 0 when DOM missing so Generic/cold-load paths don't NaN.
@@ -8611,6 +8647,8 @@ function getInputs() {
     endAge: parseInt(document.getElementById('endAge').value),
     ssClaimAge: ssClaimAge,
   };
+  // The single Traditional pool every calc consumes = self-funded + employer match.
+  inp.roger401kTrad = inp.roger401kSelf + inp.roger401kMatch;
   // Derived totals for back-compat with code that reads inp.roger401k / inp.contrib401k
   inp.roger401k = inp.roger401kTrad + inp.roger401kRoth;
   inp.contrib401k = inp.contrib401kTrad + inp.contrib401kRoth;
@@ -14847,6 +14885,10 @@ function recalcAll() {
   document.getElementById('accessibleTotal').textContent = '$' + Math.round(accessible).toLocaleString();
   document.getElementById('nwAccessible').textContent = '$' + Math.round(accessible/1000) + 'K';
   document.getElementById('nwLocked').textContent = '$' + Math.round(locked/1000) + 'K';
+  // Traditional 401K = self-funded + employer match. Echo the sum so the user
+  // can see the combined pool the math actually runs on.
+  const _tradTotalEl = document.getElementById('roger401kTradTotal');
+  if (_tradTotalEl) _tradTotalEl.textContent = '$' + Math.round(inp.roger401kTrad).toLocaleString();
 
   // Savings rate
   document.getElementById('savingsRateValue').textContent = savingsRate.toFixed(1) + '%';
@@ -19388,7 +19430,10 @@ const STATE_KEY = 'fire_dashboard_state';
 // All input IDs that should be saved/restored
 const PERSIST_IDS = [
   'annualIncome', 'raiseRate', 'taxRate',
-  'roger401k', 'roger401kRoth', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
+  // Traditional 401K by funding source (legacy single 'roger401k' key is
+  // migrated into roger401kSelf on read — see restoreState()).
+  'roger401kSelf', 'roger401kMatch',
+  'roger401kRoth', 'rogerStocks', 'rebeccaStocks', 'cashSavings', 'otherAssets',
   // Feature 032 (US1) — Roth IRA balances
   'rogerRothIra', 'rebeccaRothIra',
   'returnRate', 'return401k', 'inflationRate', 'swr',
@@ -19539,6 +19584,18 @@ function restoreState() {
     const raw = localStorage.getItem(STATE_KEY);
     if (!raw) return false;
     const state = JSON.parse(raw);
+
+    // ---- Migration: single Traditional 401K balance -> self / employer-match ----
+    // Saved states written before the split carry one `roger401k` key holding
+    // the whole Traditional balance. Attribute it all to Roger's own
+    // contribution and start the match at 0 — the TOTAL is preserved, so no
+    // calculation shifts; the user re-splits it once by hand. Only applies when
+    // the new keys are absent, so it can never clobber a real split.
+    if (state.roger401k !== undefined && state.roger401kSelf === undefined
+        && state.roger401kMatch === undefined) {
+      state.roger401kSelf  = state.roger401k;
+      state.roger401kMatch = '0';
+    }
 
     // Restore input values
     PERSIST_IDS.forEach(id => {
@@ -19813,7 +19870,11 @@ const CSV_HEADERS = [
   'Cash','Other Assets','Annual Income','Monthly Spend','401K Contrib',
   'Employer Match','Monthly Savings','Savings Rate %','FIRE Target',
   'Years to FIRE','Target Country','Target Country ID','Locked',
-  'Roger Roth IRA','Rebecca Roth IRA'  // Feature 032 — appended, never inserted.
+  'Roger Roth IRA','Rebecca Roth IRA',  // Feature 032 — appended, never inserted.
+  // Traditional-401K funding-source split. The '401K' column above stays the
+  // combined (Trad + Roth) total it has always been; these two break the
+  // Traditional half into its sources. Appended, never inserted.
+  'Roger 401K Trad Self','Roger 401K Trad Match'
 ];
 
 // ---------- localStorage (fast cache) ----------
@@ -19841,7 +19902,9 @@ function snapshotsToCSV(all) {
       s.targetCountryId || '',
       s.locked || 0,
       s.rogerRothIra || 0,    // Feature 032 — appended, never inserted.
-      s.rebeccaRothIra || 0
+      s.rebeccaRothIra || 0,
+      s.roger401kSelf || 0,   // Traditional-401K split — appended, never inserted.
+      s.roger401kMatch || 0
     ].join(',') + '\n';
   });
   return csv;
@@ -19888,6 +19951,11 @@ function csvToSnapshots(csvText) {
       // (NaN || 0) === 0. Row is NOT dropped. See tests/unit/snapshotCsv.test.js.
       rogerRothIra:   parseFloat(cols[19]) || 0,
       rebeccaRothIra: parseFloat(cols[20]) || 0,
+      // Traditional-401K split. Same short-row tolerance: rows written before
+      // the split have no cols[21]/cols[22], so both land on 0 and the history
+      // cell simply renders no sub-line for those rows.
+      roger401kSelf:  parseFloat(cols[21]) || 0,
+      roger401kMatch: parseFloat(cols[22]) || 0,
     };
   }).filter(s => s.date); // filter out empty rows
 }
@@ -20061,6 +20129,10 @@ async function saveSnapshot() {
     // Feature 032 (US5) — Roth IRA snapshot fields.
     rogerRothIra: inp.rogerRothIra || 0,
     rebeccaRothIra: inp.rebeccaRothIra || 0,
+    // Traditional-401K funding-source split. `roger401k` above stays the
+    // combined Trad+Roth total; these two sum to the Traditional half only.
+    roger401kSelf: inp.roger401kSelf || 0,
+    roger401kMatch: inp.roger401kMatch || 0,
   };
 
   const all = getSnapshots();
@@ -20240,6 +20312,13 @@ function renderSnapshotHistory() {
     const dateStr = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
     const d401k = prev ? deltaHTML(snap.roger401k, prev.roger401k, true) : '';
+    // Traditional-401K funding-source sub-line. Rows saved before the split
+    // carry neither field — render nothing rather than a misleading "$0 · $0".
+    const snapK401Self = snap.roger401kSelf || 0;
+    const snapK401Match = snap.roger401kMatch || 0;
+    const k401SplitHTML = (snapK401Self || snapK401Match)
+      ? `<div style="font-size:0.78em;color:var(--text-dim);margin-top:2px;white-space:nowrap">${t('snap.k401Self')} ${fmtMoney(snapK401Self)} · ${t('snap.k401Match')} ${fmtMoney(snapK401Match)}</div>`
+      : '';
     const dRogerStocks = prev ? deltaHTML(snap.rogerStocks, prev.rogerStocks, true) : '';
     const dRebeccaStocks = prev ? deltaHTML(snap.rebeccaStocks, prev.rebeccaStocks, true) : '';
     // Feature 032 (US5, T044) — Roth IRA deltas; legacy rows default to 0.
@@ -20262,7 +20341,7 @@ function renderSnapshotHistory() {
       <td style="font-weight:600">${dateStr}</td>
       <td>${fmtMoney(snap.netWorth)}${dNW}</td>
       <td>${fmtMoney(snap.accessible)}${dAccessible}</td>
-      <td>${fmtMoney(snap.roger401k)}${d401k}</td>
+      <td>${fmtMoney(snap.roger401k)}${d401k}${k401SplitHTML}</td>
       <td>${fmtMoney(snap.rogerStocks)}${dRogerStocks}</td>
       <td>${fmtMoney(snap.rebeccaStocks)}${dRebeccaStocks}</td>
       <td>${fmtMoney(snapRogerRothIra)}${dRogerRothIra}</td>
@@ -22354,6 +22433,14 @@ function copyDebugInfo() {
       audit: window._lastAuditSnapshot ?? null,
       lifecycleSamples: samples,
       lifecycleProjection,
+      // Traditional 401K is entered as two inputs but consumed as one pool.
+      // `inputs` below carries the raw halves; echo the derived sum so a debug
+      // paste shows at a glance what the math actually ran on.
+      trad401kComposition: (() => {
+        const self = parseFloat((document.getElementById('roger401kSelf') || {}).value) || 0;
+        const match = parseFloat((document.getElementById('roger401kMatch') || {}).value) || 0;
+        return { self, employerMatch: match, tradTotal: self + match };
+      })(),
       inputs,
     };
     const json = JSON.stringify(debugObj, null, 2);
