@@ -1516,3 +1516,134 @@ New user-visible strings. All keys added to `TRANSLATIONS.en` AND `TRANSLATIONS.
 | `retire.person2` | Person 2 | 成員 2 |
 | `retire.income.person1` | Person 1 income | 成員 1 收入 |
 | `retire.income.person2` | Person 2 income | 成員 2 收入 |
+
+---
+
+## Feature 037 — Lifecycle Projection Excel Export (2026-08-13)
+
+New user-visible strings for the `📊 Export Projection (Excel)` button in **History → Snapshots**.
+All keys added to `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in BOTH HTML files (Principle VII).
+
+The tooltip key rides a new generic `data-i18n-title` handler in `applyLanguage()` (mirrors the
+existing `data-i18n-tip` / `-aria` / `-placeholder` handlers), so native `title` attributes now
+translate in both dashboards.
+
+**Terminology (project rule)**: user-visible copy says **"money" / "Book Value"** for statement
+dollars and **"purchasing power"** for the today's-equivalent comparison. Never "real $".
+
+| Key | English | 繁體中文 |
+|-----|---------|---------|
+| `snap.exportProjection` | 📊 Export Projection (Excel) | 📊 匯出預測（Excel） |
+| `snap.exportProjectionTitle` | Download the full year-by-year Lifecycle projection as an Excel workbook — one row per year, in both money and purchasing-power frames. | 將完整的逐年生命週期預測下載為 Excel 活頁簿 — 每年一列，同時提供帳面金額與購買力兩種欄位。 |
+| `snap.exportProjectionBusy` | ⏳ Building workbook… | ⏳ 正在建立活頁簿… |
+| `snap.exportProjectionErrProjection` | Projection not ready yet — open the Lifecycle chart, let it finish drawing, then try again. No file was created. | 預測尚未就緒 — 請先開啟生命週期圖並等它畫完，再試一次。未產生任何檔案。 |
+| `snap.exportProjectionErrLibrary` | Excel export library could not be loaded — check your connection and try again. No file was created. | 無法載入 Excel 匯出程式庫 — 請檢查網路連線後再試一次。未產生任何檔案。 |
+| `snap.exportProjectionErrBuild` | Could not assemble the projection table from the current plan. No file was created. | 無法依目前的計劃組建預測表格。未產生任何檔案。 |
+| `snap.exportProjectionErrWrite` | Could not write the Excel file. No file was created. | 無法寫入 Excel 檔案。未產生任何檔案。 |
+
+### Workbook strings (from `calc/lifecycleExport.js`)
+
+These are **not** `TRANSLATIONS` keys — the pure module has no DOM access, so they live in
+its own frozen label tables and follow the dashboard's active language at export time
+(research R8). Listed here so translation review has one place to look.
+
+**Frame suffixes** — appended to every money / purchasing-power column header. Matches the
+existing `display.frame.*` vocabulary; never "real $" (CLAUDE.md hard rule).
+
+| Frame | EN suffix | zh-TW suffix |
+|-------|-----------|--------------|
+| money | ` (Book Value)` | `（帳面價值）` |
+| purchasing power | ` (purchasing power)` | `（約等於今日價值）` |
+
+**Column headers** (`MEASURE_LABELS`) — 38 measures, expanding to 70 columns.
+
+| Measure key | EN | 繁體中文 |
+|-------------|----|---------|
+| `year` | Year | 年份 |
+| `age` | Age | 年齡 |
+| `phase` | Plan phase | 計畫階段 |
+| `is401kUnlocked` | 401K unlocked | 401K 已解鎖 |
+| `hasShortfall` | Shortfall this year | 本年度資金缺口 |
+| `total` | Total portfolio | 投資組合總額 |
+| `p401k` | 401K total | 401K 總額 |
+| `p401kTrad` | Traditional 401K | 傳統 401K |
+| `p401kRoth` | Roth 401K | Roth 401K |
+| `pRothIra` | Roth IRA | Roth IRA |
+| `pStocks` | Taxable brokerage | 應稅券商帳戶 |
+| `pCash` | Cash | 現金 |
+| `accessible` | Accessible before 59.5 | 59.5 歲前可動用資產 |
+| `grossIncome` | Employment income | 工作收入 |
+| `ssIncome` | Social Security income | 社會安全福利收入 |
+| `federalTax` | Federal income tax | 聯邦所得稅 |
+| `ficaTax` | FICA payroll tax | FICA 薪資稅 |
+| `retirementFederalTax` | Federal income tax in retirement | 退休期聯邦所得稅 |
+| `annualSpending` | Annual spending | 年度支出 |
+| `grossSpend` | Spending need | 年度支出需求 |
+| `contribution` | Contributions total | 提撥總額 |
+| `pretax401kEmployee` | Employee pre-tax 401K | 員工稅前 401K 提撥 |
+| `empMatchToTrad` | Employer match to Traditional | 雇主提撥至傳統帳戶 |
+| `stockContribution` | Brokerage contribution planned | 券商投入（計畫） |
+| `stockContributionActual` | Brokerage contribution actual | 券商投入（實際） |
+| `cashFlowToCash` | Cash flow into cash | 流入現金 |
+| `withdrawal` | Withdrawals total | 提領總額 |
+| `wTrad` | Withdrawn from Traditional 401K | 自傳統 401K 提領 |
+| `wRoth` | Withdrawn from Roth 401K | 自 Roth 401K 提領 |
+| `wRothIra` | Withdrawn from Roth IRA | 自 Roth IRA 提領 |
+| `wStocks` | Withdrawn from brokerage | 自券商帳戶提領 |
+| `wCash` | Withdrawn from cash | 自現金提領 |
+| `syntheticConversion` | Surplus reinvested | 盈餘再投入 |
+| `fundedFromCash` | Shortfall funded from cash | 由現金補足缺口 |
+| `fundedFromStocks` | Shortfall funded from brokerage | 由券商帳戶補足缺口 |
+| `cashFlowWarning` | Cash-flow warning | 現金流警示 |
+| `shortfall` | Unfunded shortfall | 未補足缺口 |
+| `signedTotal` | Total portfolio before depletion clamp | 未套用歸零下限的投資組合總額 |
+
+**Plan-phase values** (`PHASE_LABELS`) — the value shown in the `Plan phase` column.
+
+| Phase id | EN | 繁體中文 |
+|----------|----|---------|
+| `accumulation` | Accumulation | 累積期 |
+| `phase1-taxable-only` | Retired — taxable only | 退休：僅可動用應稅帳戶 |
+| `phase2-401k-unlocked` | Retired — 401K unlocked | 退休：401K 已解鎖 |
+| `phase3-with-ss` | Retired — with Social Security | 退休：含社會安全福利 |
+| `drawdown-no-ss` | Retired — before Social Security | 退休：社安福利前 |
+
+**Flag values** (`BOOL_LABELS`) — used by the `401K unlocked` / `Shortfall this year` columns.
+
+| Key | EN | 繁體中文 |
+|-----|----|---------|
+| `yes` | Yes | 是 |
+| `no` | No | 否 |
+
+**Settings-sheet labels** (`SETTINGS_LABELS`) — the provenance block on sheet 2.
+
+| Key | EN | 繁體中文 |
+|-----|----|---------|
+| `dashboardVariant` | Dashboard | 儀表板版本 |
+| `fireMode` | FIRE mode | FIRE 模式 |
+| `strategyId` | Withdrawal strategy (id) | 提領策略（代碼） |
+| `strategyName` | Withdrawal strategy | 提領策略 |
+| `objective` | Objective | 目標 |
+| `mortgageStrategy` | Mortgage strategy | 房貸策略 |
+| `retired` | Retirement status declared | 已宣告退休 |
+| `retirementYear` | Retirement transition year | 退休轉換年份 |
+| `planEndAge` | Plan end age | 計畫結束年齡 |
+| `inflationRate` | Inflation rate assumed | 假設通膨率 |
+| `language` | Language | 語言 |
+| `retirementTax` | Retirement-year federal tax | 退休期聯邦所得稅 |
+| `registryVersion` | Column registry version | 欄位版本 |
+| `appVersion` | Produced by | 產生自 |
+| `exportTimestamp` | Exported at | 匯出時間 |
+
+**Settings-sheet values** (`SETTINGS_VALUE_LABELS`).
+
+| Key | EN | 繁體中文 |
+|-----|----|---------|
+| `yes` | Yes | 是 |
+| `no` | No | 否 |
+| `none` | — | — |
+| `reported` | Reported | 已提供 |
+| `notReported` | Not reported | 未提供 |
+
+The two **sheet tab names** (`Projection`, `Settings`) stay English in both languages: they are
+pinned by `contracts/lifecycle-export.contract.md` §C-2.2 and asserted by E2E.

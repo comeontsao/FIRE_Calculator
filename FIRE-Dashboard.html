@@ -24,6 +24,10 @@
      Loaded in BOTH HTML files for calc-layer lockstep; only the RR file has the
      estimator UI + renderYearTaxEstimator() consumer (documented Principle-I divergence). -->
 <script src="calc/taxEstimator.js"></script>
+<!-- Feature 037 — pure model builder for the Lifecycle → Excel export. No DOM,
+     no ExcelJS; the browser handler (exportLifecycleProjectionXlsx) feeds it the
+     cached chart projection and writes the workbook from the model it returns. -->
+<script src="calc/lifecycleExport.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -4591,6 +4595,14 @@
         <button class="btn-secondary" onclick="importCSVFromFile()" title="Import snapshots from a CSV file" data-i18n="snap.importCSV">📥 Import CSV</button>
         <button class="btn-save" onclick="saveSnapshot()" data-i18n="snap.save">💾 Save Current Snapshot</button>
         <button class="btn-secondary" onclick="exportSnapshotsCSV()" title="Download a copy of all snapshots" data-i18n="snap.exportCSV">📤 Export CSV</button>
+        <!-- Feature 037 (FR-023a) — deliberately styled apart from "Export CSV" above:
+             that one emits recorded snapshot history, this one emits the forward
+             projection. Accent outline + 📊 so the two never read as variants. -->
+        <button class="btn-secondary" id="btnExportProjectionXlsx"
+                style="border-color:var(--accent);color:var(--accent)"
+                onclick="exportLifecycleProjectionXlsx()"
+                data-i18n="snap.exportProjection" data-i18n-title="snap.exportProjectionTitle"
+                title="Download the full year-by-year Lifecycle projection as an Excel workbook — one row per year, in both money and purchasing-power frames.">📊 Export Projection (Excel)</button>
         <button class="btn-danger-outline" onclick="clearAllSnapshots()" title="Delete all saved snapshots" data-i18n="snap.clearAll">🗑️ Clear All</button>
       </div>
     </div>
@@ -6058,6 +6070,14 @@ const TRANSLATIONS = {
     'snap.exportCSV': '📤 Export CSV',
     'snap.importCSV': '📥 Import CSV',
     'snap.clearAll': '🗑️ Clear All',
+    // Feature 037 — year-by-year Lifecycle projection → Excel workbook.
+    'snap.exportProjection': '📊 Export Projection (Excel)',
+    'snap.exportProjectionTitle': 'Download the full year-by-year Lifecycle projection as an Excel workbook — one row per year, in both money and purchasing-power frames.',
+    'snap.exportProjectionBusy': '⏳ Building workbook…',
+    'snap.exportProjectionErrProjection': 'Projection not ready yet — open the Lifecycle chart, let it finish drawing, then try again. No file was created.',
+    'snap.exportProjectionErrLibrary': 'Excel export library could not be loaded — check your connection and try again. No file was created.',
+    'snap.exportProjectionErrBuild': 'Could not assemble the projection table from the current plan. No file was created.',
+    'snap.exportProjectionErrWrite': 'Could not write the Excel file. No file was created.',
     'footer.lastUpdated': 'Last updated:',
     'footer.method': 'Uses real (inflation-adjusted) returns',
     'footer.tip': '💡 Tip: Adjust any slider or input field and everything recalculates instantly. Bookmark this file and update your numbers monthly!',
@@ -7294,6 +7314,14 @@ const TRANSLATIONS = {
     'snap.exportCSV': '📤 匯出 CSV',
     'snap.importCSV': '📥 匯入 CSV',
     'snap.clearAll': '🗑️ 清除全部',
+    // Feature 037 — year-by-year Lifecycle projection → Excel workbook.
+    'snap.exportProjection': '📊 匯出預測（Excel）',
+    'snap.exportProjectionTitle': '將完整的逐年生命週期預測下載為 Excel 活頁簿 — 每年一列，同時提供帳面金額與購買力兩種欄位。',
+    'snap.exportProjectionBusy': '⏳ 正在建立活頁簿…',
+    'snap.exportProjectionErrProjection': '預測尚未就緒 — 請先開啟生命週期圖並等它畫完，再試一次。未產生任何檔案。',
+    'snap.exportProjectionErrLibrary': '無法載入 Excel 匯出程式庫 — 請檢查網路連線後再試一次。未產生任何檔案。',
+    'snap.exportProjectionErrBuild': '無法依目前的計劃組建預測表格。未產生任何檔案。',
+    'snap.exportProjectionErrWrite': '無法寫入 Excel 檔案。未產生任何檔案。',
     'footer.lastUpdated': '最後更新：',
     'footer.method': '使用實質（扣除通膨）回報率',
     'footer.tip': '💡 提示：調整任何滑桿或輸入欄位，所有計算即時更新。將此頁加入書籤，每月更新你的數據！',
@@ -8287,6 +8315,14 @@ function switchLanguage(lang) {
     const key = el.getAttribute('data-i18n-placeholder');
     const trans = TRANSLATIONS[currentLang]?.[key];
     if (trans) el.setAttribute('placeholder', trans);
+  });
+  // Feature 037 — translate native `title` tooltips. Same guarded shape as the
+  // -tip / -aria / -placeholder handlers above: an element keeps its authored
+  // English title when the key has no entry in the active language.
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    const trans = TRANSLATIONS[currentLang]?.[key];
+    if (trans) el.setAttribute('title', trans);
   });
   document.getElementById('langEN').style.background = lang === 'en' ? 'var(--accent)' : 'var(--card)';
   document.getElementById('langEN').style.color = lang === 'en' ? '#fff' : 'var(--text-dim)';
@@ -11880,10 +11916,22 @@ function projectFullLifecycle(inp, annualSpend, overrideFireAge, withSS, options
     // logic (US3+) enforces 59.5 lock when draws are computed.
     const rothIraSnap = Math.max(0, portfolioRothIra);
     const total = portfolio401k + rothIraSnap + accessibleSnap;
+    // Feature 037 (T034a / INV-8) — the UN-CLAMPED total, for the spreadsheet export.
+    // `total` above is built from pools that are each individually clamped to >= 0,
+    // and is then clamped again on the way into the row, so by the time any consumer
+    // sees it the sign is gone twice over and a depleted year is indistinguishable
+    // from a solvent $0 one. This sibling sums the RAW pools — the same form
+    // `signedLifecycleEndBalance` uses as the depletion authority.
+    // ADDITIVE ONLY: nothing reads this except the export; no projection behaviour
+    // changes. FRAME: real-$ (purchasing power) — the Book-Value companion is
+    // generated by _extendRowsWithBookValues via LIFECYCLE_EXPORT_MONEY_FIELDS.
+    const signedTotal = portfolio401kTrad + portfolio401kRoth + portfolioRothIra
+                      + portfolioStocks + portfolioCash;
 
     data.push({
       year, age,
       total: Math.max(0, total),
+      signedTotal,
       p401k: portfolio401k,
       p401kTrad: Math.max(0, portfolio401kTrad),
       p401kRoth: Math.max(0, portfolio401kRoth),
@@ -13176,6 +13224,15 @@ function scoreAndRank(inp, fireAge, mode, objective, previousWinnerId) {
       const rowBase = { age, phase: !canAccess401k ? 'phase1-taxable-only' : (!ssActive ? 'phase2-401k-unlocked' : 'phase3-with-ss') };
       const rowToPush = Object.assign(rowBase, mix);
       rowToPush.totalStart = _totalStart;
+      // Feature 037 — surface the year's gross spending need onto the row so the
+      // spreadsheet export can report it. `grossSpend` lives on the transient
+      // `ctx` and was otherwise lost the moment this iteration ended; `mix` never
+      // carried it. This is the overlay-inclusive figure (retirement spend +
+      // healthcare delta + college, per feature 029), which is genuinely
+      // "spending need" — NOT the same as the gross withdrawal that funds it,
+      // which is already reported separately from the lifecycle row.
+      // ADDITIVE ONLY: nothing but the export reads this field.
+      rowToPush.grossSpend = ctxThisYear.grossSpend;
       perYearRows.push(rowToPush);
       lifetimeTax += mix.taxOwed;
       // Aggregate caveats
@@ -14226,6 +14283,80 @@ function _renderBookValueCaption(containerEl, inflationRate) {
   }
   captionEl.textContent = `Book Value at ${pct}% assumed annual inflation`;
 }
+
+// LIFECYCLE_EXPORT_MONEY_FIELDS — feature 037 (T017 / research R3)
+//
+// FRAME: pure-data (a list of field names; no $ math here)
+//
+// The Lifecycle chart only ever needed money-frame companions for the eight
+// balances it plots. The Excel export needs one for EVERY numeric field it
+// emits, so this list is appended to the lifecycle `_extendRowsWithBookValues`
+// call below. It is deliberately a LIST, not new conversion maths: the real→
+// nominal conversion still happens exactly once, inside the audited
+// calc/displayConverter.toBookValue, so the export can never disagree with the
+// chart about inflation (Principle III, research R3).
+//
+// BLANK-VS-ZERO WARNING for consumers: _extendRowsWithBookValues writes
+// `<field>BookValue = 0` when the base field is absent, because toBookValue's
+// non-finite guard collapses `undefined` to 0. Retirement rows carry no
+// cash-flow fields at all (research R2), so a companion of 0 on those rows
+// means "field not present", NOT "measured zero". calc/lifecycleExport.js must
+// therefore decide blank-vs-zero from the BASE field's presence and only then
+// read the companion — never infer it from the companion (INV-7).
+//
+// `var`, not `const`: this is boot-path-reachable module state and every
+// browser-loaded script shares one lexical scope, so `const` would put it in a
+// TDZ that `typeof` cannot guard (CLAUDE.md Process Lessons).
+var LIFECYCLE_EXPORT_MONEY_FIELDS = [
+  'accessible',
+  'grossIncome', 'ssIncome',
+  'federalTax', 'ficaTax',
+  'annualSpending',
+  'contribution', 'pretax401kEmployee', 'empMatchToTrad',
+  'stockContribution', 'stockContributionActual', 'cashFlowToCash',
+  'fundedFromCash', 'fundedFromStocks',
+  'withdrawal',
+  // Feature 037 (T034a / INV-8) — the un-clamped total. MUST stay in this list:
+  // adding the field to the row without its Book-Value companion would leave the
+  // money column silently equal to its purchasing-power sibling and pin
+  // meta.frameFallback true forever. Field + companion are one atomic change.
+  'signedTotal',
+];
+
+// LIFECYCLE_EXPORT_STRATEGY_MONEY_FIELDS — feature 037 (T023)
+//
+// FRAME: pure-data (field names only)
+//
+// Withdrawals-by-source live on the withdrawal-STRATEGY rows, not on the
+// lifecycle rows (research R2). The export joins them by `age`, so those rows
+// need their own money-frame companions. Applied to a COPY of the active
+// strategy's rows inside exportLifecycleProjectionXlsx so the export never
+// mutates `_lastStrategyResults` (INV-6).
+// This list is EXACTLY the $-valued subset of what _simulateStrategyLifetime
+// spreads onto perYearRows — verified against a live row, not against a doc
+// comment. Note there are TWO strategy arrays with different shapes: this joins
+// `perYearRows` (rowBase + the strategy's per-year `mix`), NOT `result.strategy`.
+// `ssIncome`, `withdraw` and `grossIncome` exist on the latter but not here, so
+// listing them would be a silent no-op leaving money columns falling back to
+// purchasing power. ssIncome is sourced from the lifecycle row instead — present
+// in both phases there, and one number should have one source — and the total
+// draw is the lifecycle row's `withdrawal`.
+var LIFECYCLE_EXPORT_STRATEGY_MONEY_FIELDS = [
+  'wTrad', 'wRoth', 'wRothIra', 'wStocks', 'wCash',
+  'syntheticConversion', 'shortfall',
+  // grossSpend = the year's overlay-inclusive spending need, surfaced onto
+  // perYearRows at its construction site (search: "Feature 037 — surface the
+  // year's gross spending need"). It is the spending the withdrawals fund, not
+  // the withdrawals themselves.
+  'grossSpend',
+  // taxOwed = ordinary + LTCG federal tax actually paid that retirement year.
+  // Grafted onto the lifecycle copy as retirementFederalTax by
+  // _deriveExportLifecycleRows below. This closes research R4's "retirement
+  // years report no tax" hole WITHOUT any calc-layer change: the figure already
+  // sits on the very rows the withdrawal columns are joined from, which also
+  // makes it internally consistent with the draws it explains.
+  'taxOwed',
+];
 
 // _extendRowsWithBookValues — feature 022 Wave 4b (US1 / FR-008d)
 //
@@ -18323,7 +18454,8 @@ function renderGrowthChart(inp) {
       _extendRowsWithBookValues(lifecycle, inp.ageRoger, inp.inflationRate,
         // Feature 032 (US2) — 'pRothIra' added so pRothIraBookValue companion is
         // auto-populated for the new Roth IRA chart dataset above.
-        ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth','pRothIra']);
+        ['total','p401k','pStocks','pCash','pRoth','p401kTrad','p401kRoth','pRothIra'].concat(
+          LIFECYCLE_EXPORT_MONEY_FIELDS));
     }
   } catch (_e) { /* defensive — render real-$ if helper unavailable */ }
   // Feature 023 follow-up — FIRE NUMBER target line uses projected total at
@@ -20186,6 +20318,485 @@ function exportSnapshotsCSV() {
   const all = getSnapshots();
   if (all.length === 0) { alert('No snapshots to export.'); return; }
   downloadCSV(snapshotsToCSV(all));
+}
+
+// ==================== Feature 037 — Lifecycle projection → Excel workbook ====================
+//
+// One button in History → Snapshots downloads the whole plan as a real .xlsx:
+// one row per calendar year, current year → plan end, carrying every per-year
+// figure the Lifecycle projection computes, in both money and purchasing-power
+// frames. All the intelligence (column registry, the accumulation/retirement
+// union, the age join, blank-vs-zero) lives in the pure, Node-tested
+// calc/lifecycleExport.js. Everything below is the thin, untestable half:
+// resolve → build → lazy-load → write → download.
+//
+// FRAME (feature 022 / FR-009):
+//   Dominant frame: mixed — the workbook emits BOTH frames side by side. Money
+//     columns read the pre-computed `<field>BookValue` companions attached by
+//     _extendRowsWithBookValues; purchasing-power columns read the base fields.
+//   Frame-conversion sites: NONE in this block. Every real→nominal conversion
+//     already happened inside calc/displayConverter.toBookValue at the chart's
+//     own _extendRowsWithBookValues call site. This code must never do
+//     inflation maths of its own — a second conversion is a second source of
+//     truth and would eventually disagree with the chart (Principle III, R3).
+//
+// THE FIDELITY RULE (contract §C-2.1 step 1 / INV-5, research R6): this handler
+// reads the lifecycle rows the chart ALREADY drew, cached in
+// `window._lastLifecycleCache`. It MUST NOT call projectFullLifecycle with
+// fresh options. An export that recomputes is a second source of truth that
+// will eventually disagree with the chart, and that disagreement destroys the
+// only thing the file is for. If the cache is unavailable or stale we REFUSE
+// with a translated message and download nothing — a refusal is recoverable, a
+// plausible wrong file is not (FR-024 / FR-025).
+//
+// THE PURITY RULE (FR-022 / INV-6): producing the workbook must not call
+// recalcAll(), mutate `state`, write localStorage, or re-render a chart. Rows
+// are COPIED before companions are attached to them. Read the plan, write a
+// file, change nothing.
+
+var LIFECYCLE_EXPORT_EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+var LIFECYCLE_EXPORT_LOAD_TIMEOUT_MS = 20000;
+var LIFECYCLE_EXPORT_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+// Sheet tab names are pinned by contract §C-2.2 and asserted by E2E, so they
+// stay English in both languages (the sheet CONTENT — every column header and
+// every settings label — follows the active language per research R8).
+var LIFECYCLE_EXPORT_SHEET_PROJECTION = 'Projection';
+var LIFECYCLE_EXPORT_SHEET_SETTINGS = 'Settings';
+var LIFECYCLE_EXPORT_NUMFMT_CURRENCY = '"$"#,##0';
+var LIFECYCLE_EXPORT_NUMFMT_INTEGER = '0';
+var LIFECYCLE_EXPORT_MIN_COL_WIDTH = 11;
+var LIFECYCLE_EXPORT_MAX_COL_WIDTH = 30;
+// In-flight / completed lazy-load promise. `var` (not `const`) because every
+// browser-loaded script shares one lexical scope and boot-path-reachable module
+// state must stay out of the TDZ (CLAUDE.md Process Lessons).
+var _excelJsLoadPromise = null;
+var _lifecycleExportInFlight = false;
+
+// Lazy-load ExcelJS (research R1). 926 KB is roughly the weight of the entire
+// rest of the page, so a static <script> in <head> would tax every cold load
+// for a feature most sessions never use. Injected on the FIRST export click
+// only; later clicks reuse window.ExcelJS. A failure here is a caught, reported
+// error with no download — never a silent no-op (FR-024 / FR-025).
+function _loadExcelJs() {
+  if (typeof window !== 'undefined' && window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if (_excelJsLoadPromise) return _excelJsLoadPromise;
+  _excelJsLoadPromise = new Promise(function (resolve, reject) {
+    var settled = false;
+    var finish = function (err, api) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // Drop the cached promise on failure so the NEXT click retries rather
+      // than replaying a rejection forever (the common case is a transient
+      // network blip, and the user's only recovery is clicking again).
+      if (err) { _excelJsLoadPromise = null; reject(err); } else { resolve(api); }
+    };
+    var timer = setTimeout(function () {
+      finish(new Error('EXCELJS_TIMEOUT'));
+    }, LIFECYCLE_EXPORT_LOAD_TIMEOUT_MS);
+    var s = document.createElement('script');
+    s.src = LIFECYCLE_EXPORT_EXCELJS_URL;
+    s.async = true;
+    s.onload = function () {
+      if (window.ExcelJS) finish(null, window.ExcelJS);
+      else finish(new Error('EXCELJS_NOT_EXPOSED'));
+    };
+    s.onerror = function () { finish(new Error('EXCELJS_LOAD_FAILED')); };
+    document.head.appendChild(s);
+  });
+  return _excelJsLoadPromise;
+}
+
+// Resolve `buildLifecycleExport` from either UMD surface calc/lifecycleExport.js
+// may expose (a namespace object or a bare global). Returns null when the module
+// failed to load — which, per the global-scope lesson in CLAUDE.md, is exactly
+// what a duplicate top-level `const` in some other calc script looks like from
+// here, so the caller reports it rather than limping on.
+function _resolveLifecycleExportBuilder() {
+  var g = (typeof globalThis !== 'undefined') ? globalThis : window;
+  if (g.lifecycleExport && typeof g.lifecycleExport.buildLifecycleExport === 'function') {
+    return g.lifecycleExport.buildLifecycleExport;
+  }
+  if (typeof g.buildLifecycleExport === 'function') return g.buildLifecycleExport;
+  return null;
+}
+
+// Step 1 of contract §C-2.1 — the cached chart lifecycle, or null.
+//
+// Staleness is judged with the same test feature 036's retired-verdict probe
+// uses (`!previewActive && Array.isArray(rows)`): mid-drag the chart is pinned
+// to bracket-fill and the cached rows are a PREVIEW, not the committed plan, so
+// exporting them would hand the user a file that matches nothing. Null here
+// means refuse — never fall back to a recompute (INV-5).
+function _resolveExportLifecycleRows() {
+  var cache = (typeof window !== 'undefined') ? window._lastLifecycleCache : null;
+  if (!cache || cache.previewActive) return null;
+  if (!Array.isArray(cache.rows) || cache.rows.length === 0) return null;
+  return cache.rows;
+}
+
+// Step 2's other half — the ACTIVE withdrawal strategy's per-year rows.
+//
+// Withdrawals-by-source (wTrad / wRoth / wRothIra / wStocks / wCash /
+// syntheticConversion) live on the strategy rows, not the lifecycle rows
+// (research R2), and it must be the strategy the chart is RENDERING, not the
+// bracket-fill default — the same parity rule that governs the FIRE-mode gates
+// (CLAUDE.md). Mirrors renderRothLadder's own winner/preview swap so the
+// workbook and the Withdrawal Strategy chart can never report different draws.
+//
+// Returns COPIES with money-frame companions attached: `_lastStrategyResults`
+// is live app state and this handler is read-only (INV-6).
+function _resolveExportStrategyRows(currentAge, inflationRate) {
+  try {
+    if (typeof _lastStrategyResults === 'undefined' || !_lastStrategyResults) return null;
+    if (!Array.isArray(_lastStrategyResults.rows) || _lastStrategyResults.rows.length === 0) return null;
+    var displayedId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+      || _lastStrategyResults.winnerId;
+    if (!displayedId) return null;
+    var displayed = _lastStrategyResults.rows.find(function (r) { return r.strategyId === displayedId; });
+    if (!displayed || !Array.isArray(displayed.perYearRows) || displayed.perYearRows.length === 0) return null;
+    var copies = displayed.perYearRows.map(function (r) { return Object.assign({}, r); });
+    if (typeof _extendRowsWithBookValues === 'function'
+        && typeof currentAge === 'number' && typeof inflationRate === 'number') {
+      _extendRowsWithBookValues(copies, currentAge, inflationRate,
+        LIFECYCLE_EXPORT_STRATEGY_MONEY_FIELDS);
+    }
+    return copies;
+  } catch (_e) {
+    // Withdrawal columns are optional per contract §C-1.2 — absent strategy rows
+    // leave them blank rather than aborting the whole export.
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[lifecycleExport] strategy-row resolution threw:', _e);
+    }
+    return null;
+  }
+}
+
+// Graft the retirement-year federal tax onto a COPY of the cached lifecycle rows.
+//
+// `retirementFederalTax` is a lifecycle-sourced measure in the export registry,
+// but the figure itself lives on the withdrawal-strategy rows as `taxOwed` —
+// ordinary + LTCG federal tax actually paid that year. Research R4 scoped
+// surfacing it as this feature's ONLY calc-layer change; it turned out to be
+// already sitting on the very rows the withdrawal columns are joined from, so
+// the projection's behaviour is untouched and the tax figure is internally
+// consistent with the draws it explains.
+//
+// COPIES, always. `window._lastLifecycleCache.rows` is the live array the chart
+// drew from, and this handler is read-only (INV-6): we copy, graft, then run the
+// audited converter over the copies to produce the money-frame companion. No
+// inflation maths here (Principle III).
+//
+// Accumulation rows, and any row without an age-matched strategy row, are copied
+// untouched — the measure then renders blank rather than a fabricated zero
+// (INV-7). A blank there means "not computed", which is the truth.
+function _deriveExportLifecycleRows(rows, strategyRows, currentAge, inflationRate) {
+  var byAge = {};
+  if (Array.isArray(strategyRows)) {
+    for (var i = 0; i < strategyRows.length; i++) {
+      var sr = strategyRows[i];
+      if (sr && typeof sr.age === 'number') byAge[sr.age] = sr;
+    }
+  }
+  var copies = rows.map(function (r) {
+    var copy = Object.assign({}, r);
+    var match = (r && typeof r.age === 'number') ? byAge[r.age] : null;
+    if (match && Number.isFinite(match.taxOwed)) copy.retirementFederalTax = match.taxOwed;
+    return copy;
+  });
+  if (typeof _extendRowsWithBookValues === 'function'
+      && typeof currentAge === 'number' && typeof inflationRate === 'number') {
+    _extendRowsWithBookValues(copies, currentAge, inflationRate, ['retirementFederalTax']);
+  }
+  return copies;
+}
+
+// Step 2 of contract §C-2.1 — the provenance block (data-model §1.3).
+//
+// Strategy and mortgage settings come from getActiveChartStrategyOptions() /
+// getActiveMortgageStrategyOptions(), the SAME helpers the chart consumes.
+// Reading `state._payoffVsInvest.mortgageStrategy` directly here is prohibited:
+// the helper centralises the v017 lumpSumPayoff fallback and the
+// 'invest-keep-paying' no-op short-circuit, and bypassing it is precisely how
+// the feature-014 drift failure reproduced.
+function _collectLifecycleExportSettings(cache) {
+  var stratOpts = (typeof getActiveChartStrategyOptions === 'function')
+    ? getActiveChartStrategyOptions() : undefined;
+  var mortOpts = (typeof getActiveMortgageStrategyOptions === 'function')
+    ? getActiveMortgageStrategyOptions() : {};
+  // getActiveChartStrategyOptions() returns undefined when the default is
+  // active — that IS the bracket-fill winner, so name it explicitly rather than
+  // leaving the file silent about which strategy produced it.
+  var strategyId = (stratOpts && stratOpts.strategyOverride) || 'bracket-fill-smoothed';
+  var strategyName = strategyId;
+  try {
+    var policy = (typeof getStrategies === 'function')
+      ? getStrategies().find(function (s) { return s.id === strategyId; }) : null;
+    if (policy && policy.nameKey) strategyName = t(policy.nameKey);
+  } catch (_e) { /* fall back to the raw id */ }
+
+  var kpi = (typeof _lastKpiSnapshot !== 'undefined' && _lastKpiSnapshot) ? _lastKpiSnapshot : null;
+  var endAgeEl = document.getElementById('endAge');
+  var retStatus = (typeof getRetirementStatus === 'function')
+    ? getRetirementStatus() : { retired: false, retirementYear: null };
+
+  // Dashboard variant without a per-file literal, so this whole block stays
+  // byte-identical across FIRE-Dashboard.html and FIRE-Dashboard-Generic.html
+  // (Principle I). GENERIC_VERSION exists only in the Generic file; the
+  // try/catch covers the const-TDZ case even though a click always lands well
+  // after script evaluation.
+  var variant = 'RR';
+  try { if (typeof GENERIC_VERSION !== 'undefined') variant = 'Generic'; } catch (_e) { /* RR */ }
+
+  return {
+    fireMode: (typeof fireMode !== 'undefined') ? fireMode : null,
+    strategyId: strategyId,
+    strategyName: strategyName,
+    thetaOverride: (stratOpts && typeof stratOpts.thetaOverride === 'number') ? stratOpts.thetaOverride : null,
+    objective: (typeof _currentObjective !== 'undefined') ? _currentObjective : null,
+    mortgageStrategy: mortOpts.mortgageStrategyOverride || null,
+    retired: !!(retStatus && retStatus.retired),
+    retirementYear: (retStatus && retStatus.retired) ? (retStatus.retirementYear || null) : null,
+    fireAge: (cache && typeof cache.fireAge === 'number') ? cache.fireAge
+      : (kpi && typeof kpi.fireAge === 'number' ? kpi.fireAge : null),
+    planEndAge: endAgeEl ? (parseInt(endAgeEl.value, 10) || null) : null,
+    currentAge: (kpi && typeof kpi.currentAge === 'number') ? kpi.currentAge : null,
+    inflationRate: (kpi && typeof kpi.inflationRate === 'number') ? kpi.inflationRate : null,
+    language: (typeof currentLang !== 'undefined') ? currentLang : 'en',
+    dashboardVariant: variant,
+    // Injected, never read inside the pure module (contract §C-1.1 forbids
+    // Date.now() there so fixtures stay deterministic).
+    exportTimestamp: new Date().toISOString(),
+    appVersion: 'FIRE Command Center — feature 037',
+  };
+}
+
+function _lifecycleExportColumnWidth(col) {
+  // FR-011b — no header may truncate on open. Header length is the floor;
+  // currency columns get a little extra so "$1,234,567" fits without a ####.
+  var headerLen = (col && typeof col.header === 'string') ? col.header.length : 0;
+  var padding = (col && col.numFmt === 'currency') ? 4 : 2;
+  return Math.min(LIFECYCLE_EXPORT_MAX_COL_WIDTH,
+    Math.max(LIFECYCLE_EXPORT_MIN_COL_WIDTH, headerLen + padding));
+}
+
+function _lifecycleExportNumFmt(col) {
+  if (!col) return null;
+  if (col.numFmt === 'currency') return LIFECYCLE_EXPORT_NUMFMT_CURRENCY;
+  if (col.numFmt === 'integer') return LIFECYCLE_EXPORT_NUMFMT_INTEGER;
+  return null;
+}
+
+function _lifecycleExportFilename(now) {
+  var d = now || new Date();
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  return 'FIRE-Lifecycle-Projection-'
+    + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '.xlsx';
+}
+
+// Step 5 of contract §C-2.1 — write the workbook (§C-2.2 shape).
+function _buildLifecycleExportWorkbook(ExcelJS, model) {
+  var wb = new ExcelJS.Workbook();
+  wb.creator = 'FIRE Command Center';
+  wb.created = new Date();
+
+  // ---- Sheet 1: Projection ----
+  var sheet = wb.addWorksheet(LIFECYCLE_EXPORT_SHEET_PROJECTION);
+  sheet.columns = model.columns.map(function (col) {
+    var fmt = _lifecycleExportNumFmt(col);
+    var def = { header: col.header, key: col.key, width: _lifecycleExportColumnWidth(col) };
+    if (fmt) def.style = { numFmt: fmt };
+    return def;
+  });
+  var headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.alignment = { vertical: 'bottom', wrapText: true };
+
+  // FR-011b / FR-011d — freeze the header row AND the leading identity columns.
+  // At ~68 columns this is what keeps the sheet usable: scroll right and Year /
+  // Age / Plan phase stay pinned; scroll down and the headers stay pinned.
+  var xSplit = 0;
+  while (xSplit < model.columns.length && model.columns[xSplit].group === 'identity') xSplit++;
+  sheet.views = [{ state: 'frozen', xSplit: xSplit, ySplit: 1 }];
+
+  // FR-009 / INV-7 — numerics go in as NUMBERS (so Excel can sum, sort and
+  // chart them), and a blank goes in as an EMPTY cell: never 0, never "-",
+  // never "N/A". Blank means "not applicable / not computed"; zero means
+  // "measured zero". Collapsing the two would make the file lie about, e.g.,
+  // whether a retirement year paid no tax or simply doesn't report it.
+  for (var i = 0; i < model.rows.length; i++) {
+    var values = model.rows[i];
+    var row = sheet.addRow([]);
+    for (var c = 0; c < values.length; c++) {
+      var v = values[c];
+      if (v === null || v === undefined) continue; // leave the cell genuinely empty
+      row.getCell(c + 1).value = v;
+    }
+    row.commit && row.commit();
+  }
+
+  // ---- Sheet 2: Settings (FR-011c) ----
+  // Label/value pairs, no header row: the pairs are self-describing and an
+  // invented header would be untranslated chrome. Labels arrive already
+  // localised from the pure module (research R8).
+  var settingsSheet = wb.addWorksheet(LIFECYCLE_EXPORT_SHEET_SETTINGS);
+  settingsSheet.columns = [{ key: 'label', width: 34 }, { key: 'value', width: 56 }];
+  var settingsRows = Array.isArray(model.settings) ? model.settings : [];
+  for (var s = 0; s < settingsRows.length; s++) {
+    var pair = settingsRows[s] || {};
+    var sRow = settingsSheet.addRow([]);
+    sRow.getCell(1).value = (pair.label === null || pair.label === undefined) ? '' : pair.label;
+    sRow.getCell(1).font = { bold: true };
+    if (pair.value !== null && pair.value !== undefined) sRow.getCell(2).value = pair.value;
+    sRow.commit && sRow.commit();
+  }
+
+  return wb;
+}
+
+// Step 6 — download. Same Blob → anchor → click path as downloadCSV(), with the
+// OOXML spreadsheet MIME type so Excel and Sheets both claim the file.
+function _downloadXlsxBuffer(buffer, filename) {
+  var blob = new Blob([buffer], { type: LIFECYCLE_EXPORT_MIME });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _lifecycleExportFail(messageKey, err, context) {
+  // The `[lifecycleExport]` prefix is the grep handle that makes a failure
+  // findable in a 20,000-line console (CLAUDE.md shim-defence lesson).
+  if (typeof console !== 'undefined' && console.error) {
+    console.error('[lifecycleExport] export refused:', messageKey,
+      err && err.stack ? err.stack : (err || ''), context || '');
+  }
+  try { showToast(t(messageKey)); } catch (_e) { /* toast is best-effort */ }
+}
+
+// ---- The click handler (contract §C-2.1) ----
+//
+// Ordered steps; ANY failure aborts with a user-visible translated message and
+// NO download. There is deliberately no partial-file path: half a projection is
+// worse than none, because it looks complete (FR-025).
+async function exportLifecycleProjectionXlsx() {
+  if (_lifecycleExportInFlight) return; // double-click guard
+  var btn = document.getElementById('btnExportProjectionXlsx');
+  var restoreLabel = btn ? btn.textContent : null;
+  _lifecycleExportInFlight = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('snap.exportProjectionBusy');
+  }
+  try {
+    // --- 1. The cached chart projection. Never a recompute (INV-5). ---
+    var cache = (typeof window !== 'undefined') ? window._lastLifecycleCache : null;
+    var lifecycleRows = _resolveExportLifecycleRows();
+    if (!lifecycleRows) {
+      _lifecycleExportFail('snap.exportProjectionErrProjection', null, {
+        haveCache: !!cache,
+        previewActive: !!(cache && cache.previewActive),
+        rowCount: (cache && Array.isArray(cache.rows)) ? cache.rows.length : 0,
+      });
+      return;
+    }
+
+    // --- 2. Active settings, via the chart's own resolver helpers. ---
+    var settings = _collectLifecycleExportSettings(cache);
+    var strategyRows = _resolveExportStrategyRows(settings.currentAge, settings.inflationRate);
+    // Retirement-year federal tax is joined in from the strategy rows here, onto
+    // COPIES. From this point `lifecycleRows` is the derived array; the cached
+    // original is never written to.
+    lifecycleRows = _deriveExportLifecycleRows(lifecycleRows, strategyRows,
+      settings.currentAge, settings.inflationRate);
+    var firstRow = lifecycleRows[0];
+    // currentYear MUST equal the first projection row's year or the module throws
+    // YEAR_SEQUENCE_INVALID. Never today's calendar year: the plan's base year is
+    // a projection input and the two can legitimately differ.
+    var currentYear = (firstRow && Number.isFinite(firstRow.year))
+      ? firstRow.year : new Date().getFullYear();
+
+    // --- 3. Build the model (pure module). ---
+    var build = _resolveLifecycleExportBuilder();
+    if (!build) {
+      _lifecycleExportFail('snap.exportProjectionErrBuild',
+        new Error('BUILDER_UNAVAILABLE — calc/lifecycleExport.js did not load'), null);
+      return;
+    }
+    var model;
+    try {
+      model = build({
+        lifecycleRows: lifecycleRows,
+        strategyRows: strategyRows,
+        settings: settings,
+        currentYear: currentYear,
+        language: settings.language,
+      });
+    } catch (buildErr) {
+      // The module throws a typed LifecycleExportError carrying `err.code`.
+      // LIFECYCLE_UNAVAILABLE is the one build failure that really means "the
+      // plan isn't ready", so it maps to the projection message.
+      // YEAR_SEQUENCE_INVALID and SETTINGS_INCOMPLETE are our bug, not the
+      // user's state, and the build message says so plainly.
+      var code = (buildErr && buildErr.code) || '';
+      _lifecycleExportFail(
+        code === 'LIFECYCLE_UNAVAILABLE'
+          ? 'snap.exportProjectionErrProjection' : 'snap.exportProjectionErrBuild',
+        buildErr, { code: code, rowCount: lifecycleRows.length, currentYear: currentYear });
+      return;
+    }
+    if (!model || !Array.isArray(model.columns) || !Array.isArray(model.rows)) {
+      _lifecycleExportFail('snap.exportProjectionErrBuild',
+        new Error('MODEL_MALFORMED'), { model: model });
+      return;
+    }
+    if (model.meta && model.meta.frameFallback) {
+      // Not fatal — the money column fell back to the purchasing-power value
+      // for at least one field. Observable rather than silent (contract §C-1.3).
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[lifecycleExport] frame fallback active — a *BookValue companion was missing;'
+          + ' some money columns show purchasing-power values.', model.meta);
+      }
+    }
+
+    // --- 4. Lazy-load ExcelJS. ---
+    var ExcelJS;
+    try {
+      ExcelJS = await _loadExcelJs();
+    } catch (loadErr) {
+      _lifecycleExportFail('snap.exportProjectionErrLibrary', loadErr,
+        { url: LIFECYCLE_EXPORT_EXCELJS_URL });
+      return;
+    }
+
+    // --- 5 + 6. Write the workbook and download it. ---
+    try {
+      var wb = _buildLifecycleExportWorkbook(ExcelJS, model);
+      var buffer = await wb.xlsx.writeBuffer();
+      _downloadXlsxBuffer(buffer, _lifecycleExportFilename());
+    } catch (writeErr) {
+      _lifecycleExportFail('snap.exportProjectionErrWrite', writeErr,
+        { columns: model.columns.length, rows: model.rows.length });
+      return;
+    }
+  } catch (fatalErr) {
+    // Belt-and-braces: an unexpected throw must still surface a message rather
+    // than leaving the button stuck on "Building workbook…".
+    _lifecycleExportFail('snap.exportProjectionErrBuild', fatalErr, null);
+  } finally {
+    _lifecycleExportInFlight = false;
+    if (btn) {
+      btn.disabled = false;
+      // Re-read the key rather than restoring the captured string, so a
+      // language switch mid-export leaves the button in the right language.
+      btn.textContent = t('snap.exportProjection') || restoreLabel;
+    }
+  }
+}
+if (typeof window !== 'undefined') {
+  window.exportLifecycleProjectionXlsx = exportLifecycleProjectionXlsx;
 }
 
 // Try to auto-load from CSV on page open

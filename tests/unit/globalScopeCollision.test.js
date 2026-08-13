@@ -131,3 +131,67 @@ test('calc/taxEstimator.js uses a unique UMD const and registers a unique global
   assert.ok(/^function estimateYearTax\(/m.test(src),
     `expected top-level 'function estimateYearTax(' declaration`);
 });
+
+// ---------------------------------------------------------------------------
+// Feature 037 — static guard for calc/lifecycleExport.js.
+// Registers a UNIQUE global `buildLifecycleExport` via a UNIQUE UMD const
+// `_lifecycleExportApi` (never `_api`), and carries NO top-level `export`
+// keyword (file:// classic-script requirement, Constitution V). Mirrors the
+// discipline proven by calc/cashSweep.js's `_cashSweepApi`.
+//
+// The generic per-HTML sweep above only covers modules already referenced by a
+// <script src> tag, so this block guards the module from the moment it exists —
+// before the dashboards load it — and additionally pins that its top-level
+// names stay namespaced enough not to collide with the shared global scope.
+// ---------------------------------------------------------------------------
+test('calc/lifecycleExport.js uses a unique UMD const and registers a unique global', () => {
+  const jsPath = path.join(REPO_ROOT, 'calc', 'lifecycleExport.js');
+  assert.ok(fs.existsSync(jsPath), 'calc/lifecycleExport.js must exist');
+  const src = fs.readFileSync(jsPath, 'utf8');
+
+  // Unique UMD const name — NOT the historically-colliding `_api`.
+  assert.ok(/^const _lifecycleExportApi = /m.test(src),
+    `expected top-level 'const _lifecycleExportApi =' UMD footer`);
+  assert.ok(!/^const _api\b/m.test(src),
+    `found top-level 'const _api' — collides across classic scripts (see cashSweep.js history)`);
+
+  // Registers the global the browser export path consumes.
+  assert.ok(/globalThis\.buildLifecycleExport = buildLifecycleExport/.test(src),
+    `expected 'globalThis.buildLifecycleExport = buildLifecycleExport' global registration`);
+  assert.ok(/module\.exports = _lifecycleExportApi/.test(src),
+    `expected 'module.exports = _lifecycleExportApi' Node export`);
+
+  // No top-level ESM export keyword — file:// classic <script> cannot parse it.
+  assert.ok(!/^export\s/m.test(src),
+    `found a top-level 'export' — breaks file:// classic-script loading (Constitution V)`);
+
+  // The public function declaration is present.
+  assert.ok(/^function buildLifecycleExport\(/m.test(src),
+    `expected top-level 'function buildLifecycleExport(' declaration`);
+});
+
+test('calc/lifecycleExport.js top-level names do not collide with either dashboard inline scope', () => {
+  const jsPath = path.join(REPO_ROOT, 'calc', 'lifecycleExport.js');
+  const { lexical, varLike } = topLevelNames(jsPath);
+  const mine = lexical.concat(varLike);
+  assert.ok(mine.length > 5, 'expected the module to declare top-level names');
+
+  // Single-letter / ultra-generic top-level names are landmines in a shared
+  // global lexical scope. Pin them out.
+  for (const name of mine) {
+    assert.ok(name.length >= 3,
+      `top-level name '${name}' is too short for the shared global scope`);
+  }
+
+  for (const htmlFile of HTML_FILES) {
+    const html = fs.readFileSync(path.join(REPO_ROOT, htmlFile), 'utf8');
+    for (const name of mine) {
+      // Column 0 only — indented declarations are function/block scoped and
+      // cannot collide (same convention as topLevelNames above).
+      const re = new RegExp(`^(?:const|let|class)\\s+${name}\\b`, 'm');
+      assert.ok(!re.test(html),
+        `'${name}' is also declared lexically in ${htmlFile} — a classic-script ` +
+        `collision would throw SyntaxError and silently kill calc/lifecycleExport.js`);
+    }
+  }
+});
