@@ -380,37 +380,82 @@ for (const dash of DASHBOARDS) {
 }
 
 // ---------------------------------------------------------------------------
-// Timeline ordering. Not strictly part of 038, but 038 doubled the number of
-// same-year cards and made the old push-order tiebreak visible: a 2029 row read
-// $1,210,085 -> $1,059,872 -> $874,332 -> $606,376, i.e. backwards.
+// Timeline ordering. The panel is a net-worth LADDER, not a chronology: the
+// money cards sort by dollar figure ascending so it reads as "the next number I
+// have to hit, then the next". Years deliberately do NOT ascend — a cheap
+// country can want less money in a later year than an expensive one wants
+// sooner. Event cards (college = a cost, Social Security = an income stream)
+// carry figures that are not net-worth targets, so they are slotted by YEAR
+// instead of laddered, and "Now" is pinned to the top as the reference point.
 // ---------------------------------------------------------------------------
+
+/** Language-independent markers for the two event card types. */
+const EVENT_GLYPHS = ['\u{1F393}', '\u{1F3DB}']; // graduation cap, classical building
+
+function isEventCard(text: string): boolean {
+  return EVENT_GLYPHS.some((g) => text.includes(g));
+}
 
 for (const dash of DASHBOARDS) {
   test.describe(`timeline ordering — ${dash.key}`, () => {
-    test('milestones run chronologically, and ascend by amount within a year', async ({ page }) => {
+    test('"Now" anchors the top and the money cards ladder by amount', async ({ page }) => {
       await loadDashboard(page, dash.fileName);
       await fundProfile(page, dash);
       await setShortlist(page, ['taiwan', 'japan', 'thailand', 'vietnam', 'philippines', 'china']);
 
+      const items = await timelineItems(page);
       const rows = await timelineYearAmounts(page);
       expect(rows.length).toBeGreaterThan(5);
 
+      // The starting point is where you stand, not a target — it stays first
+      // even when a country's target sits below today's net worth.
+      expect(items[0], '"Now" must anchor the top of the ladder').toContain('Now');
+
+      // Money cards ascend by figure. Skip index 0 (the anchor) and every event.
+      let prev: number | null = null;
       for (let i = 1; i < rows.length; i++) {
-        const prev = rows[i - 1];
-        const cur = rows[i];
-        expect(cur.year, `row ${i}: years must never go backwards`).toBeGreaterThanOrEqual(prev.year);
-        if (cur.year !== prev.year) continue;
-        // Same year: the dollar figure must not decrease. Cards without a figure
-        // sort last, so a null after a number is fine; a number after a null is not.
-        if (cur.amount === null) continue;
-        expect(
-          prev.amount,
-          `${cur.year}: a card with a figure follows one without — figure-less cards sort last`,
-        ).not.toBeNull();
-        expect(
-          cur.amount,
-          `${cur.year}: amounts within a year must ascend, got ${prev.amount} then ${cur.amount}`,
-        ).toBeGreaterThanOrEqual(prev.amount as number);
+        if (isEventCard(items[i])) continue;
+        const amount = rows[i].amount;
+        if (amount === null) continue;
+        if (prev !== null) {
+          expect(
+            amount,
+            `money cards must ascend by figure: ${prev} then ${amount} (${items[i].slice(0, 50)})`,
+          ).toBeGreaterThanOrEqual(prev);
+        }
+        prev = amount;
+      }
+      expect(prev, 'expected at least one money card after the anchor').not.toBeNull();
+    });
+
+    test('event cards sit in front of the first money card at or after their year', async ({ page }) => {
+      await loadDashboard(page, dash.fileName);
+      await fundProfile(page, dash);
+      await setShortlist(page, ['taiwan', 'japan', 'thailand', 'vietnam', 'philippines', 'china']);
+
+      const items = await timelineItems(page);
+      const rows = await timelineYearAmounts(page);
+
+      for (let i = 0; i < items.length; i++) {
+        if (!isEventCard(items[i])) continue;
+        const eventYear = rows[i].year;
+
+        // Nothing BEFORE this event may be a money card dated at/after it.
+        // Index 0 is the "Now" anchor, which is exempt by construction.
+        for (let j = 1; j < i; j++) {
+          if (isEventCard(items[j])) continue;
+          expect(
+            rows[j].year,
+            `${items[i].slice(0, 40)} (${eventYear}) should sit before ` +
+              `${items[j].slice(0, 40)} (${rows[j].year})`,
+          ).toBeLessThan(eventYear);
+        }
+
+        // And the next money card after it, if any, is dated at/after the event.
+        const offset = items.slice(i + 1).findIndex((txt) => !isEventCard(txt));
+        if (offset !== -1) {
+          expect(rows[i + 1 + offset].year).toBeGreaterThanOrEqual(eventYear);
+        }
       }
     });
   });

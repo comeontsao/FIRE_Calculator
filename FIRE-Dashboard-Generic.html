@@ -19173,7 +19173,10 @@ function renderTimeline(inp) {
   const projection = projectGrowth(inp, 25);
 
   const milestones = [
-    { label: t('timeline.now.label'), year: 2026, desc: t('timeline.now.desc'), amount: nw, type: 'completed' },
+    // kind:'anchor' — "Now" is where you stand, not a target to reach. It is
+    // pinned to the top of the ladder rather than sorted by its figure, which
+    // would otherwise bury it behind any target you have already passed.
+    { label: t('timeline.now.label'), year: 2026, desc: t('timeline.now.desc'), amount: nw, type: 'completed', kind: 'anchor' },
   ];
 
   // $500K milestone — achieved if current net worth already crosses target OR
@@ -19303,7 +19306,7 @@ function renderTimeline(inp) {
   // Social Security milestone
   const ssYear = 2026 + (inp.ssClaimAge - inp.agePerson1);
   const ssAnn = getSSAnnual(inp, inp.ssClaimAge);
-  milestones.push({ label: t('timeline.ss.label'), year: ssYear, desc: t('timeline.ss.desc', inp.ssClaimAge, Math.round(ssAnn/12).toLocaleString()), amount: Math.round(ssAnn), type: 'future' });
+  milestones.push({ label: t('timeline.ss.label'), year: ssYear, desc: t('timeline.ss.desc', inp.ssClaimAge, Math.round(ssAnn/12).toLocaleString()), amount: Math.round(ssAnn), type: 'future', kind: 'event' });
 
   // Kid milestones (dynamic) — include per-kid college location and total cost
   if (inp.childAges && inp.childAges.length > 0) {
@@ -19314,24 +19317,48 @@ function renderTimeline(inp) {
         const total = plan.cost * plan.years;
         const shortLabel = plan.label.replace(/^[^\s]+\s/, '');
         const desc = total > 0 ? t('timeline.child.descTotal', inp.agePerson1 + (18 - childAge), shortLabel, (total/1000).toFixed(0)) : t('timeline.child.desc', inp.agePerson1 + (18 - childAge), shortLabel);
-        milestones.push({ label: t('timeline.child.label', i + 1), year: collegeYear, desc, amount: total > 0 ? total : null, type: 'future' });
+        milestones.push({ label: t('timeline.child.label', i + 1), year: collegeYear, desc, amount: total > 0 ? total : null, type: 'future', kind: 'event' }); // a tuition COST, not a net-worth target
       }
     });
   }
 
   // Sort and render
-  // Chronological first — this is a timeline, so the year always wins. Within a
-  // single year, order by the dollar figure so the row reads as an ascending
-  // ladder instead of the order the pushes happened to run in (which put 2029 at
-  // $1,210,085 -> $1,059,872 -> $874,332 -> $606,376, i.e. backwards).
-  // Milestones with no figure sort last within their year.
-  milestones.sort((a, b) => {
-    if (a.year !== b.year) return a.year - b.year;
-    const av = Number.isFinite(a.amount) ? a.amount : Infinity;
-    const bv = Number.isFinite(b.amount) ? b.amount : Infinity;
-    return av - bv;
-  });
-  milestones.forEach(m => {
+  // ---- Order: a net-worth LADDER with dated events slotted in ----
+  //
+  // The money cards (Now, $500K, Millionaire, and every country's FIRE and
+  // Coast FIRE target) sort by DOLLAR FIGURE ascending, so the panel reads as
+  // "the next number I have to hit, then the next". Their years deliberately do
+  // NOT ascend, and that is not a bug: a cheap country can want less money in a
+  // later year than an expensive one wants sooner. Thailand's Coast target
+  // ($956,656, 2036) really does come before the $1,000,000 mark (2031) when you
+  // read by size.
+  //
+  // Event cards carry a COST (college) or an INCOME stream (Social Security),
+  // not a net-worth target, so laddering them by the same key would strand a
+  // $192K tuition bill and a $29,954/yr benefit ahead of the starting point.
+  // Each event is instead slotted in front of the first ladder card that lands
+  // at or after the event's year, so it still reads in the right place in time.
+  const _ladder = milestones
+    .filter(m => m.kind !== 'event' && m.kind !== 'anchor')
+    .sort((a, b) => {
+      const av = Number.isFinite(a.amount) ? a.amount : Infinity;
+      const bv = Number.isFinite(b.amount) ? b.amount : Infinity;
+      // Equal figures (Now and an already-achieved threshold both read as
+      // today's net worth) fall back to chronological order.
+      return av !== bv ? av - bv : a.year - b.year;
+    });
+
+  const _ordered = milestones.filter(m => m.kind === 'anchor').concat(_ladder);
+  milestones
+    .filter(m => m.kind === 'event')
+    .sort((a, b) => a.year - b.year)
+    .forEach(ev => {
+      const at = _ordered.findIndex(m => m.kind !== 'event' && m.kind !== 'anchor' && m.year >= ev.year);
+      if (at === -1) _ordered.push(ev);
+      else _ordered.splice(at, 0, ev);
+    });
+
+  _ordered.forEach(m => {
     const div = document.createElement('div');
     div.className = `milestone ${m.type}`;
     div.innerHTML = `
