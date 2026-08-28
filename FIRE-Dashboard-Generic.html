@@ -7048,6 +7048,8 @@ const TRANSLATIONS = {
     'timeline.ageLabel': 'Age {0}',
     'timeline.coastCountry.label': '{0} {1} Coast FIRE',
     'timeline.coastCountry.desc': 'Age {0} — if you stop saving today',
+    'timeline.coastCountry.descGated': 'Age {0} — could stop saving from {1}',
+    'timeline.fire.descGated': 'Age {0} — ${1}/yr · retire-ready at {2}',
     'timeline.coastCountry.descNow': 'Already there — even if you stop saving today',
     'geo.pin.add': 'Add to your shortlist',
     'geo.pin.remove': 'Remove from your shortlist',
@@ -8200,6 +8202,8 @@ const TRANSLATIONS = {
     'timeline.ageLabel': '{0} 歲',
     'timeline.coastCountry.label': '{0} {1} Coast FIRE',
     'timeline.coastCountry.desc': '{0} 歲 — 若現在停止儲蓄',
+    'timeline.coastCountry.descGated': '{0} 歲 — {1} 歲起可停止儲蓄',
+    'timeline.fire.descGated': '{0} 歲 — ${1}/年 · {2} 歲可實際退休',
     'timeline.coastCountry.descNow': '已達成 — 即使現在停止儲蓄',
     'geo.pin.add': '加入選單',
     'geo.pin.remove': '從選單移除',
@@ -19270,6 +19274,22 @@ function renderTimeline(inp) {
   // there at 84" is not a decision anyone acts on, and every extra age costs a
   // solver call on a path that already runs 6 times per recalc. Countries that
   // do not clear by 80 simply get no Coast marker.
+  // Every money card is dated by when the keep-working curve REACHES its figure,
+  // not by when some gate clears. The panel is a ladder sorted by figure and this
+  // curve only rises, so the years then ascend BY CONSTRUCTION rather than by
+  // tie-breaking — the ordering problem stops being a sorting problem.
+  //
+  // Each card keeps its own original meaning on its second line: a FIRE card
+  // still tells you the age the retirement gate clears, a Coast card still tells
+  // you the age you could stop saving. Those ages are the conservative answers
+  // and are NOT interchangeable with the date; the date says "you can afford it",
+  // the age says "the plan survives it".
+  const _moneyDate = (amount) => {
+    if (!Number.isFinite(amount)) return null;
+    const hit = projection.find(r => r && Number.isFinite(r.total) && r.total >= amount);
+    return hit ? { year: hit.year, age: hit.age } : null;
+  };
+
   const COAST_SCAN_CEILING_AGE = 80;
   const _coastScanMaxAge = Math.min(COAST_SCAN_CEILING_AGE, Number.isFinite(inp.endAge) ? inp.endAge : 95);
 
@@ -19280,7 +19300,27 @@ function renderTimeline(inp) {
 
     const hit = projection[yrs];
     if (hit) {
-      milestones.push({ label: t('timeline.fire.label', s.flag, countryName), year: hit.year, desc: t('timeline.fire.desc', hit.age, sSpend.toLocaleString()), amount: Math.round(fireNum), type: 'future' });
+      // hit = the gate answer (when retiring here actually clears Safe/Exact/DWZ).
+      // _md = the money answer (when the portfolio reaches the required figure).
+      // The money answer dates the card; the gate answer stays visible, because
+      // affording a number is not the same as the plan surviving on it.
+      const _md = _moneyDate(fireNum) || { year: hit.year, age: hit.age };
+      // Only mention the gate when it is the BINDING constraint — i.e. when it
+      // makes you wait past the year you can afford the number. When the gate
+      // clears first (it often does by a year; the gate solver and the
+      // requirement solver are not the same code) the money is what holds you
+      // up, and printing "retire-ready at 46" on a card dated age 47 reads like
+      // a bug rather than the solver split it actually is.
+      const _gateBinds = Number.isFinite(hit.age) && hit.age > _md.age;
+      milestones.push({
+        label: t('timeline.fire.label', s.flag, countryName),
+        year: _md.year,
+        desc: _gateBinds
+          ? t('timeline.fire.descGated', _md.age, sSpend.toLocaleString(), hit.age)
+          : t('timeline.fire.desc', _md.age, sSpend.toLocaleString()),
+        amount: Math.round(fireNum),
+        type: 'future',
+      });
     }
 
     // Coast marker: the age you could retire HERE if you stopped contributing
@@ -19334,15 +19374,25 @@ function renderTimeline(inp) {
     }
 
     if (coastAge !== null) {
-      const coastYear = _currentYear + (coastAge - _currentAge);
+      const coastTarget = Math.round(_targetCache.get(coastAge) || 0);
       const alreadyCoasting = coastAge <= _currentAge;
+      // Same split as the FIRE card: the date is when the portfolio reaches this
+      // figure while still working; coastAge is when freezing contributions would
+      // still carry this country. Fall back to the coast year if the curve never
+      // reaches the figure.
+      const _md = _moneyDate(coastTarget)
+        || { year: _currentYear + (coastAge - _currentAge), age: coastAge };
       milestones.push({
         label: t('timeline.coastCountry.label', s.flag, countryName),
-        year: coastYear,
+        year: _md.year,
         desc: alreadyCoasting
           ? t('timeline.coastCountry.descNow')
-          : t('timeline.coastCountry.desc', coastAge),
-        amount: Math.round(_targetCache.get(coastAge) || 0),
+          // Same rule as the FIRE card: the stop-saving age is worth printing
+          // only when it is later than the age you can afford the figure.
+          : (coastAge > _md.age
+              ? t('timeline.coastCountry.descGated', _md.age, coastAge)
+              : t('timeline.coastCountry.desc', _md.age)),
+        amount: coastTarget,
         type: alreadyCoasting ? 'completed' : 'future',
       });
     }

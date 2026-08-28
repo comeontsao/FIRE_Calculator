@@ -1698,3 +1698,28 @@ chronology the panel does not deliver.
 
 The nav pill label (`nav.pill.milestones` = "Milestones" / 里程碑) is unchanged —
 it names the section, not its ordering.
+
+### Feature 038 follow-up — cards dated by when the money arrives (2026-08-28)
+
+Milestone cards are now dated by the year the keep-working curve REACHES the
+card's figure, not by the year a gate clears. Because the panel is a ladder
+sorted by figure and that curve only rises, years now ascend by construction.
+
+Each card's original meaning moved to its second line, and is printed ONLY when
+it is the binding constraint — i.e. when it makes you wait past the year you can
+afford the figure. A FIRE card whose gate clears before the money arrives simply
+shows the plain description; printing "retire-ready at 46" on a card dated age 47
+reads like a bug rather than the solver split it actually is.
+
+| Key | English | 繁體中文 |
+|-----|---------|---------|
+| `timeline.fire.descGated` | Age {0} — ${1}/yr · retire-ready at {2} | {0} 歲 — ${1}/年 · {2} 歲可實際退休 |
+| `timeline.coastCountry.descGated` | Age {0} — could stop saving from {1} | {0} 歲 — {1} 歲起可停止儲蓄 |
+
+`{0}` is the age the portfolio reaches the figure. The trailing `{2}` / `{1}` is
+the conservative age: when the retirement gate clears, or when freezing
+contributions would still carry that country. The two are NOT interchangeable —
+the date says "you can afford it", the trailing age says "the plan survives it".
+
+`timeline.fire.desc` and `timeline.coastCountry.desc` are still used, as the
+non-binding variants of the same two cards.

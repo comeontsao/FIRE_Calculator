@@ -319,30 +319,43 @@ for (const dash of DASHBOARDS) {
       }
     });
 
-    test('INVARIANT: a Coast marker never lands earlier than its own FIRE marker', async ({ page }) => {
+    test('INVARIANT: the stop-saving age a Coast card states is never before that country FIRE age', async ({ page }) => {
       await loadDashboard(page, dash.fileName);
       await fundProfile(page, dash);
-      await setShortlist(page, ['taiwan', 'japan', 'thailand', 'vietnam']);
+      const ids = ['taiwan', 'japan', 'thailand', 'vietnam'];
+      await setShortlist(page, ids);
 
+      // NOTE this deliberately no longer compares card YEARS. Cards are now
+      // dated by when the portfolio can afford their figure, and a Coast figure
+      // is normally the smaller of the pair, so a Coast card legitimately lands
+      // in an EARLIER year than its FIRE card. The invariant was never about the
+      // dates — it is that freezing contributions cannot let you retire sooner,
+      // which lives in the AGES.
       const items = await timelineItems(page);
-      for (const id of ['taiwan', 'japan', 'thailand', 'vietnam']) {
-        const name = await countryLabel(page, id);
-        const coast = items.find((s) => s.includes(`${name} Coast FIRE`));
-        const fire = items.find((s) => s.includes(`FIRE (${name})`));
-        if (!coast || !fire) continue; // country unreachable in this plan
 
-        // Compare YEARS, not DOM position. Within a single year cards are
-        // ordered by dollar figure, and a Coast marker's figure is normally the
-        // smaller of the pair — so a same-year pair legitimately renders Coast
-        // first. That is presentation, not a violation of the invariant.
-        const coastYear = Number(/^(\d{4})/.exec(coast)?.[1]);
-        const fireYear = Number(/^(\d{4})/.exec(fire)?.[1]);
-        expect(Number.isFinite(coastYear) && Number.isFinite(fireYear)).toBe(true);
+      for (const id of ids) {
+        const name = await countryLabel(page, id);
+        const coast = items.find((txt) => txt.includes(`${name} Coast FIRE`));
+        if (!coast) continue; // country unreachable in this plan
+
+        // The Coast card prints its stop-saving age only when that age is the
+        // binding constraint; when it is not, the card is already at or before
+        // the FIRE age and there is nothing to violate.
+        const stated = /(?:from|自|起)\D{0,4}(\d{2})/.exec(coast);
+        if (!stated) continue;
+        const statedAge = Number(stated[1]);
+
+        const fireAge = (await page.evaluate(`(() => {
+          const inp = getInputs();
+          const s = scenarios.find(x => x.id === ${JSON.stringify(id)});
+          return computeScenarioFireFigures(inp, s).estFireAge;
+        })()`)) as number;
+
         expect(
-          coastYear,
-          `${name}: Coast (${coastYear}) precedes its FIRE marker (${fireYear}) — ` +
-            'the frozen-savings path cannot beat the still-contributing path',
-        ).toBeGreaterThanOrEqual(fireYear);
+          statedAge,
+          `${name}: the card offers to stop saving at ${statedAge}, before its FIRE age ` +
+            `${fireAge} — freezing contributions cannot let you retire sooner`,
+        ).toBeGreaterThanOrEqual(fireAge);
       }
     });
 
@@ -398,7 +411,7 @@ function isEventCard(text: string): boolean {
 
 for (const dash of DASHBOARDS) {
   test.describe(`timeline ordering — ${dash.key}`, () => {
-    test('"Now" anchors the top and the money cards ladder by amount', async ({ page }) => {
+    test('"Now" anchors the top; money cards ascend by BOTH figure and year', async ({ page }) => {
       await loadDashboard(page, dash.fileName);
       await fundProfile(page, dash);
       await setShortlist(page, ['taiwan', 'japan', 'thailand', 'vietnam', 'philippines', 'china']);
@@ -411,21 +424,32 @@ for (const dash of DASHBOARDS) {
       // even when a country's target sits below today's net worth.
       expect(items[0], '"Now" must anchor the top of the ladder').toContain('Now');
 
-      // Money cards ascend by figure. Skip index 0 (the anchor) and every event.
-      let prev: number | null = null;
+      // Money cards ascend by figure AND by year. The years ascend because every
+      // money card is dated by when the keep-working curve reaches its figure,
+      // and that curve only rises — so a bigger figure cannot be dated earlier.
+      // If this ever fails on the year while passing on the figure, the panel has
+      // gone back to dating cards off a gate answer instead of the money answer.
+      let prevAmount: number | null = null;
+      let prevYear: number | null = null;
       for (let i = 1; i < rows.length; i++) {
         if (isEventCard(items[i])) continue;
-        const amount = rows[i].amount;
+        const { amount, year } = rows[i];
         if (amount === null) continue;
-        if (prev !== null) {
+        if (prevAmount !== null) {
           expect(
             amount,
-            `money cards must ascend by figure: ${prev} then ${amount} (${items[i].slice(0, 50)})`,
-          ).toBeGreaterThanOrEqual(prev);
+            `money cards must ascend by figure: ${prevAmount} then ${amount} (${items[i].slice(0, 50)})`,
+          ).toBeGreaterThanOrEqual(prevAmount);
+          expect(
+            year,
+            `a larger figure was dated EARLIER: ${prevAmount}/${prevYear} then ` +
+              `${amount}/${year} (${items[i].slice(0, 50)})`,
+          ).toBeGreaterThanOrEqual(prevYear as number);
         }
-        prev = amount;
+        prevAmount = amount;
+        prevYear = year;
       }
-      expect(prev, 'expected at least one money card after the anchor').not.toBeNull();
+      expect(prevAmount, 'expected at least one money card after the anchor').not.toBeNull();
     });
 
     test('event cards sit in front of the first money card at or after their year', async ({ page }) => {
