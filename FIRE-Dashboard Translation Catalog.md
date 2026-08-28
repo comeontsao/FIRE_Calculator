@@ -1647,3 +1647,41 @@ existing `display.frame.*` vocabulary; never "real $" (CLAUDE.md hard rule).
 
 The two **sheet tab names** (`Projection`, `Settings`) stay English in both languages: they are
 pinned by `contracts/lifecycle-export.contract.md` §C-2.2 and asserted by E2E.
+
+---
+
+## Feature 038 — Per-Country Coast FIRE Milestones (2026-08-28)
+
+Adds a ⭐ shortlist pin to each country card in **Geography → Scenarios**, and replaces the single
+generic Coast FIRE milestone in **Milestones** with one Coast marker per shortlisted country.
+All keys added to `TRANSLATIONS.en` AND `TRANSLATIONS.zh` in BOTH HTML files (Principle VII).
+
+**Removed keys** — `timeline.coast.done`, `timeline.coast.future`, `timeline.coast.desc`. The
+milestone they labelled no longer exists; the per-country markers below replace it. The Savings-card
+Coast FIRE badge (`savings.coastFire`, `dyn.coastFireReady`, `dyn.coastFireGap`) is UNCHANGED and
+keeps its own age-60 question.
+
+**Terminology (project rule)**: "can stop saving" / "still FIRE at {age}" — plain language, no
+"real $". The amounts these markers carry are purchasing-power figures shared with the rest of the
+timeline, which is unchanged by this feature.
+
+| Key | English | 繁體中文 |
+|-----|---------|---------|
+| `timeline.coastCountry.label` | {0} {1} Coast FIRE | {0} {1} Coast FIRE |
+| `timeline.coastCountry.desc` | Age {0} — if you stop saving today | {0} 歲 — 若現在停止儲蓄 |
+| `timeline.coastCountry.descNow` | Already there — even if you stop saving today | 已達成 — 即使現在停止儲蓄 |
+| `geo.pin.add` | Add to your shortlist | 加入選單 |
+| `geo.pin.remove` | Remove from your shortlist | 從選單移除 |
+
+`{0}` in `timeline.coastCountry.label` is the country flag; `{1}` is the localised country name
+(falls back to `scenarios[].name` when no `country.<id>` key exists). `{0}` in
+`timeline.coastCountry.desc` is an age. Both `geo.pin.*` strings are used as the star button's
+`title` AND its `aria-label`, so they must read correctly when announced on their own, without the
+surrounding card for context.
+
+**What the Coast marker means** — the age you could retire in that country if you stopped
+contributing today, so it always sits ON or AFTER that country's FIRE marker. It is NOT "the year
+you earn the right to coast": a FIRE age already assumes contributions continue, so freezing them
+can only push retirement later, and that crossing never occurs. Translations must not imply the
+marker is an earlier, easier milestone than the FIRE marker beside it — it is the more pessimistic
+of the pair.

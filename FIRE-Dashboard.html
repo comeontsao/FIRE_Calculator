@@ -28,6 +28,11 @@
      no ExcelJS; the browser handler (exportLifecycleProjectionXlsx) feeds it the
      cached chart projection and writes the workbook from the model it returns. -->
 <script src="calc/lifecycleExport.js"></script>
+<!-- Feature 038 — per-country Coast FIRE markers. Pure growth model + the
+     persisted country-shortlist sanitiser; the timeline calls it once per
+     pinned country. Does NOT replace coastFIRECheck (the age-60 Savings-card
+     badge), which keeps its own separate question. -->
+<script src="calc/coastFire.js"></script>
 <script>
   // Feature 014 — capture the assembler reference for later wiring.
   window._assembleAuditSnapshot = window.assembleAuditSnapshot;
@@ -506,6 +511,30 @@
   }
 
   .scenario-card .country { font-size: 1.8em; margin-bottom: 6px; }
+
+  /* === Feature 038 — ⭐ shortlist pin === */
+  /* The card itself is the primary-target selector; the star is a SECOND,
+     independent control living in its corner, so it is absolutely positioned
+     out of the card's flex flow and stops its own clicks from bubbling. */
+  .scenario-card { position: relative; }
+  .scenario-card__pin {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    z-index: 1;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    line-height: 1;
+    font-size: 0.95em;
+    cursor: pointer;
+    color: var(--text-dim);
+    opacity: 0.45;
+    transition: opacity 200ms, color 200ms, transform 120ms;
+  }
+  .scenario-card__pin:hover { opacity: 1; color: var(--accent); transform: scale(1.15); }
+  .scenario-card__pin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; opacity: 1; }
+  .scenario-card__pin--on { opacity: 1; color: var(--accent); }
   .scenario-card .name { font-weight: 600; margin-bottom: 4px; font-size: 0.92em; }
   .scenario-card .fire-num { font-size: 1.3em; font-weight: 700; color: var(--accent2); margin: 6px 0; }
   .scenario-card .detail { font-size: 0.78em; color: var(--text-dim); }
@@ -5800,6 +5829,81 @@ function _buildCollegeYearsForAudit(inp) {
 }
 
 let selectedScenario = 'taiwan'; // default primary target
+
+// ==================== FEATURE 038 — COUNTRY SHORTLIST (⭐ PINS) ====================
+// The ids pinned here are the ONLY countries the Milestones timeline draws — it
+// emits a FIRE marker AND a Coast FIRE marker for each. An EMPTY shortlist means
+// "no shortlist", which falls back to showing every country (i.e. exactly the
+// pre-038 timeline), so a brand-new user is never met with an empty section.
+//
+// Stored under its own localStorage key, deliberately NOT inside the saved state
+// blob: clearing or replacing the plan (Generic's 🔄 Reset to Defaults button —
+// RR has no such control — or any future import) wipes your ages/balances/
+// spending but leaves your pins alone, because which countries you are weighing
+// is a reading preference, not financial data. Same treatment the sidebar pin
+// and the EN/中文 language toggle already get.
+const SHORTLIST_KEY = 'fire_dashboard_shortlist';
+// RR ships pre-pinned with the six countries actually under consideration.
+const DEFAULT_SHORTLIST = Object.freeze(['taiwan', 'china', 'japan', 'vietnam', 'thailand', 'philippines']);
+let shortlistedScenarios = DEFAULT_SHORTLIST.slice();
+
+/** Ids that actually exist in this build — the whitelist for the sanitiser. */
+function allScenarioIds() {
+  return (typeof scenarios !== 'undefined' && Array.isArray(scenarios)) ? scenarios.map(s => s.id) : [];
+}
+
+/**
+ * Boot-time read. Corrupt JSON, an unknown id from an older build, or a wrong
+ * type all degrade to DEFAULT_SHORTLIST rather than throwing on the boot path.
+ * calc/coastFire.js owns that policy (and its tests); this is just the I/O.
+ */
+function loadShortlist() {
+  let raw = null;
+  try {
+    const stored = localStorage.getItem(SHORTLIST_KEY);
+    if (stored != null) raw = JSON.parse(stored);
+  } catch (_e) {
+    raw = null; // corrupt blob — treat as absent
+  }
+  const api = (typeof globalThis !== 'undefined' && globalThis.coastFire) ? globalThis.coastFire : null;
+  shortlistedScenarios = api
+    ? api.resolveShortlist(raw, allScenarioIds(), DEFAULT_SHORTLIST)
+    : DEFAULT_SHORTLIST.slice();
+  return shortlistedScenarios;
+}
+
+function saveShortlist() {
+  try { localStorage.setItem(SHORTLIST_KEY, JSON.stringify(shortlistedScenarios)); } catch (_e) {}
+}
+
+function isShortlisted(scenarioId) {
+  return shortlistedScenarios.indexOf(scenarioId) !== -1;
+}
+
+/**
+ * The countries the timeline should draw. Empty shortlist ⇒ all of them.
+ * Returns scenario objects in `scenarios` order so the timeline stays stable
+ * regardless of the order the user happened to click the stars.
+ */
+function shortlistedScenarioObjects() {
+  if (!shortlistedScenarios.length) return scenarios.slice();
+  return scenarios.filter(s => isShortlisted(s.id));
+}
+
+/**
+ * ⭐ click handler. stopPropagation matters: the star sits inside .scenario-card,
+ * whose own click sets the PRIMARY FIRE target. Pinning a country to compare it
+ * must not silently re-point the whole dashboard at it.
+ */
+function toggleShortlist(scenarioId, ev) {
+  if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+  // Immutable update — no in-place splice/push on shared state.
+  shortlistedScenarios = isShortlisted(scenarioId)
+    ? shortlistedScenarios.filter(id => id !== scenarioId)
+    : shortlistedScenarios.concat([scenarioId]);
+  saveShortlist();
+  recalcAll();
+}
 let fireMode = 'safe'; // 'safe', 'exact', or 'dieWithZero'
 window.fireMode = fireMode; // sync for calc/shims.js (reads globalThis.window.fireMode at call time)
 let currentLang = 'en';
@@ -6637,9 +6741,11 @@ const TRANSLATIONS = {
     'timeline.nw500k.future': '$500K Net Worth',
     'timeline.alreadyAchieved': 'Already achieved!',
     'timeline.ageLabel': 'Age {0}',
-    'timeline.coast.done': 'Coast FIRE ✓',
-    'timeline.coast.future': 'Coast FIRE',
-    'timeline.coast.desc': 'Age {0} — can stop saving',
+    'timeline.coastCountry.label': '{0} {1} Coast FIRE',
+    'timeline.coastCountry.desc': 'Age {0} — if you stop saving today',
+    'timeline.coastCountry.descNow': 'Already there — even if you stop saving today',
+    'geo.pin.add': 'Add to your shortlist',
+    'geo.pin.remove': 'Remove from your shortlist',
     'timeline.million.done': 'Millionaire! ✓',
     'timeline.million.future': 'Millionaire!',
     'timeline.fire.label': '{0} FIRE ({1})',
@@ -7852,9 +7958,11 @@ const TRANSLATIONS = {
     'timeline.nw500k.future': '$500K 淨資產',
     'timeline.alreadyAchieved': '已達成！',
     'timeline.ageLabel': '{0} 歲',
-    'timeline.coast.done': 'Coast FIRE ✓',
-    'timeline.coast.future': 'Coast FIRE',
-    'timeline.coast.desc': '{0} 歲 — 可停止儲蓄',
+    'timeline.coastCountry.label': '{0} {1} Coast FIRE',
+    'timeline.coastCountry.desc': '{0} 歲 — 若現在停止儲蓄',
+    'timeline.coastCountry.descNow': '已達成 — 即使現在停止儲蓄',
+    'geo.pin.add': '加入選單',
+    'geo.pin.remove': '從選單移除',
     'timeline.million.done': '百萬達成！ ✓',
     'timeline.million.future': '百萬達成！',
     'timeline.fire.label': '{0} FIRE（{1}）',
@@ -16686,7 +16794,13 @@ function renderScenarios(inp) {
     if (isTerritorialTax) badges += `<span class="badge badge-tax">${t('geo.noForeignTax')}</span>`;
 
     const simpleFire = calcSimpleFIRENumber(sSpend, inp.swr);
-    card.innerHTML = `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> ${t('country.card.yrsSuffix')}</div><div class="scenario-card__expand"><div class="row"><span>${t('country.card.budget')}</span><strong>$${sSpend.toLocaleString()}/yr</strong></div><div class="row target-line"><span>${t('country.card.bridgeAtFire')}</span><strong>$${Math.round(fireNum).toLocaleString()}</strong></div><div class="row target-line"><span>${t('country.card.target25x')}</span><strong>$${Math.round(simpleFire).toLocaleString()}</strong></div></div>`;
+    // Feature 038 — ⭐ shortlist pin. Rendered first so it anchors to the card's
+    // top-right corner; toggleShortlist stops propagation so starring a country
+    // does NOT also make it the primary FIRE target.
+    const _pinned = isShortlisted(s.id);
+    const _pinTip = _pinned ? t('geo.pin.remove') : t('geo.pin.add');
+    const _pin = `<button type="button" class="scenario-card__pin${_pinned ? ' scenario-card__pin--on' : ''}" onclick="toggleShortlist('${s.id}', event)" aria-pressed="${_pinned}" aria-label="${_pinTip}" title="${_pinTip}">${_pinned ? '★' : '☆'}</button>`;
+    card.innerHTML = _pin + `<div class="country">${s.flag}</div><div class="name">${t('country.' + s.id)}</div><div class="years-compact"><span class="num">${yrs}</span> ${t('country.card.yrsSuffix')}</div><div class="scenario-card__expand"><div class="row"><span>${t('country.card.budget')}</span><strong>$${sSpend.toLocaleString()}/yr</strong></div><div class="row target-line"><span>${t('country.card.bridgeAtFire')}</span><strong>$${Math.round(fireNum).toLocaleString()}</strong></div><div class="row target-line"><span>${t('country.card.target25x')}</span><strong>$${Math.round(simpleFire).toLocaleString()}</strong></div></div>`;
     grid.appendChild(card);
   });
 
@@ -19392,26 +19506,13 @@ function renderTimeline(inp) {
     if (m500k && m500k.year > 2026) milestones.push({ label: t('timeline.nw500k.future'), year: m500k.year, desc: t('timeline.ageLabel', m500k.age), amount: 500000, type: 'future' });
   }
 
-  // Coast FIRE
-  const coast = coastFIRECheck(inp);
-  if (!coast.coastReady) {
-    // estimate when coast fire hits
-    const scenario = scenarios.find(s => s.id === selectedScenario);
-    const target = calcFIRENumber(getScenarioEffectiveSpend(scenario), inp.swr);
-    for (const d of projection) {
-      const yearsLeft = 60 - d.age;
-      if (yearsLeft > 0) {
-        const realReturn = realRate(inp.returnRate, inp.inflationRate);
-        const fv = d.total * Math.pow(1 + realReturn, yearsLeft);
-        if (fv >= target) {
-          milestones.push({ label: t('timeline.coast.future'), year: d.year, desc: t('timeline.coast.desc', d.age), amount: Math.round(d.total), type: 'future' });
-          break;
-        }
-      }
-    }
-  } else {
-    milestones.push({ label: t('timeline.coast.done'), year: 2026, desc: t('timeline.alreadyAchieved'), amount: nw, type: 'completed' });
-  }
+  // Coast FIRE — feature 038 moved this. There is no longer ONE generic coast
+  // milestone here: the per-country pass below emits a Coast marker for each
+  // shortlisted country, measured against THAT country's own FIRE age and its
+  // own chart-consistent FIRE number. (The old version measured against a plain
+  // spend/SWR number while the Savings-card badge used the mode-aware target, so
+  // the badge and the marker could disagree — that mismatch is gone with it.)
+  // coastFIRECheck() itself is untouched and still drives the age-60 badge.
 
   // $1M milestone — same nw-first pattern as the $500K milestone.
   if (nw >= 1000000) {
@@ -19421,17 +19522,100 @@ function renderTimeline(inp) {
     if (m1m) milestones.push({ label: t('timeline.million.future'), year: m1m.year, desc: t('timeline.ageLabel', m1m.age), amount: 1000000, type: 'future' });
   }
 
-  // FIRE milestone for each scenario (using two-phase model)
+  // FIRE + Coast FIRE milestones — one PAIR per shortlisted country (feature 038).
   // Per-scenario calc — avoids the selectedScenario leak in getSelectedRelocationCost /
   // getHealthcareDeltaAnnual that would otherwise score every country against the
   // currently-selected country's costs.
-  scenarios.forEach(s => {
-    const { sSpend, yrs, fireNum } = computeScenarioFireFigures(inp, s);
-    if (yrs < 40) {
-      const hit = projection[yrs];
-      if (hit) {
-        milestones.push({ label: t('timeline.fire.label', s.flag, (t('country.' + s.id) !== ('country.' + s.id) ? t('country.' + s.id) : s.name)), year: hit.year, desc: t('timeline.fire.desc', hit.age, sSpend.toLocaleString()), amount: Math.round(fireNum), type: 'future' });
-      }
+  //
+  // shortlistedScenarioObjects() returns every country when nothing is pinned,
+  // so an unpinned dashboard shows exactly what it showed before this feature.
+  const _coastApi = (typeof globalThis !== 'undefined' && globalThis.coastFire) ? globalThis.coastFire : null;
+  const _realReturnAccessible = realRate(inp.returnRate, inp.inflationRate);
+  const _realReturn401k = realRate(inp.return401k, inp.inflationRate);
+  // Coast markers measure from TODAY's frozen balances, not from a projection row.
+  const _accessibleNow = calcAccessible(inp);
+  const _lockedNow = calcLocked(inp);
+  const _currentAge = (projection && projection[0]) ? projection[0].age : null;
+  const _currentYear = (projection && projection[0]) ? projection[0].year : 2026;
+  // Scan ceiling. Well short of the plan end (95) on purpose: "you could retire
+  // there at 84" is not a decision anyone acts on, and every extra age costs a
+  // solver call on a path that already runs 6 times per recalc. Countries that
+  // do not clear by 80 simply get no Coast marker.
+  const COAST_SCAN_CEILING_AGE = 80;
+  const _coastScanMaxAge = Math.min(COAST_SCAN_CEILING_AGE, Number.isFinite(inp.endAge) ? inp.endAge : 95);
+
+  shortlistedScenarioObjects().forEach(s => {
+    const { sSpend, yrs, estFireAge, fireNum } = computeScenarioFireFigures(inp, s);
+    if (yrs >= 40) return; // not reachable inside the plan — draw neither marker
+    const countryName = (t('country.' + s.id) !== ('country.' + s.id)) ? t('country.' + s.id) : s.name;
+
+    const hit = projection[yrs];
+    if (hit) {
+      milestones.push({ label: t('timeline.fire.label', s.flag, countryName), year: hit.year, desc: t('timeline.fire.desc', hit.age, sSpend.toLocaleString()), amount: Math.round(fireNum), type: 'future' });
+    }
+
+    // Coast marker: the age you could retire HERE if you stopped contributing
+    // today. Deliberately NOT "the year you earn the right to coast to the FIRE
+    // age above" — that crossing can never happen (the FIRE age already assumes
+    // you keep contributing, so freezing them only pushes it later). See
+    // calc/coastFire.js findCoastFireAge. This marker therefore always lands ON
+    // or AFTER the country's FIRE marker; the gap is the price of stopping.
+    if (!_coastApi) return; // module absent (shouldn't happen) — skip, never throw
+
+    // Both callbacks are hit once per scanned age. getMortgageAdjustedRetirement
+    // reads the DOM and findMinTotalAtFireNumerical runs a solver, so memoise
+    // both — a 6-country shortlist would otherwise re-derive the same figures
+    // dozens of times per recalc.
+    const _proceedsCache = new Map();
+    const _targetCache = new Map();
+
+    let coastAge = null;
+    try {
+      coastAge = _coastApi.findCoastFireAge({
+        accessibleReal: _accessibleNow,
+        lockedReal: _lockedNow,
+        currentAge: _currentAge,
+        // No crossing can exist below this country's FIRE age (the still-saving
+        // balance is short of the target down there, and the frozen balance is
+        // never above the still-saving one). targetTotalFor runs a solver, so
+        // skipping those ages is the difference between ~27 solver calls per
+        // recalc and ~318.
+        minAge: estFireAge,
+        maxAge: _coastScanMaxAge,
+        realReturnAccessible: _realReturnAccessible,
+        realReturn401k: _realReturn401k,
+        saleProceedsFor: (yearsFromNow) => {
+          if (!_proceedsCache.has(yearsFromNow)) {
+            _proceedsCache.set(yearsFromNow, getMortgageAdjustedRetirement(sSpend, yearsFromNow).saleProceeds || 0);
+          }
+          return _proceedsCache.get(yearsFromNow);
+        },
+        targetTotalFor: (age) => {
+          if (!_targetCache.has(age)) {
+            _targetCache.set(age, findMinTotalAtFireNumerical(inp, sSpend, age, fireMode));
+          }
+          return _targetCache.get(age);
+        },
+      });
+    } catch (err) {
+      // A solver throwing must not take the whole timeline down with it. The
+      // [coastFire] prefix is what makes this findable in a 7000-line console.
+      console.error('[coastFire] coast-age scan threw for ' + s.id + ':', err);
+      coastAge = null;
+    }
+
+    if (coastAge !== null) {
+      const coastYear = _currentYear + (coastAge - _currentAge);
+      const alreadyCoasting = coastAge <= _currentAge;
+      milestones.push({
+        label: t('timeline.coastCountry.label', s.flag, countryName),
+        year: coastYear,
+        desc: alreadyCoasting
+          ? t('timeline.coastCountry.descNow')
+          : t('timeline.coastCountry.desc', coastAge),
+        amount: Math.round(_targetCache.get(coastAge) || 0),
+        type: alreadyCoasting ? 'completed' : 'future',
+      });
     }
   });
 
@@ -21129,6 +21313,9 @@ function renderSnapshotAnalytics() {
 // ==================== INIT ====================
 updateAges();
 buildExpenseTable();
+// Feature 038 — hydrate the ⭐ country shortlist BEFORE restoreState(), because
+// restoreState() fires recalcAll() → renderTimeline(), which reads it.
+loadShortlist();
 restoreState();       // Load saved values (inputs, sliders, expenses, scenario, SS age, earnings history)
 // T043/T044 (feature-007) — wire the IRMAA-disabled hint + Rule-of-55 warning
 // listeners after restoreState so `.value` writes during restore don't trigger
