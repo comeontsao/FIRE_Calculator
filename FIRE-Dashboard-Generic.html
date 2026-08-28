@@ -19192,9 +19192,18 @@ function renderTimeline(inp) {
   const _tlOpts = Object.assign({},
     (_tlStrategyId && _tlStrategyId !== 'bracket-fill-smoothed') ? { strategyOverride: _tlStrategyId } : null,
     (typeof getActiveMortgageStrategyOptions === 'function') ? getActiveMortgageStrategyOptions() : {});
-  // null => let the engine apply its own default (age + yearsToFIREcache),
-  // matching `fireAgeOverride ?? calculatedFireAge` used everywhere else.
-  const _tlFireAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null) ? fireAgeOverride : null;
+  // Retirement is pushed to the end of the plan ON PURPOSE, so this curve is
+  // "keep working and keep contributing" all the way out.
+  //
+  // Milestones are dated against a common baseline. Letting the engine retire at
+  // the SELECTED country's FIRE age bends the curve downward from that age, which
+  // (a) made the panel contradict itself — China FIRE was dated 2035 needing
+  // $1,295,026 while the same curve showed only $1,048,237 that year, because the
+  // curve had already retired at 50 while China's FIRE age assumes working to 52 —
+  // and (b) made the $500K / $1M dates depend on which country was selected.
+  // Every per-country FIRE age is computed assuming you work until THAT age, so
+  // the only baseline consistent with all of them is one that never retires.
+  const _tlFireAge = Number.isFinite(inp.endAge) ? inp.endAge : 95;
 
   let projection;
   try {

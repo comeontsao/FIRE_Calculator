@@ -492,6 +492,45 @@ for (const dash of DASHBOARDS) {
       expect(rows[0].amount).toBe(kpi);
     });
 
+    test('the $1M date does not move when the primary country changes', async ({ page }) => {
+      // This is how the "curve must keep working" invariant is observable from
+      // the OUTSIDE. If the dating curve retires at the selected country's FIRE
+      // age it bends downward from that age, so picking a cheap country (early
+      // FIRE) can push the curve's peak below $1M and the milestone vanishes
+      // entirely. A keep-working curve is country-independent by construction.
+      //
+      // Checking the panel's own output, not a curve computed alongside it —
+      // an earlier version of this test recomputed the curve itself and passed
+      // happily with the bug reintroduced.
+      await loadDashboard(page, dash.fileName);
+      await fundProfile(page, dash, 300_000, 50_000);
+
+      const readMillionYear = async (): Promise<number | null> => {
+        const rows = await timelineYearAmounts(page);
+        const i = rows.findIndex((r) => r.amount === 1_000_000);
+        return i === -1 ? null : rows[i].year;
+      };
+
+      const setPrimary = async (id: string): Promise<void> => {
+        await page.evaluate(`(() => { selectedScenario = ${JSON.stringify(id)}; recalcAll(); })()`);
+        await page.waitForTimeout(SETTLE_MS);
+      };
+
+      // Cheapest country in the table => earliest FIRE age => earliest bend.
+      await setPrimary('vietnam');
+      const withCheap = await readMillionYear();
+      await setPrimary('us');
+      const withExpensive = await readMillionYear();
+
+      expect(withCheap, 'the $1M milestone vanished when a cheap country was primary').not.toBeNull();
+      expect(withExpensive, 'the $1M milestone vanished when an expensive country was primary').not.toBeNull();
+      expect(
+        withCheap,
+        `$1M dated ${withCheap} with Vietnam primary but ${withExpensive} with the US primary — ` +
+          'the dating curve is retiring at the FIRE age of the selected country instead of working on',
+      ).toBe(withExpensive);
+    });
+
     test('the $1M milestone is dated by the Lifecycle engine, not projectGrowth', async ({ page }) => {
       await loadDashboard(page, dash.fileName);
       // Deliberately modest: net worth must stay BELOW $1M or the Millionaire
@@ -501,7 +540,11 @@ for (const dash of DASHBOARDS) {
       const both = (await page.evaluate(`(() => {
         const inp = getInputs();
         const spend = getScenarioEffectiveSpend(scenarios.find(s => s.id === selectedScenario));
-        const life = projectFullLifecycle(inp, spend, null, true, {});
+        // inp.endAge as the FIRE age => the "keep working" curve, which is what
+        // renderTimeline dates against. Passing null would retire at the selected
+        // country's FIRE age and bend the curve down, which is the bug this
+        // whole test family exists to catch.
+        const life = projectFullLifecycle(inp, spend, inp.endAge, true, {});
         const grow = projectGrowth(inp, 25);
         const lifeHit = life.find(r => r.total >= 1000000);
         const growHit = grow.find(r => r.total >= 1000000);
