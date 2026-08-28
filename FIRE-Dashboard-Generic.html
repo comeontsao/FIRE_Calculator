@@ -696,6 +696,14 @@
     pointer-events: none;
     overflow: visible;
   }
+  /* The path is what tells you the rows READ right-to-left on every other row
+     (serpentine). On --border it was nearly invisible against the card
+     background, which made a correctly-ordered timeline look shuffled. This
+     rule beats the presentation attribute set in drawTimelinePath(). */
+  .timeline > svg.timeline-path path {
+    stroke: var(--text-dim);
+    stroke-opacity: 0.55;
+  }
 
   .milestone {
     position: relative;
@@ -19312,7 +19320,17 @@ function renderTimeline(inp) {
   }
 
   // Sort and render
-  milestones.sort((a, b) => a.year - b.year);
+  // Chronological first — this is a timeline, so the year always wins. Within a
+  // single year, order by the dollar figure so the row reads as an ascending
+  // ladder instead of the order the pushes happened to run in (which put 2029 at
+  // $1,210,085 -> $1,059,872 -> $874,332 -> $606,376, i.e. backwards).
+  // Milestones with no figure sort last within their year.
+  milestones.sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    const av = Number.isFinite(a.amount) ? a.amount : Infinity;
+    const bv = Number.isFinite(b.amount) ? b.amount : Infinity;
+    return av - bv;
+  });
   milestones.forEach(m => {
     const div = document.createElement('div');
     div.className = `milestone ${m.type}`;

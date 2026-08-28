@@ -136,15 +136,6 @@ async function timelineItems(page: Page): Promise<string[]> {
   });
 }
 
-/**
- * Index of the first timeline item matching a predicate, or -1. Timeline order
- * IS chronological order (renderTimeline sorts by year before appending), so
- * comparing indices compares dates.
- */
-function indexOfItem(items: string[], test: (s: string) => boolean): number {
-  return items.findIndex(test);
-}
-
 /** Localised country name exactly as the timeline renders it, e.g. "Taiwan". */
 async function countryLabel(page: Page, id: string): Promise<string> {
   const expr = `(() => {
@@ -175,6 +166,22 @@ async function clickPin(page: Page, selector: string): Promise<void> {
   await pin.scrollIntoViewIfNeeded();
   await pin.click();
   await page.waitForTimeout(SETTLE_MS);
+}
+
+/**
+ * Timeline rows as {year, amount} pairs, in render order. `amount` is the
+ * trailing dollar figure on the card, or null where a card carries none.
+ */
+async function timelineYearAmounts(page: Page): Promise<Array<{ year: number; amount: number | null }>> {
+  const items = await timelineItems(page);
+  return items.map((txt) => {
+    const year = /^(\d{4})/.exec(txt);
+    const amount = /\$([\d,]+)\s*$/.exec(txt);
+    return {
+      year: year ? Number(year[1]) : Number.NaN,
+      amount: amount ? Number(amount[1].replace(/,/g, '')) : null,
+    };
+  });
 }
 
 /**
@@ -320,14 +327,22 @@ for (const dash of DASHBOARDS) {
       const items = await timelineItems(page);
       for (const id of ['taiwan', 'japan', 'thailand', 'vietnam']) {
         const name = await countryLabel(page, id);
-        const coastIdx = indexOfItem(items, (s) => s.includes(`${name} Coast FIRE`));
-        const fireIdx = indexOfItem(items, (s) => s.includes(`FIRE (${name})`));
-        if (coastIdx === -1 || fireIdx === -1) continue; // country unreachable in this plan
+        const coast = items.find((s) => s.includes(`${name} Coast FIRE`));
+        const fire = items.find((s) => s.includes(`FIRE (${name})`));
+        if (!coast || !fire) continue; // country unreachable in this plan
+
+        // Compare YEARS, not DOM position. Within a single year cards are
+        // ordered by dollar figure, and a Coast marker's figure is normally the
+        // smaller of the pair — so a same-year pair legitimately renders Coast
+        // first. That is presentation, not a violation of the invariant.
+        const coastYear = Number(/^(\d{4})/.exec(coast)?.[1]);
+        const fireYear = Number(/^(\d{4})/.exec(fire)?.[1]);
+        expect(Number.isFinite(coastYear) && Number.isFinite(fireYear)).toBe(true);
         expect(
-          coastIdx,
-          `${name}: Coast marker precedes its FIRE marker — the frozen-savings path ` +
-            'cannot beat the still-contributing path',
-        ).toBeGreaterThanOrEqual(fireIdx);
+          coastYear,
+          `${name}: Coast (${coastYear}) precedes its FIRE marker (${fireYear}) — ` +
+            'the frozen-savings path cannot beat the still-contributing path',
+        ).toBeGreaterThanOrEqual(fireYear);
       }
     });
 
@@ -361,6 +376,43 @@ for (const dash of DASHBOARDS) {
       expect(await getShortlist(page)).toEqual(['taiwan']);
     });
 
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Timeline ordering. Not strictly part of 038, but 038 doubled the number of
+// same-year cards and made the old push-order tiebreak visible: a 2029 row read
+// $1,210,085 -> $1,059,872 -> $874,332 -> $606,376, i.e. backwards.
+// ---------------------------------------------------------------------------
+
+for (const dash of DASHBOARDS) {
+  test.describe(`timeline ordering — ${dash.key}`, () => {
+    test('milestones run chronologically, and ascend by amount within a year', async ({ page }) => {
+      await loadDashboard(page, dash.fileName);
+      await fundProfile(page, dash);
+      await setShortlist(page, ['taiwan', 'japan', 'thailand', 'vietnam', 'philippines', 'china']);
+
+      const rows = await timelineYearAmounts(page);
+      expect(rows.length).toBeGreaterThan(5);
+
+      for (let i = 1; i < rows.length; i++) {
+        const prev = rows[i - 1];
+        const cur = rows[i];
+        expect(cur.year, `row ${i}: years must never go backwards`).toBeGreaterThanOrEqual(prev.year);
+        if (cur.year !== prev.year) continue;
+        // Same year: the dollar figure must not decrease. Cards without a figure
+        // sort last, so a null after a number is fine; a number after a null is not.
+        if (cur.amount === null) continue;
+        expect(
+          prev.amount,
+          `${cur.year}: a card with a figure follows one without — figure-less cards sort last`,
+        ).not.toBeNull();
+        expect(
+          cur.amount,
+          `${cur.year}: amounts within a year must ascend, got ${prev.amount} then ${cur.amount}`,
+        ).toBeGreaterThanOrEqual(prev.amount as number);
+      }
+    });
   });
 }
 
