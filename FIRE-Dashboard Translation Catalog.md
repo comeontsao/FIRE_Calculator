@@ -75,7 +75,7 @@ something like `{0}年又{1}個月` in a follow-up if desired.
 | "Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security" | Static | 📊 | Line ~1619 |
 | "Monthly Expense Breakdown (Editable)" | Static | 💸 | Line ~1630 |
 | "Net Worth Breakdown" | Static | 🥧 | Line ~1651 |
-| "FIRE Milestone Timeline" | Static | 🏁 | Line ~1660 |
+| "Milestones by Target" | Static | 🏁 | Line ~1660. Renamed 2026-08-28: the panel sorts by target amount, not by date, so "Timeline" was misleading. |
 | "Expense Distribution" | Static | 📉 | Line ~1675 |
 | "Quick What-If" | Static | 🔮 | Line ~1683 |
 | "Years to FIRE by Retirement Location" | Static | 🌐 | Line ~1718 |
@@ -567,7 +567,7 @@ This phase expanded static DOM i18n coverage. **Generic was brought roughly to p
 | `sec.lifecycle` (Generic) | Full Portfolio Lifecycle — Accumulation → FIRE → Drawdown → Social Security | 完整投資組合生命週期 — 累積 → FIRE → 提領 → 社會安全金 |
 | `sec.expenses` (Generic) | Monthly Expense Breakdown (Editable) | 每月支出明細（可編輯） |
 | `sec.netWorthPie` (Generic) | Net Worth Breakdown | 淨資產分佈 |
-| `sec.milestones` (Generic) | FIRE Milestone Timeline | FIRE 里程碑時間線 |
+| `sec.milestones` (Generic) | Milestones by Target | 里程碑（依目標金額） |
 | `sec.expenseDist` (Generic) | Expense Distribution | 支出分佈 |
 | `sec.countryChart` (Generic) | Years to FIRE by Retirement Location | 各國 FIRE 所需年數 |
 | `sec.snapshots` (Generic) | Snapshot History — Track Your Progress Over Time | 快照紀錄 — 追蹤你的進度 |
@@ -1685,3 +1685,16 @@ you earn the right to coast": a FIRE age already assumes contributions continue,
 can only push retirement later, and that crossing never occurs. Translations must not imply the
 marker is an earlier, easier milestone than the FIRE marker beside it — it is the more pessimistic
 of the pair.
+
+### Feature 038 follow-up — panel renamed (2026-08-28)
+
+`sec.milestones` changed from "FIRE Milestone Timeline" to **"Milestones by Target"**
+(zh-TW: 里程碑（依目標金額）) in BOTH HTML files.
+
+The panel no longer orders by date. Money cards ladder by the dollar figure they
+require, so the years intentionally jump around — a cheap country can want less
+money in a later year than an expensive one wants sooner. "Timeline" promised a
+chronology the panel does not deliver.
+
+The nav pill label (`nav.pill.milestones` = "Milestones" / 里程碑) is unchanged —
+it names the section, not its ordering.
