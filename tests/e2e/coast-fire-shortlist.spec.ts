@@ -203,9 +203,9 @@ async function openGeography(page: Page): Promise<void> {
  * would assert on an empty timeline. Funding both builds identically also keeps
  * these tests independent of whatever RR's personal numbers happen to be.
  */
-async function fundProfile(page: Page, dash: DashboardFixture): Promise<void> {
+async function fundProfile(page: Page, dash: DashboardFixture, stocks = 800_000, cash = 100_000): Promise<void> {
   await page.evaluate(
-    ([stocksId]) => {
+    ([stocksId, stocksVal, cashVal]) => {
       const set = (id: string, v: number): void => {
         const el = document.getElementById(id) as HTMLInputElement | null;
         if (!el) throw new Error(`fundProfile: missing input #${id}`);
@@ -213,10 +213,10 @@ async function fundProfile(page: Page, dash: DashboardFixture): Promise<void> {
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      set(stocksId, 800_000);
-      set('cashSavings', 100_000);
+      set(stocksId as string, stocksVal as number);
+      set('cashSavings', cashVal as number);
     },
-    [dash.stocksSel],
+    [dash.stocksSel, stocks, cash] as [string, number, number],
   );
   await page.waitForTimeout(SETTLE_MS);
 }
@@ -457,6 +457,83 @@ for (const dash of DASHBOARDS) {
           expect(rows[i + 1 + offset].year).toBeGreaterThanOrEqual(eventYear);
         }
       }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Engine provenance. The panel MUST date its cards off projectFullLifecycle —
+// the same engine the Lifecycle chart draws — and not off a private curve.
+//
+// It previously used projectGrowth(), which never learned about the rothIra
+// pool added in feature 032: it started $59,021 low and missed $14,000/yr of
+// contributions, so the panel's own "Now" card disagreed with the curve dating
+// every other card. That drift was silent for three features. These tests make
+// it loud.
+// ---------------------------------------------------------------------------
+
+for (const dash of DASHBOARDS) {
+  test.describe(`timeline engine provenance — ${dash.key}`, () => {
+    test('the "Now" card agrees with the net-worth KPI', async ({ page }) => {
+      // NOTE: this is a consistency check, NOT a provenance check. The Now card
+      // reads calcNetWorth() directly and never touches the projection, so it
+      // cannot detect which curve dates the other cards. The test below does.
+      await loadDashboard(page, dash.fileName);
+      await fundProfile(page, dash);
+
+      const items = await timelineItems(page);
+      const rows = await timelineYearAmounts(page);
+      expect(items[0]).toContain('Now');
+
+      const kpi = await page.evaluate(() => {
+        const el = document.getElementById('totalNetWorth');
+        return el ? Number((el.textContent || '').replace(/[^0-9.-]/g, '')) : null;
+      });
+      expect(rows[0].amount).toBe(kpi);
+    });
+
+    test('the $1M milestone is dated by the Lifecycle engine, not projectGrowth', async ({ page }) => {
+      await loadDashboard(page, dash.fileName);
+      // Deliberately modest: net worth must stay BELOW $1M or the Millionaire
+      // card renders as "already achieved" at 2026 and there is no date to check.
+      await fundProfile(page, dash, 300_000, 50_000);
+
+      const both = (await page.evaluate(`(() => {
+        const inp = getInputs();
+        const spend = getScenarioEffectiveSpend(scenarios.find(s => s.id === selectedScenario));
+        const life = projectFullLifecycle(inp, spend, null, true, {});
+        const grow = projectGrowth(inp, 25);
+        const lifeHit = life.find(r => r.total >= 1000000);
+        const growHit = grow.find(r => r.total >= 1000000);
+        return {
+          lifecycleYear: lifeHit ? lifeHit.year : null,
+          growthYear: growHit ? growHit.year : null,
+          nw: Math.round(calcNetWorth(inp)),
+        };
+      })()`)) as { lifecycleYear: number | null; growthYear: number | null; nw: number };
+
+      expect(both.nw, 'fixture must start below $1M for this test to mean anything').toBeLessThan(1_000_000);
+      expect(both.lifecycleYear, 'lifecycle must reach $1M inside the plan').not.toBeNull();
+
+      // The whole point: the two engines must actually disagree, or this test
+      // proves nothing. They disagree wherever a pool exists that projectGrowth
+      // never learned about — the rothIra pool from feature 032 on RR. Generic
+      // has no Roth IRA inputs (FR-018), so there the curves can legitimately
+      // coincide and there is nothing to discriminate.
+      test.skip(
+        both.lifecycleYear === both.growthYear,
+        'both engines date $1M to the same year for this fixture — nothing to discriminate',
+      );
+
+      const rows = await timelineYearAmounts(page);
+      const millionIdx = rows.findIndex((r) => r.amount === 1_000_000);
+      expect(millionIdx, 'expected a future $1,000,000 milestone card').toBeGreaterThanOrEqual(0);
+
+      expect(
+        rows[millionIdx].year,
+        `$1M dated ${rows[millionIdx].year}; Lifecycle says ${both.lifecycleYear}, ` +
+          `projectGrowth says ${both.growthYear} — the panel is on the wrong engine`,
+      ).toBe(both.lifecycleYear);
     });
   });
 }

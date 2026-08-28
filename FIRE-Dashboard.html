@@ -19497,7 +19497,43 @@ function renderTimeline(inp) {
   const container = document.getElementById('timeline');
   container.innerHTML = '';
   const nw = calcNetWorth(inp);
-  const projection = projectGrowth(inp, 25);
+
+  // Date every milestone off the SAME engine the Lifecycle chart draws.
+  //
+  // This used to call projectGrowth(), a private simplified accumulation curve
+  // that never learned about the rothIra pool added in feature 032. It started
+  // $59,021 low (exactly rebeccaRothIra) and missed $14,000/yr of Roth IRA
+  // contributions, so the panel printed "Now $532,021" and then dated every
+  // other card off a curve starting at $473,000 — its own first card contradicted
+  // the arithmetic behind all the others. Reading projectFullLifecycle means the
+  // panel and the chart cannot drift again, and any pool added to the engine
+  // later flows through here for free.
+  //
+  // Strategy + mortgage overrides are threaded exactly as the chart threads them
+  // (CLAUDE.md: EVERY projectFullLifecycle caller must consume the same ones, or
+  // the panel silently dates itself against a trajectory nothing else renders).
+  const _tlSpend = getScenarioEffectiveSpend(scenarios.find(s => s.id === selectedScenario));
+  const _tlStrategyId = (typeof _previewStrategyId !== 'undefined' && _previewStrategyId)
+    || (typeof _lastStrategyResults !== 'undefined' && _lastStrategyResults && _lastStrategyResults.winnerId)
+    || null;
+  const _tlOpts = Object.assign({},
+    (_tlStrategyId && _tlStrategyId !== 'bracket-fill-smoothed') ? { strategyOverride: _tlStrategyId } : null,
+    (typeof getActiveMortgageStrategyOptions === 'function') ? getActiveMortgageStrategyOptions() : {});
+  // null => let the engine apply its own default (age + yearsToFIREcache),
+  // matching `fireAgeOverride ?? calculatedFireAge` used everywhere else.
+  const _tlFireAge = (typeof fireAgeOverride === 'number' && fireAgeOverride != null) ? fireAgeOverride : null;
+
+  let projection;
+  try {
+    projection = projectFullLifecycle(inp, _tlSpend, _tlFireAge, true, _tlOpts);
+    if (!Array.isArray(projection) || projection.length === 0) throw new Error('lifecycle returned no rows');
+  } catch (err) {
+    // A blank Milestones panel is worse than a slightly-off one. Fall back to
+    // the old curve, but say so loudly — the [renderTimeline] prefix is what
+    // makes this findable in a 7000-line console.
+    console.error('[renderTimeline] projectFullLifecycle threw; falling back to projectGrowth:', err);
+    projection = projectGrowth(inp, 25);
+  }
 
   const milestones = [
     // kind:'anchor' — "Now" is where you stand, not a target to reach. It is
